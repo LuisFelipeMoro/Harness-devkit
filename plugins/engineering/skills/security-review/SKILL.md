@@ -7,23 +7,23 @@ description: Use when auditing code for security issues. Runs OWASP Web Top 10 (
 
 Act as a Staff Security Engineer. Perform a thorough security audit covering OWASP Web Top 10 (2025) + OWASP LLM Top 10 (2025) where AI/GenAI components are present.
 
+## Contract
+- **Input**: a target — file path, domain name, or "current branch" (ask if not provided).
+- **Output**: a severity-tagged findings report (CRITICAL/HIGH/MEDIUM/LOW) with file:line evidence, plus an OWASP Web coverage table and an LLM coverage table when applicable.
+- **Boundary**: read-only audit — never modifies code; CRITICAL always blocks deployment, no exceptions.
+- **Done when**: the Output Format report prints with both coverage tables filled (LLM table only if AI/LLM components were found) and a top 3–5 summary.
+
 ## Rules (apply throughout)
-- CRITICAL = blocks all deployment, no exceptions
 - If cannot verify PASS → emit FAIL with note
 - All evidence must be file:line references
-- LLM Top 10 section only runs when AI/GenAI components are present
 
 ## Invocation
 `/security-review [target]` — file path, domain name, or "current branch"
 
 ## Process
 
-### Step 1 — Scope Map
-- Entry points (HTTP endpoints, CLI, queue consumers, file uploads)
-- Auth/authz boundaries
-- External integrations (APIs, DBs, caches, queues)
-- Secret usage (env vars, vault, credential handling)
-- AI/LLM components present? → triggers LLM Top 10 audit
+### Step 1 — Scope Map + Secrets Scan (1 Explore sub-agent, model: haiku)
+Multi-file, codebase-wide grunt work — keep it out of main context. Dispatch one read-only Explore sub-agent using the call template in `references/scope-map-reference.md`.
 
 ### Step 2 — OWASP Web Top 10 (2025)
 Emit PASS / FAIL / N/A with file:line evidence for each:
@@ -56,15 +56,12 @@ Emit PASS / FAIL / N/A with file:line evidence for each:
 | LLM09 Misinformation | Human review gates for high-stakes? Grounded in verified sources? |
 | LLM10 Unbounded Consumption | Rate limits per tenant? Token budgets enforced? Circuit breakers? |
 
-### Step 4 — Secrets Scan
-Grep for hardcoded API keys, passwords, tokens, connection strings, private keys. `.env.example` must contain no real values.
-
-### Step 5 — Auth/AuthZ Deep Dive
+### Step 4 — Auth/AuthZ Deep Dive
 - Every authenticated route has middleware guard?
 - Authorization at resource level (not just route)?
 - No IDOR — users cannot access other users' data?
 
-### Step 6 — Input Validation
+### Step 5 — Input Validation
 - All external inputs validated before use (body, query, headers, files, path params)?
 - Length limits enforced?
 - Error responses safe (no stack traces, no internal paths, no raw DB errors)?
@@ -98,3 +95,6 @@ Grep for hardcoded API keys, passwords, tokens, connection strings, private keys
 
 ### Summary — top 3–5 recommendations by risk
 ```
+
+## References
+- `references/scope-map-reference.md` — Step 1 sub-agent dispatch template.

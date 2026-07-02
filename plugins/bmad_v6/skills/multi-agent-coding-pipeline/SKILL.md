@@ -5,6 +5,12 @@ description: Use when running the full BMAD v6 agile pipeline for a large featur
 
 Run the BMAD v6 agile pipeline. If no task is provided, ask first.
 
+## Contract
+- **Input**: a feature/epic description (ask if not provided).
+- **Output**: implemented, tested epics with Review/Stress/QA/Verdict scores; a `PROGRESS.md` entry per epic; DevOps artifacts on final PRODUCTION READY.
+- **Boundary**: Coder owns tests + implementation test-first; Reviewer/StressTester run only after QA approval or escalation; unmitigated CRITICAL security is automatic NOT READY.
+- **Done when**: the Pipeline Summary prints after the final epic's Verdict with Security Gate + Coverage shown.
+
 > **Model assignment** (see CLAUDE.md Model assignment table): dispatch the Coder (core + backend/frontend overlay), Tuner, and DevOps on `opus`; Analyst, PM, Architect, Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; any read-only Explore/mapping sub-agent on `haiku`. Don't run exploration on opus or author code on haiku.
 
 ---
