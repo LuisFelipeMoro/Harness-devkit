@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.1.2] — 2026-07-02
+
+### Fixed
+
+- **Agent model tier pinned in frontmatter.** Pipeline agents (`analyst`, `pm`, `architect`,
+  `scrum-master`, `bug-investigator`, `qa`, `reviewer`, `stress`, `verdict`, `coder` +
+  overlays, `tuner`, `devops`, `rote-adapter`) had no `model:` field, so the Agent tool fell
+  back to inheriting the parent session's model on every spawn regardless of the CLAUDE.md
+  model-assignment table. Now pinned (`sonnet` for reasoning/validation, `opus` for
+  code-writing). Also fixes `DevOps` being listed `opus` in CLAUDE.md but `sonnet` in both
+  pipeline `SKILL.md` files — standardized on `opus` (it writes IaC files).
+- **`bug-fix`'s Phase 3 only ran the test command** — no lint, typecheck, or build — so a fix
+  could reach Reviewer with a broken build. Now runs the full gate set (same as the other
+  pipelines), with reloop-to-fix on any failure via the existing Bug-Fix Loop Protocol.
+- **Missing build gate for React SPA.** Only Next.js had a `next build` gate; `tsc --noEmit`
+  doesn't catch bundler-only failures (unresolved imports, case-sensitive path mismatches).
+  Added to `quality-gate-reference.md`, Quinn's gate list, and the `pre-push` git hook.
+- **`env-guard.sh` only fired on the `Read` tool.** `cat .env`, `grep SECRET .env`, and nested
+  `bash -c "cat .env"` all bypassed the "never read `.env`" rule entirely. Now covers
+  `Read|Bash|Grep|Glob`; regex hardened to catch `.env` anywhere in a command string, not
+  just as a suffix.
+- **Indirect prompt-injection surface in `pr-review-responder.sh`.** Untrusted GitHub PR
+  comment bodies were piped straight into Claude's context with no delimiter, immediately
+  followed by an "ACTION REQUIRED" directive Claude is instructed to obey — exploitable by
+  anyone who can comment on the PR. Now wrapped in explicit untrusted-content markers.
+- **`engineering/quality-gate` depended on a `bmad_v6`-only reference file**
+  (`quality-gate-reference.md`), the same class of bug fixed for the Reviewer agent ref in
+  1.1.1 but missed here — breaks when `engineering` is installed standalone. Gave it its own
+  trimmed local copy instead of a hard cross-plugin dependency.
+- **`security-review` did its full-codebase scan inline** instead of dispatching a read-only
+  Explore/haiku sub-agent like `improve-codebase-architecture` does for identical-shaped
+  work — burning main-thread context on pure grunt work. Now dispatches the same way.
+- **Missing Contract blocks.** `multi-agent-coding-pipeline` and `security-review` had no
+  explicit Input/Output/Boundary/Done-when block, unlike their sibling skills — a SkillSpec
+  HIGH finding (agent follow-through risk). Added, matching the existing pattern.
+
 ## [1.1.1] — 2026-07-01
 
 ### Fixed
