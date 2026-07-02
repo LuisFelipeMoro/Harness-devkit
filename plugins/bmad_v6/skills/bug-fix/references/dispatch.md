@@ -47,14 +47,9 @@ Return ONLY: CODER DONE — BUGFIX COMPLETE — [file:line — what changed, one
 )
 ```
 
-## Phase 3 — Verify: full suite per detected stack
+## Phase 3 — Verify: full gate set per detected stack
 
-| File present | Command |
-|---|---|
-| `next.config.*` | `rtk pnpm vitest run` |
-| `go.mod` | `rtk go test ./...` |
-| `Cargo.toml` | `rtk cargo test` |
-| `package.json` | `rtk npx jest --passWithNoTests` |
+Run every gate for the detected stack from `references/quality-gate-reference.md` (format, type/vet, lint, build, tests + coverage, race for Go, vuln scan) — not the test command alone. A bug fix that passes its new regression test but fails lint/typecheck/build is still a gate FAIL and routes back to Amelia.
 
 Gate report:
 
@@ -63,6 +58,9 @@ Gate report:
 |------------|--------|---------------------------|
 | new test   | ✅     | [name] RED → GREEN        |
 | full suite | ✅     | N tests, 0 failed         |
+| lint       | ✅     | —                         |
+| types/vet  | ✅     | —                         |
+| build      | ✅     | —                         |
 ```
 
 ## Phase 5 — Summary template

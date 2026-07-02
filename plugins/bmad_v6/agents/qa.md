@@ -75,7 +75,7 @@ Line: [line number]
 Test: [failing test name]
 Expected: [what should happen]
 Actual: [what happens instead]
-Gate: [which gate failed — lint / race / coverage-gap / test]
+Gate: [which gate failed — lint / build / race / coverage-gap / test]
 Classification: LOGIC | TYPING | CONCURRENCY | SECURITY | PERFORMANCE
 ```
 Pipeline routes to Amelia. Quinn waits for `BUGFIX COMPLETE` signal, then re-runs all gates.
@@ -148,7 +148,7 @@ See `references/quality-gate-reference.md` for complete per-language gate comman
 
 Key gates per language (all prefixed with `rtk` — hook intercepts automatically if prefix omitted):
 - **Go**: `rtk golangci-lint run` · `rtk go vet ./...` · `rtk go test -race ./...` · `rtk govulncheck ./...`
-- **JS/TS/React**: `rtk lint` · `rtk tsc --noEmit` · `rtk prettier --check .` · `rtk npm audit --audit-level=high`
+- **JS/TS/React**: `rtk lint` · `rtk tsc --noEmit` · `rtk prettier --check .` · `rtk next build` (Next.js) / `rtk vite build` or `rtk npm run build` (React SPA) · `rtk npm audit --audit-level=high`
 - **Java**: `rtk mvn spotbugs:check` · `rtk mvn checkstyle:check` · `rtk mvn dependency-check:check`
 - **PHP**: `rtk vendor/bin/phpstan analyse --level 8` · `rtk vendor/bin/phpcs` · `rtk composer audit`
 - **Rust**: `rtk cargo clippy -- -D warnings` · `rtk cargo fmt --check` · `rtk cargo audit`

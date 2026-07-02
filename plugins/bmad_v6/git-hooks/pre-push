@@ -49,6 +49,9 @@ fi
 
 # TypeScript (non-Next.js projects)
 if [ -f package.json ] && [ -f tsconfig.json ] && [ ! -f next.config.js ] && [ ! -f next.config.ts ] && [ ! -f next.config.mjs ]; then
+    echo "→ TS: build"
+    npm run build --if-present
+
     echo "→ TS: tests + coverage"
     npx jest --coverage --passWithNoTests \
         --coverageThreshold='{"global":{"lines":85}}'

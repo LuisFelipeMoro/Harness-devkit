@@ -5,9 +5,10 @@
 1. Format check *(fastest)*
 2. Type check / vet / static analysis
 3. Lint
-4. Tests + coverage — the mandatory test-runner sensor; every changed source file should have a corresponding test (TDD evidence). Coverage below threshold = FAIL.
-5. Race detector *(Go only)*
-6. Vulnerability scan *(network — last)*
+4. Build — the project must actually build (`next build` / `vite build` / `go build` / `cargo build` / `mvn compile`, etc.); type-check alone does not catch bundler/compiler-only failures. FAIL blocks everything after it.
+5. Tests + coverage — the mandatory test-runner sensor; every changed source file should have a corresponding test (TDD evidence). Coverage below threshold = FAIL.
+6. Race detector *(Go only)*
+7. Vulnerability scan *(network — last)*
 
 For common fixes per gate failure, see `references/quality-gate-reference.md`.
 

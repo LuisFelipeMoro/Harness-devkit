@@ -20,11 +20,11 @@
 | Types | `rtk tsc --noEmit` | Zero errors |
 | Lint | `rtk lint` | Zero warnings |
 | Format | `rtk prettier --check .` | No changes |
-| Build | `rtk next build` *(Next.js only)* | Zero errors |
+| Build | `rtk next build` *(Next.js)* / `rtk vite build` or `rtk npm run build` *(React SPA — Vite/CRA)* | Zero errors |
 | Vuln | `rtk npm audit --audit-level=high` | No high/critical |
 | Coverage | `rtk pnpm vitest run --coverage` | ≥ 85% |
 
-> `next build` is a required gate — catches SSR/hydration issues that `tsc` misses.
+> Build is a required gate for every JS/TS project, not just Next.js — `tsc --noEmit` catches type errors but not bundler-specific failures (unresolved imports, case-sensitive path mismatches, SSR/hydration issues). Skip only for a library published as source with no bundle step.
 
 ## Rust
 | Gate | Command | Pass |

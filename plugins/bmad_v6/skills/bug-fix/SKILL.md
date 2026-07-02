@@ -34,11 +34,11 @@ Dispatch Amelia (model `opus`) using the Phase 2 template in [references/dispatc
 ## Phase 3 — Verify (Quinn)
 
 Input: `CODER DONE` signal from Phase 2.
-Output: Gate report or `QA→CODER BUG REPORT` if regressions found.
+Output: Gate report or `QA→CODER BUG REPORT` if any gate fails.
 
-Run the full test suite for the detected stack and emit the gate report — commands and report shape are in [references/dispatch.md](references/dispatch.md).
+Run every quality gate for the detected stack — not just the test suite: format, type/vet, lint, **build**, tests + coverage, race (Go), vuln scan — per `references/quality-gate-reference.md` (same gate set the full pipelines use). A fix that passes its new test but fails lint/typecheck/build must not reach Reviewer. Emit the gate report per `references/dispatch.md`.
 
-Regressions: emit `QA→CODER BUG REPORT` → route back to Amelia (max 3 iterations).
+Any gate FAIL (regression, lint, typecheck, build, or otherwise): emit `QA→CODER BUG REPORT` → route back to Amelia (Bug-Fix Loop Protocol, max 3 iterations — see `references/quality-gate-reference.md`).
 After 3 failures: escalate to `/task-coding-pipeline` with original BUG REPORT as input.
 
 ## Phase 4 — Review (Reviewer)
