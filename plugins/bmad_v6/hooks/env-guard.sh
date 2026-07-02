@@ -4,16 +4,16 @@
 # Exit 2 blocks the tool call
 
 input=$(cat)
-file_path=$(echo "$input" | python3 -c "
+target=$(echo "$input" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
-    print(d.get('file_path', '') or d.get('command', ''))
+    print(d.get('file_path', '') or d.get('path', '') or d.get('command', ''))
 except Exception:
     print('')
 " 2>/dev/null)
 
-if echo "$file_path" | grep -qE '(^|/)\.(env)(rc|(\.[^/]+)?)?$'; then
+if echo "$target" | grep -qE '(^|[/[:space:]"'\''])\.(env)(rc|(\.[^/[:space:]"'\'']+)?)?([/[:space:]"'\''\`]|$)'; then
     echo "BLOCKED: .env / .envrc files may contain production secrets — Claude must never read them."
     exit 2
 fi

@@ -763,7 +763,7 @@ Spec is the source of truth — code follows spec, never the reverse.
 | Hook | Trigger | Behaviour |
 |------|---------|-----------|
 | `session-bootstrap.sh` | SessionStart | Harness memory — prints `PROGRESS.md` so a new session resumes with done/failed/current state |
-| `env-guard.sh` | PreToolUse → Read | Blocks reads of `.env`, `.envrc`, `.env.*` — hard exit |
+| `env-guard.sh` | PreToolUse → Read/Bash/Grep/Glob | Blocks reads of `.env`, `.envrc`, `.env.*` — hard exit, including `cat`/`grep` via Bash |
 | `pr-review-responder.sh` | PostToolUse → Bash | After `git push`: surfaces PR comments; Claude fixes valid issues and replies |
 | RTK hook | PreToolUse → Bash | Every Bash command routed through RTK for compact output |
 | Caveman activate | SessionStart | Loads compressed mode; persists across turns |
