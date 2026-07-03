@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.0] — 2026-07-03
+
+### Added
+
+- **Database selection reference for the Architect.** `references/db-selection-reference.md` —
+  a PACELC-classified comparison of 15 databases (Cassandra, MongoDB, DynamoDB, CockroachDB,
+  Spanner, PostgreSQL, Redis, etcd, Riak, Neo4j, Elasticsearch, FoundationDB, ScyllaDB,
+  Couchbase, YugabyteDB) with use cases and refactor-risk notes. `architect.md` loads it only
+  when a feature introduces a new datastore or an existing one takes on a materially different
+  use case — not part of every Architecture Document.
+- **Frontend design-quality checklist (anti-AI-slop).** `references/frontend-design-reference.md`,
+  condensed from [Impeccable](https://github.com/pbakaus/impeccable) (Apache 2.0): absolute
+  bans (gradient text, glassmorphism-as-default, side-stripe borders, identical card grids,
+  eyebrow-on-every-section, etc.) plus color/typography/layout/motion rules. `coder-frontend.md`
+  carries the hard-ban shortlist inline and loads the full reference only for stories that
+  create or materially redesign visual surface. Quinn's frontend audit lens (`qa.md`)
+  spot-checks the same bans as a MINOR/aesthetic finding, never a gate blocker.
+- **`/frontend-design` dispatch wired into the task and epic pipelines.** Before dispatching
+  the frontend coder on a story that creates/redesigns visual surface,
+  `multi-agent-coding-pipeline` and `task-coding-pipeline` now invoke Anthropic's
+  `frontend-design` skill for a design plan (palette, type pairing, layout concept, signature
+  element) and pass it into the coder's dispatch prompt. Skipped for backend-only and
+  non-visual frontend work — zero overhead otherwise. Doesn't change the TDD cycle: tests
+  still come first, the plan only governs visual direction.
+
 ## [1.1.2] — 2026-07-02
 
 ### Fixed
