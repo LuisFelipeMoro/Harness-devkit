@@ -38,7 +38,8 @@ Complete Phases 0–4 of the planning skill (Phase 5 is informational when invok
   - Backend-only story → backend coder. Frontend-only → frontend coder.
   - Full-stack story was already split by the ScrumMaster into BE + FE sub-stories sharing the `api-spec.yaml` contract (BE = producer, FE = consumer). Dispatch each to its tier coder; run BE first so the spec is real before FE consumes it.
   - If the repo/plan has no frontend stack, the frontend coder is never spawned (zero overhead).
-- Each receives: `agents/coder.md` + the tier overlay + `story-{slug}.md`
+  - **Frontend story creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` to produce a compact design plan (palette, type pairing, layout concept, signature element), then include that plan in the coder's dispatch prompt. Skip for backend-only stories and for frontend stories that don't touch visual surface (state management, data wiring, a11y-only fixes).
+- Each receives: `agents/coder.md` + the tier overlay + `story-{slug}.md` (+ the design plan, when produced)
 - The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
 - Coder runs Phase 0 Analysis, then Red→Green→Refactor: failing test first, minimum impl, refactor — owns both test and impl files
 - Coder emits `CODER DONE` (with TDD evidence: RED → GREEN) when the cycle is complete

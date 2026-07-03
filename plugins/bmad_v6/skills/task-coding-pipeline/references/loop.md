@@ -23,6 +23,7 @@ Input: Task Manifest row + Architecture → Output: `story-{slug}.md`
 
 **B. Code (TDD)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
 - **Stack-aware dispatch**: pick the overlay by the sub-task's Tier — `agents/coder-backend.md` (server/API/domain) or `agents/coder-frontend.md` (UI/SSR/client). Load only the `language-rules-reference.md` section for the sub-task's `Language` — never all. Full-stack sub-tasks were split BE/FE around the `api-spec.yaml` contract (BE producer first, then FE consumer). No frontend stack → frontend coder never spawned.
+  - **Frontend sub-task creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` for a compact design plan (palette, type pairing, layout concept, signature element) and include it in the coder's dispatch prompt. Skip for backend-only sub-tasks and frontend sub-tasks that don't touch visual surface.
 - The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
 - Coder runs Phase 0 Analysis, then the Red→Green→Refactor cycle: failing test first, minimum impl, refactor — owns both test and impl files
 - Coder emits `CODER DONE` (with TDD evidence: RED → GREEN) when the cycle is complete

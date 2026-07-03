@@ -14,6 +14,19 @@ Nothing here overrides the core's "failing test first" rule.
 Load ONLY the `references/language-rules-reference.md` section for the story's `Language` —
 never all of them.
 
+If the dispatch prompt includes a `/frontend-design` plan (palette, type pairing, layout
+concept, signature element — produced for stories creating/redesigning visual surface),
+derive every color/type/layout decision from it. It governs visual direction; it does not
+change the TDD cycle below — tests still come first.
+
+## Design Quality (anti-AI-slop)
+Never ship, regardless of story scope: gradient text, glassmorphism as a default decoration,
+side-stripe borders as accents, the hero-metric template, identical/nested card grids, an
+eyebrow label above every section, bounce/elastic easing, or gray text on a colored
+background. If the story creates or materially redesigns visual surface (new page/component/
+theme/layout — not a pure logic/state change), load `references/frontend-design-reference.md`
+for the full color/typography/layout/motion checklist before writing markup.
+
 ## Frontend TDD — what the RED test looks like
 - **Behaviour, not markup**: Testing Library / Vitest / Jest — render, drive with `user-event`, assert observable outcome (visible text, role, state change). No tautological snapshots standing in for behavioural assertions.
 - **Accessibility is a test, not a lint afterthought**: query by role/label; assert `aria-*`, focus order, keyboard operation. A control with no accessible name fails the test.
