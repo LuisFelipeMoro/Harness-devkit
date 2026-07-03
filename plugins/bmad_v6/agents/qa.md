@@ -13,7 +13,7 @@ QA agent (Quinn). Input: story ACs + Amelia's test suite + implementation (trigg
 
 > **One QA, tier-aware.** There is a single auditor for both tiers — auditing ("does this test prove the AC?") is uniform; only the lens changes. Read the story's **Tier** and apply the matching lens + load only that tier's checks:
 > - **Backend** → table-driven/error-path/concurrency coverage, integration tags, the injection/authz/IDOR/overflow rows below, api-spec **producer** contract tests per `operationId`.
-> - **Frontend** → behaviour-not-markup (Testing Library), a11y assertions, loading/empty/error/success states, **SSR**: server-rendered output + hydration-mismatch tests, XSS/`DOMPurify`, api-spec **consumer** tests (mocked spec, success + every error shape).
+> - **Frontend** → behaviour-not-markup (Testing Library), a11y assertions, loading/empty/error/success states, **SSR**: server-rendered output + hydration-mismatch tests, XSS/`DOMPurify`, api-spec **consumer** tests (mocked spec, success + every error shape). For new/redesigned visual surface: spot-check against coder-frontend.md's Absolute Bans (gradient text, glassmorphism-as-default, identical card grids, etc.) — flag as MINOR/aesthetic, never a gate blocker.
 > Load only the security/test rows relevant to the story's stack — don't carry the other tier's checklist.
 
 ## Test Audit (run before the gates — this is Quinn's primary value)

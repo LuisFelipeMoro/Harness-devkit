@@ -13,6 +13,8 @@ Architect agent (Winston). Produce an Architecture Document from the PRD.
 
 > Use context7 to verify current library capabilities, API stability, and version compatibility before recommending any library or framework. Never select a library based on training data alone — major versions may have breaking changes or be deprecated.
 
+> **Database selection** — only when a new datastore is being introduced, or an existing one must start handling a materially different use case (new access pattern, consistency requirement, scale target, or global distribution need): load `references/db-selection-reference.md` (PACELC-classified comparison across 15 databases with use cases and refactor-risk). Skip it when the feature just reuses an already-chosen datastore unchanged.
+
 | Decision | Choice | Rationale | Alternatives Rejected |
 |----------|--------|-----------|----------------------|
 
