@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.2.1] — 2026-08-06
+
+### Changed
+
+- **Model tiering rebalanced: heavy reasoning on planning, `haiku` on code execution.**
+  The Model assignment table (`plugins/bmad_v6/CLAUDE.md`) previously ran all
+  planning/validation agents on `sonnet` and every code-writing agent (`coder` + tier
+  overlays, `tuner`, `devops`) on `opus`. Now: `opus` is reserved for the Architect's
+  design pass only (system design, ADRs, tech-stack calls — the one artifact everything
+  downstream depends on); `sonnet` keeps the rest of planning/validation (Analyst, PM,
+  Scrum Master, Bug Investigator diagnosis, QA audit, Reviewer, Stress, Verdict, pipeline
+  orchestrators); `coder` (+ backend/frontend overlays), `tuner`, and `devops` move to
+  `haiku`. Updated in agent frontmatter, `CLAUDE.md`'s table, both pipeline `SKILL.md`
+  files (`multi-agent-coding-pipeline`, `task-coding-pipeline`), `bug-fix`'s dispatch
+  (`SKILL.md` + `references/dispatch.md`), `README.md`, and `codex/harness-adapter.md`.
+- **Architecture and story artifacts made airtight so `haiku` execution stays mechanical.**
+  A cheaper Coder only works if it isn't asked to design anything. `architect.md` now
+  requires a field-by-field table for every data structure (`### Data Structures`) and a
+  new `### Test Case Specification` section enumerating the exact test cases — one row per
+  AC, edge case, and non-N/A OWASP mitigation, with a literal test name Coder copies
+  verbatim. `scrum-master.md`'s story template carries a new `### Test Cases` section
+  filtered from that spec, and the Definition of Done now checks against table rows instead
+  of ACs directly. `coder.md`'s RED phase changed from "write a test that encodes the AC's
+  intent" to "execute the next row from the Test Cases table" — the design decision moved
+  upstream to Architect/Scrum Master. `coder-backend.md`/`coder-frontend.md` reframe their
+  TDD category checklists as gap-detection rather than design guidance. `qa.md` gained a
+  spec-completeness check (every Test Cases row implemented) ahead of its existing
+  intent/tautology/corner-case audit lenses.
+
 ## [1.2.0] — 2026-07-03
 
 ### Added

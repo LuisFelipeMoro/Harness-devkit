@@ -53,13 +53,23 @@ ID: STORY-{N} | Epic: {Epic Name} | Status: Ready for Dev
 ### Known Edge Cases
 {Every edge case from architecture that this story must handle}
 
+### Test Cases
+*(Copied verbatim from architecture's Test Case Specification — filtered to rows this
+story's components touch)*
+| Test Name | Input | Expected Result | Type |
+|-----------|-------|------------------|------|
+
+Amelia implements exactly these tests, RED before GREEN, in table order. She does not
+invent additional test names beyond this list — if she discovers a gap the table doesn't
+cover, she flags it in `CODER DONE` (`Gap found: ...`) rather than silently expanding scope.
+
 ### Do NOT
 - Do not implement {feature X} — that's STORY-{M}
 
 ## Definition of Done
 *(This list is the frozen acceptance contract — agreed before any code is written. Amelia satisfies it via TDD; she does not redefine it.)*
 - [ ] All ACs pass
-- [ ] TDD followed — each AC + security AC had a test written and observed RED before its implementation
+- [ ] TDD followed — every row in the Test Cases table was written and observed RED before its implementation
 - [ ] Unit tests for every exported function / public method
 - [ ] Security ACs verified — no OWASP Top 10 violations in scope
 - [ ] Lint clean (zero errors): Go — `go vet`, `staticcheck`, `golangci-lint`; Java — `checkstyle`, `SpotBugs`, `PMD`; JS/TS — `eslint --max-warnings 0`, `prettier --check`; PHP — `phpstan` level 8, `phpcs`, `php-cs-fixer`; Rust — `cargo clippy -D warnings`, `cargo fmt --check`, `cargo audit`
@@ -74,4 +84,4 @@ ID: STORY-{N} | Epic: {Epic Name} | Status: Ready for Dev
 
 **Full-stack split**: if a task needs both server and UI work, write it as TWO stories — a Backend story (Tier: Backend) and a Frontend story (Tier: Frontend) — that share the `api-spec.yaml` as their contract. The backend story is the spec **producer**; the frontend story is the **consumer**. This keeps each story single-tier, independently testable, and dispatchable to one coder overlay. Sequence: backend story first (makes the spec real), then frontend.
 
-Handoff: each story-{slug}.md → one Coder subagent, dispatched to its tier overlay (`coder-backend.md` or `coder-frontend.md`) per the story's **Tier** field. Each story is self-contained — Coder does not receive architecture.md. The verbatim interface/type/edge-case copies in Technical Context above are what make it self-contained; shallow Technical Context sections will cause Coder to produce incorrect implementations.
+Handoff: each story-{slug}.md → one Coder subagent, dispatched to its tier overlay (`coder-backend.md` or `coder-frontend.md`) per the story's **Tier** field. Each story is self-contained — Coder does not receive architecture.md. The verbatim interface/type/edge-case/test-case copies above are what make it self-contained — a story with a complete Test Cases table needs no design judgment from Coder, only execution; shallow Technical Context or an incomplete Test Cases table will cause Coder to produce incorrect implementations.

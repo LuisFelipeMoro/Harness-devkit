@@ -1,7 +1,7 @@
 ---
 name: coder-backend
 description: Coder overlay — Backend (Amelia · server tier). Load with agents/coder.md core.
-model: opus
+model: haiku
 ---
 
 # Coder overlay — Backend (Amelia · server tier)
@@ -16,6 +16,9 @@ Load ONLY the `references/language-rules-reference.md` section for the story's `
 never all of them.
 
 ## Backend TDD — what the RED test looks like
+The story's Test Cases table should already include a row per category below. If one is
+missing, flag it as a gap in `CODER DONE` rather than inventing the case yourself — Winston's
+spec is the source of test design, not Amelia's judgment.
 - **Unit**: table-driven; every exported function — happy path, boundary, type edge, every `return err` / rejected promise / raised exception.
 - **Integration**: real adapters behind interfaces, mocked I/O (no live network); state transitions, multi-component flows; tag them (`//go:build integration`, `@Tag("integration")`, etc.).
 - **Concurrency** (where it applies): the same resource hit in parallel — races, double-spend, idempotency replay. Go: assert under `-race`.

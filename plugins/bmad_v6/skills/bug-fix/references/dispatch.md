@@ -30,7 +30,7 @@ Return ONLY:
 Agent(
   description: "Amelia — bug fix",
   subagent_type: "claude",
-  model: "opus",
+  model: "haiku",
   prompt: """
 Read agents/coder.md (core) PLUS the tier overlay for the bug's stack —
 agents/coder-backend.md if the fix is server/API/domain, agents/coder-frontend.md if it is UI/SSR/client.

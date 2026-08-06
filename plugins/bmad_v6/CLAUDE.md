@@ -27,11 +27,11 @@ Every skill, agent, and pipeline drives code test-first:
 
 | Work | Model | Examples |
 |------|-------|----------|
-| Read-only / quick answers | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers |
-| Planning · design · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Architect, Scrum Master, Bug Investigator (diagnosis), QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
-| Writing/changing code | `opus` | Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation or TDD red→green |
+| Architecture design | `opus` | Architect — system design, ADRs, tech stack, data-flow decisions the whole plan depends on |
+| Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
+| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation or TDD red→green |
 
-Default to the cheapest model that fits the task. Never run exploration on `opus`; never author production code on `haiku`. Escalate one tier only with a stated reason.
+Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason.
 
 ## Tool Preferences
 - **LSP first**: Use LSP (go-to-definition, find-references, diagnostics) for code navigation — grep only when LSP not applicable

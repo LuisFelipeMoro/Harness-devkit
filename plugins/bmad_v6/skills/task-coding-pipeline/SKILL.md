@@ -17,7 +17,7 @@ Behavior contract: [skill.spec.yml](skill.spec.yml) · dependency ledger: [deps.
 
 ## Model assignment
 
-Dispatch the Coder (core + backend/frontend overlay), Tuner, and DevOps on `opus`; Architect, Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; any read-side Explore/mapping sub-agent on `haiku` (see CLAUDE.md Model assignment table).
+Dispatch the Architect on `opus`; Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-side Explore/mapping sub-agent on `haiku` (see CLAUDE.md Model assignment table).
 
 ## Steps
 
