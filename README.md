@@ -210,6 +210,38 @@ bash ~/.claude/git-hooks/install.sh
 
 ---
 
+### Codex CLI / Other Harnesses
+
+Every `SKILL.md` in this devkit uses only `name:`/`description:` frontmatter — the same
+shape Codex CLI's own Skills convention expects. A dedicated installer places them where
+Codex scans for skills:
+
+```bash
+bash plugins/bmad_v6/scripts/install-codex.sh
+```
+
+**What you get:** every skill installed to `~/.agents/skills/` (Codex's user-level skills
+path), plus the 18 `agents/*.md` persona docs copied to `~/.agents/agents-reference/` for
+manual reference. Root `AGENTS.md` documents the same engineering standards for any
+harness working in this repo directly.
+
+To also give Codex real, dispatchable subagents (not just reference docs) — one
+`~/.codex/agents/<name>.toml` per persona, reasoning effort mapped from that persona's
+Claude model tier (`opus`→`high`, `sonnet`→`medium`, `haiku`→`low`):
+
+```bash
+bash plugins/bmad_v6/scripts/generate-codex-agents.sh
+```
+
+**Scope:** single-agent skills (`security-review`, `quality-gate`, `pr-review`, etc.) work
+identically to Claude Code. Multi-agent pipeline skills (`multi-agent-coding-pipeline`,
+`bug-fix`, etc.) now have real per-persona Codex subagents at the right reasoning effort,
+but pipeline **sequencing** — which persona runs when, reading handoff signals like
+`CODER DONE` — hasn't been exercised end-to-end in a live Codex session yet. See
+`plugins/bmad_v6/codex/harness-adapter.md` for the vocabulary mapping and current gaps.
+
+---
+
 ## Plugin Structure
 
 The devkit is split into focused plugins. Each installs independently or together:
