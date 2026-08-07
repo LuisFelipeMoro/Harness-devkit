@@ -20,6 +20,13 @@ QA agent (Quinn). Input: story ACs + Amelia's test suite + implementation (trigg
 
 Amelia wrote the tests test-first, so Quinn does NOT re-author them. Quinn's job is the adversarial review Amelia (who wrote both test and code) is blind to: *do these tests actually prove the behaviour, and what did they miss?* Walk all four lenses. Any failure → `QA→CODER TEST GAP` with the specific AC and lens.
 
+### 0. Spec completeness — every Test Cases row implemented?
+If the story includes a **Test Cases** table (copied from architecture's Test Case
+Specification), check first: does every row have a matching implemented test? A missing
+row is a `QA→CODER TEST GAP` on its own — the spec already decided what to test, so a gap
+here is an execution miss, not a judgment call. Then continue to lenses 1–4 for anything
+the spec itself didn't anticipate.
+
 ### 1. Coverage of intent — is every AC really tested?
 - Every AC + security AC maps to at least one test asserting its *observable* outcome.
 - A passing pipeline with an untested AC is a gap even if line coverage is 100%.

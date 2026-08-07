@@ -29,7 +29,7 @@ Input: SAM HANDOFF from Phase 1 (includes Sam's failing RED test).
 Output: `CODER DONE — BUGFIX COMPLETE` signal (see Agent Handoff Signals in `references/quality-gate-reference.md`).
 Boundary: make Sam's RED test GREEN with the minimum fix. Amelia may ADD regression tests for edge cases the fix exposes; she must NOT weaken, delete, or rewrite an existing test to fit the fix.
 
-Dispatch Amelia (model `opus`) using the Phase 2 template in [references/dispatch.md](references/dispatch.md).
+Dispatch Amelia (model `haiku`) using the Phase 2 template in [references/dispatch.md](references/dispatch.md).
 
 ## Phase 3 — Verify (Quinn)
 

@@ -5,7 +5,7 @@ BMAD v6 AI-assisted development pipeline for [Claude Code](https://claude.ai/cod
 - **Test-first by default** — the Coder writes a failing test before any implementation; the QA agent audits those tests instead of writing them. No code ships without a test that was red first.
 - **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
 - **11-agent coding pipeline** — Analyst → PM → Architect → grill-me plan stress → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps
-- **Task-matched models** — `haiku` for read/explore, `sonnet` for plan/validate/long sessions, `opus` for writing code. Cheaper where it can be, stronger where it counts.
+- **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap.
 - **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Flutter, HTMX, Kotlin Android, HTML/CSS
 - **Security-first quality gates** — OWASP Web Top 10 + OWASP LLM Top 10 2025 enforced at every stage
 - **23 skills** (slash commands) — architecture, security review, DB migrations, observability, PR review, release management, and more

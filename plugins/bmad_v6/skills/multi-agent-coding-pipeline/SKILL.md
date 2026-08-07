@@ -11,7 +11,7 @@ Run the BMAD v6 agile pipeline. If no task is provided, ask first.
 - **Boundary**: Coder owns tests + implementation test-first; Reviewer/StressTester run only after QA approval or escalation; unmitigated CRITICAL security is automatic NOT READY.
 - **Done when**: the Pipeline Summary prints after the final epic's Verdict with Security Gate + Coverage shown.
 
-> **Model assignment** (see CLAUDE.md Model assignment table): dispatch the Coder (core + backend/frontend overlay), Tuner, and DevOps on `opus`; Analyst, PM, Architect, Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; any read-only Explore/mapping sub-agent on `haiku`. Don't run exploration on opus or author code on haiku.
+> **Model assignment** (see CLAUDE.md Model assignment table): dispatch the Architect on `opus`; Analyst, PM, Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-only Explore/mapping sub-agent on `haiku`. Don't run exploration on opus or the Architect's design pass on haiku.
 
 ---
 

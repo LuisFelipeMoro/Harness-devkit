@@ -1,7 +1,7 @@
 ---
 name: coder-frontend
 description: Coder overlay — Frontend / Client (Amelia · UI tier). Load with agents/coder.md core.
-model: opus
+model: haiku
 ---
 
 # Coder overlay — Frontend / Client (Amelia · UI tier)
@@ -28,6 +28,9 @@ theme/layout — not a pure logic/state change), load `references/frontend-desig
 for the full color/typography/layout/motion checklist before writing markup.
 
 ## Frontend TDD — what the RED test looks like
+The story's Test Cases table should already include a row per category below. If one is
+missing, flag it as a gap in `CODER DONE` rather than inventing the case yourself — Winston's
+spec is the source of test design, not Amelia's judgment.
 - **Behaviour, not markup**: Testing Library / Vitest / Jest — render, drive with `user-event`, assert observable outcome (visible text, role, state change). No tautological snapshots standing in for behavioural assertions.
 - **Accessibility is a test, not a lint afterthought**: query by role/label; assert `aria-*`, focus order, keyboard operation. A control with no accessible name fails the test.
 - **States**: loading, empty, error, and success — each gets a test. Async data: assert the loading→resolved/error transitions.
