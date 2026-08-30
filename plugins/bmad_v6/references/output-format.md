@@ -9,7 +9,7 @@
 ## 📄 John (PM) — PRD
 ## 🏗️ Winston (Architect) — Architecture
 ## 📝 Bob (SM) — Story File
-## 💻 Amelia (Coder) — TDD Implementation (tests + code)
+## 💻 Amelia (Coder) — Implementation + Specified Tests (falsified)
 ## 🧪 Quinn (QA) — Test Audit & Gates
 ## 🔍 Reviewer — Code Review  [Score: X/10]
 ## 🔥 Stress Tester — Stress Report  [Score: X/10]
@@ -26,11 +26,11 @@
 
 | Agent | Role | Output | Score |
 |-------|------|--------|-------|
-| Mary | Analyst | product-brief.md | — |
-| John | PM | PRD.md ({N} FRs, {M} NFRs) | — |
-| Winston | Architect | architecture.md ({N} ADRs) | — |
+| Mary | Analyst | {key}/product-brief.md | — |
+| John | PM | {key}/PRD.md ({N} FRs, {M} NFRs) | — |
+| Winston | Architect | delivery-{slug}-{key}.md ({N} ADRs) | — |
 | Bob | SM | story-{slug}.md | — |
-| Amelia | Coder | tests + impl ({N} files, TDD red→green) | — |
+| Amelia | Coder | impl + tests ({N} files, {N} rows, all falsified) | — |
 | Quinn | QA | audited {N} tests, coverage {C}% | — |
 | Reviewer | Code Review | {N} issues ({X} critical) | {score}/10 |
 | Stress | Chaos/Perf | {N} scenarios | {score}/10 |
@@ -53,10 +53,10 @@
 
 | Tab | Agent(s) | Content |
 |-----|----------|---------|
-| Analysis | Mary + John | product-brief.md + PRD.md |
-| Planning | Winston | architecture.md + manifest |
+| Analysis | Mary + John | {key}/product-brief.md + {key}/PRD.md |
+| Planning | Winston | delivery file + manifest |
 | Stories | Bob | story-{slug}.md files |
-| Code | Amelia | Tests + implementation (TDD) |
+| Code | Amelia | Implementation + specified tests (falsified) |
 | QA Audit | Quinn | Test audit + gates + coverage |
 | Review | Reviewer | Review + score |
 | Stress | Stress Tester | Stress report + score |

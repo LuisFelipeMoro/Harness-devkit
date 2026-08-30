@@ -124,19 +124,19 @@ Use as test prompts when validating the skill or as quick-start examples.
 ```
 /analysis Build a webhook delivery system with retry, signature verification, and dead letter queue
 ```
-Output: product-brief.md + PRD.md + Epic Summary table. No architecture produced yet.
+Output: `docs/deliveries/{key}/product-brief.md` + `docs/deliveries/{key}/PRD.md` + Epic Summary table. No delivery file produced yet.
 
 **Step 2 — `/planning`** (loads existing Brief+PRD, produces architecture):
 ```
 /planning
 ```
-Output: architecture.md (with Mermaid diagram + OWASP threat table) + Epic Manifest. Halts — no code.
+Output: docs/deliveries/delivery-{slug}-{key}.md (with Mermaid diagram + OWASP threat table) + Epic Manifest. Halts — no code.
 
 **Step 3 — `/multi-agent-coding-pipeline`** (loads all artifacts, implements):
 ```
 /multi-agent-coding-pipeline
 ```
-Loads Brief, PRD, architecture.md, Epic Manifest. Runs ScrumMaster → Coder → QA → Review → Verdict.
+Loads Brief, PRD, the delivery file, Epic Manifest. Runs ScrumMaster → Coder → QA → Review → Verdict.
 
 ---
 

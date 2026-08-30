@@ -54,7 +54,7 @@ Start with: `Score: X/10`
 
 **Maintainability**: functions >40 lines · magic numbers without named constants · poor naming (`data`, `info`, `result`, single-letter vars outside loops) · untyped public API · missing type annotations on exported symbols
 
-**TDD Compliance**: every AC + security AC has a test that asserts observable behaviour (not a tautology, not mock-call-only) · tests would fail if the implementation were broken (mutation sense) · corner/error/boundary cases covered, not just the happy path · no test weakened or deleted to make a change pass · test files present alongside the implementation. Tautological or absent tests for a shipped behaviour = MAJOR.
+**Test Falsifiability**: every AC + security AC has a test that asserts observable behaviour (not a tautology, not mock-call-only) · every test carries falsification evidence — the break applied, the quoted assertion failure, the restore · tests would fail if the implementation were broken · corner/error/boundary cases covered, not just the happy path · no test weakened or deleted to make a change pass · test files present alongside the implementation. Because tests are written after the implementation, read them adversarially: does this test encode the *requirement*, or does it just restate what the code happens to do? A test whose expected value is computed with the implementation's own logic proves nothing. Tautological, unfalsified, or absent tests for a shipped behaviour = MAJOR — independent of how high coverage is.
 
 Per issue: `[SEVERITY] file:line — description`  Severity: `CRITICAL | MAJOR | MINOR | NIT`
 

@@ -1,5 +1,154 @@
 # Changelog
 
+## [1.3.0] — 2026-08-30
+
+### Changed
+
+- **TDD replaced with spec-first testing across every pipeline, agent, and skill.**
+  Code is no longer written test-first. Instead the test specification is frozen *before*
+  the code and the tests are written *after* it, then proven by falsification. Four steps:
+  **Spec** (Architect freezes a Test Case table) → **Implement** (Coder builds to it) →
+  **Test** (Coder writes exactly those rows) → **Falsify** (Coder breaks each code path,
+  observes the test fail on its own assertion, restores).
+
+  **Why this changed.** Red→Green→Refactor was dropped after real usage showed it wasn't
+  paying for itself. It burns a large amount of tokens — every acceptance criterion costs an
+  extra write-run-read cycle before any implementation exists, plus the RED output quoted
+  back into context, multiplied across every story in a pipeline — and the code quality it
+  bought did not measurably exceed what a tight plan plus a rigorous post-hoc test pass
+  produces. Worse, agent-driven TDD degraded into writing whatever test would go red fastest,
+  which is a bias toward shallow tests, not good ones. The leverage was never in the ordering;
+  it was in deciding *what to assert and why*. So that decision moved upstream into the
+  architecture, where it is made once on `opus` and reused, instead of being re-derived
+  per-AC on `haiku` at execution time.
+
+  **What replaces the RED guarantee.** Test-first's one real guarantee is that a test was
+  observed to fail. Falsification restores it after the fact and more cheaply: apply the
+  break the spec names, confirm the assertion fails, revert. One run per test, no
+  implementation-blocking cycle.
+
+  **Tautology is now the blocking defect; coverage is only a floor.** A green suite at 90%
+  coverage that survives having its guards deleted fails the audit. QA scores a tautological
+  or unfalsified test as MAJOR, capping the score at 4 — the same weight as a failing gate —
+  and coverage above target never compensates. Tests added purely to move the percentage are
+  explicitly rejected, and coverage-driven additions are re-audited as the highest-risk source
+  of tautologies.
+
+  **Bug fixes keep test-first**, and are the only exception: the RED reproduction test is what
+  proves the root cause was found rather than guessed, so it is written and observed failing
+  before the fix. There the RED *is* the falsification, obtained for free.
+
+  Files: `plugins/bmad_v6/CLAUDE.md` (new "Spec-First Test Discipline" section replacing
+  "TDD Discipline"); `architect.md` (Test Case Specification gains **Expected Observable
+  Result**, **Why It Matters**, and **Falsified By** columns — the table is now the
+  highest-leverage section of the architecture); `scrum-master.md` (story carries all columns
+  verbatim; a row missing any of the three is an incomplete story; DoD checks rows +
+  falsification + no tautologies); `coder.md` (Phase 1 TDD Cycle replaced by Phase 1 Implement
+  → Phase 2 Write specified tests → Phase 3 Falsify; `CODER DONE` now reports spec coverage
+  and one evidence line per test); `coder-backend.md`/`coder-frontend.md` (security and
+  contract tests falsified by deleting the control); `qa.md` (audit lens 1 is now falsification
+  evidence with mandatory spot-checks, lens 2 is an expanded tautology hunt, score table gains
+  a Spec + Falsification column); `reviewer.md`, `verdict.md`, `tuner.md`; both pipeline
+  skills + `task-coding-pipeline/references/loop.md`; `bug-fix/SKILL.md` (documents the
+  exception); `engineering:observability` and `engineering:database-migration` (assert-then-
+  falsify instead of RED-first; observability's `test-first-and-checklist.md` renamed to
+  `test-and-checklist.md`); `engineering:code-review-gate`, `engineering:quality-gate`,
+  `pr-workflow:pr-review` (TDD-compliance check → test-falsifiability check, with new HIGH
+  findings for expected values re-derived from the implementation and for security tests that
+  pass with the control removed); plus `references/` (`bmad-artifacts.md`,
+  `language-rules-reference.md`, `output-format.md`, `progress-file.md`,
+  `quality-gate-reference.md`, `spec-driven-reference.md`), `README.md`, and both plugin
+  manifests.
+
+### Added
+
+- **`architecture.md` replaced by a keyed delivery file.** The pipeline no longer writes
+  `architecture.md` to the project root. It now writes
+  `docs/deliveries/delivery-{slug}-{key}.md`, where the key is the first 6 hex chars of the
+  SHA-256 of the feature name. Two problems went away: the devkit was overwriting the host
+  repo's own `architecture.md` — a file that usually documents the whole system, not one
+  feature — and a single fixed filename meant two deliveries against the same repo fought over
+  it. The delivery file opens with a signature header (`Delivery-Key`, Status, base commit,
+  release branch, worktree path), and manifests, stories, and `api-spec.yaml` are keyed
+  alongside it under `docs/deliveries/{key}/`. `PROGRESS.md` stays at the repo root with every
+  entry prefixed `[{key}]` so concurrent deliveries interleave readably.
+
+  Because the key is a pure function of the feature name, re-running a pipeline for the same
+  feature resolves to the same delivery and **resumes** it rather than forking a duplicate. The
+  trade-off is that two genuinely independent passes at one feature need distinct names.
+
+  If the repo has its own `architecture.md`, the Architect now reads it as context and never
+  modifies it.
+
+- **Per-delivery git worktree and a branching model that never touches `main`.** Each pipeline
+  run creates `.worktrees/dlv-{key}/` on branch `release/{slug}-{key}`, and everything —
+  stories, gates, QA, review — happens in there, leaving the human's main working tree free.
+  An existing worktree for a key means resume, not recreate.
+
+  Branching: every delivery gets a release branch; per-story `feature/{key}-{story-slug}`
+  branches are optional and merged back with `--no-ff` when a story is substantial enough to
+  keep in history; `/bug-fix` instead cuts `hotfix/{slug}` straight from `main` with no
+  delivery file, release branch, or worktree. **The pipeline never commits or merges to
+  `main`** — its terminal step is opening a PR from a `release/*` or `hotfix/*` branch, and it
+  asks before the first push.
+
+  **Behavior change**: `multi-agent-coding-pipeline`'s "Parallel Coding" phase is now
+  sequential. One worktree per delivery means stories share a working tree, so two concurrent
+  Coder subagents would overwrite each other; story N is green and merged before story N+1 is
+  dispatched. Read-only Explore/mapping subagents still run in parallel. This trades
+  wall-clock for the cross-story isolation the worktree exists to provide.
+
+  New reference: `plugins/bmad_v6/references/delivery-and-worktree.md` (key derivation, header
+  block, setup/resume/teardown commands, branch table, PR rules). Wired into `architect.md`,
+  `scrum-master.md`, `coder.md`, `devops.md`, `CLAUDE.md`, both pipeline skills +
+  `task-coding-pipeline/references/loop.md`, `bug-fix/SKILL.md`, `planning/SKILL.md` +
+  `references/phases.md`, `architecture/SKILL.md`, `references/` (`bmad-artifacts.md`,
+  `output-format.md`, `presets.md`, `progress-file.md`), `README.md`, and `.gitignore`
+  (`/.worktrees/`).
+
+### Fixed
+
+- **Consistency audit across the whole devkit** after the two changes above. Gaps closed:
+  - **Brief and PRD had the same collision `architecture.md` did.** `product-brief.md` and
+    `PRD.md` were written to the repo root, so a second delivery clobbered the first's. Both
+    are now keyed under `docs/deliveries/{key}/`, along with manifests and stories.
+  - **`api-spec.yaml` location settled at the project root.** The new delivery reference had
+    put it under `docs/deliveries/{key}/`, contradicting seven agents that check the project
+    root. Root wins: it is the application's shared, cumulative API contract, tooling expects a
+    fixed path, and worktree isolation already gives each delivery its own checkout — two
+    deliveries touching the same endpoints surface as a merge conflict at PR time, as they
+    should.
+  - **`/release-management` no longer appears to contradict "never merge to `main`".** It now
+    states it is the step *after* a human merges the delivery PR — it tags an already-merged
+    `main` — and that `release/{slug}-{key}` branches are a different thing from "cutting a
+    release". It must not be used to get delivery work onto `main`.
+  - **`/handoff` now records the delivery identity** (key, delivery file, release branch,
+    worktree, next story). Without the key a resumed session derives a fresh one and forks the
+    work. Its `PROGRESS.md` schema copy also gained the `[{key}]` entry prefix and the
+    falsification tie, matching `bmad_v6/references/progress-file.md`.
+  - **Verdict gained a gate** asserting all work sits on `release/*` or `hotfix/*` and nothing
+    on `main`.
+  - **Stress Tester's regression-test instruction clarified** — a stress-found failure mode is
+    written test-first like a bug fix, and the reference now says why (the RED proves the mode
+    was reproduced, not assumed) rather than reading as leftover TDD.
+  - **"Architecture + Manifest" retained-context wording** updated to "the delivery file +
+    Manifest" in four places.
+  - **README pipeline diagram** gained the Delivery Setup and Delivery Close phases, marks
+    implementation SEQUENTIAL, and shows the keyed artifact paths.
+  - **`AGENTS.md` and `codex/harness-adapter.md`** now state both conventions for non-Claude
+    harnesses; the adapter notes delivery isolation is plain `git` and should port cleanly,
+    with sequencing still the unvalidated part.
+  - Verified: every relative `.md` link in the repo resolves, every `SKILL.md` is under 100
+    lines, both plugin manifests parse, and the global/codex installers use globs so the new
+    reference files ship without a manifest edit.
+
+- **`multi-agent-coding-pipeline` epic-loop detail extracted to `references/loop.md`.** Adding
+  the delivery-setup phase pushed `SKILL.md` from 98 to 115 lines, past the devkit's own
+  "under 100 lines, overflow to `references/`" rule. Steps A–F now live in
+  `skills/multi-agent-coding-pipeline/references/loop.md` (mirroring what
+  `task-coding-pipeline` already did), leaving a 69-line `SKILL.md` with a phase summary and a
+  link. No behavior change.
+
 ## [1.2.1] — 2026-08-06
 
 ### Changed

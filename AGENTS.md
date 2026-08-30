@@ -8,6 +8,17 @@ repo: the canonical engineering standards live in a single place to avoid drift 
 quality gates, security defaults, and per-language rules that apply regardless of which
 harness you are.
 
+Two conventions there are easy to get wrong and worth calling out up front:
+
+- **Tests are written after the implementation, against a spec frozen before it** — then
+  *falsified* (break the code path, confirm the test fails on its own assertion, restore).
+  Not TDD. A tautological or unfalsified test blocks handoff regardless of coverage. The one
+  exception is a bug fix, which keeps its RED reproduction test.
+- **Pipeline runs are *deliveries***: a keyed plan file under `docs/deliveries/`, one
+  `git worktree` per delivery on a `release/{slug}-{key}` branch, and **never a commit or
+  merge to `main`** — the terminal step is a PR. See
+  `plugins/bmad_v6/references/delivery-and-worktree.md`.
+
 ## Harness-specific notes
 
 - **Skills** (`plugins/*/skills/*/SKILL.md`) use only `name:`/`description:` frontmatter —

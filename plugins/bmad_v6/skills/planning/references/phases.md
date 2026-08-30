@@ -2,22 +2,24 @@
 
 ## Phase 0 — Requirements Input
 
-Check for existing analysis artifacts:
+Derive the delivery slug + key from the feature name first (`references/delivery-and-worktree.md`) — every artifact below is keyed under `docs/deliveries/{key}/`. Then check for existing analysis artifacts:
 
-**If `product-brief.md` and `PRD.md` already exist** (from a prior `/analysis` run):
+**If `{key}/product-brief.md` and `{key}/PRD.md` already exist** (from a prior `/analysis` run for this key):
 - Load them as context
 - Skip to Phase 1
 
-**If `product-brief.md` exists but `PRD.md` does not**:
+**If `{key}/product-brief.md` exists but `{key}/PRD.md` does not**:
 - Load the existing Brief
-- Run PM only: Load `agents/pm.md` → **PRD.md** *(security ACs mandatory for I/O/auth epics)*
-- Skip Analyst step; show `✓ PRD.md`, then continue to Phase 1
+- Run PM only: Load `agents/pm.md` → **`{key}/PRD.md`** *(security ACs mandatory for I/O/auth epics)*
+- Skip Analyst step; show `✓ docs/deliveries/{key}/PRD.md`, then continue to Phase 1
 
 **If neither exists** — run full analysis inline:
-1. Load `agents/analyst.md` → **product-brief.md** *(include language context + security constraints)*
-2. Load `agents/pm.md` → **PRD.md** *(security ACs mandatory for I/O/auth epics)*
+1. Load `agents/analyst.md` → **`{key}/product-brief.md`** *(include language context + security constraints)*
+2. Load `agents/pm.md` → **`{key}/PRD.md`** *(security ACs mandatory for I/O/auth epics)*
 
-Show: `✓ product-brief.md` / `✓ PRD.md` as each is produced.
+Show: `✓ docs/deliveries/{key}/product-brief.md` / `✓ docs/deliveries/{key}/PRD.md` as each is produced.
+
+All planning artifacts are keyed under the delivery — see `references/delivery-and-worktree.md`. Only `api-spec.yaml` stays at the project root.
 
 ## Phase 1 — Architecture
 
@@ -25,14 +27,14 @@ Load `agents/architect.md` with Brief + PRD as input.
 
 Required output sections: Security Architecture + OWASP threat table + Mermaid data-flow diagram(s).
 
-Output: **architecture.md** — write to project root (show in full). Show: `✓ architecture.md`
+Output: **the delivery file** — write to `docs/deliveries/delivery-{slug}-{key}.md` with the header block from `references/delivery-and-worktree.md` (show in full). Show: `✓ docs/deliveries/delivery-{slug}-{key}.md`
 
 ## Phase 2 — Stress the Plan (grill-me — MANDATORY before any code)
 
 Every plan is stress-tested before coding. Load `/grill-me` and grill the architecture + manifest: missing error cases, auth gaps, schema problems, undecided edge cases, unowned failure modes. The goal is to surface and **close gaps now**, while changes are cheap — not at code time.
 
 For each gap grill-me raises:
-- If the requirements (Brief/PRD/architecture) support a decision → **decide it and write it into `architecture.md`**. A question the plan should have answered but didn't is a planning error — fix the plan, do not defer it to the coder.
+- If the requirements (Brief/PRD/delivery file) support a decision → **decide it and write it into the delivery file**. A question the plan should have answered but didn't is a planning error — fix the plan, do not defer it to the coder.
 - If it cannot be decided from the available context → carry it to Phase 3 as an explicit open question for the human.
 
 Re-run grill-me until it raises no new gaps the plan can resolve on its own.
@@ -47,7 +49,7 @@ Present to user:
 
 Ask: *"Does the architecture make sense? Any changes to libraries, strategies, or design? Please resolve the open questions above. Approve / request changes?"*
 
-On changes → update `architecture.md` → re-confirm before continuing.
+On changes → update the delivery file → re-confirm before continuing.
 
 **If `api-spec.yaml` was produced** (feature has HTTP endpoints):
 
@@ -62,7 +64,7 @@ The API contract was already stressed in Phase 2 (grill-me) — confirm those fi
 
 On spec changes → update `api-spec.yaml` → run `rtk npx @stoplight/spectral-cli lint api-spec.yaml --ruleset .spectral.yaml` → re-confirm before continuing.
 
-**Do not proceed to Phase 4 (Manifest) until both `architecture.md` and `api-spec.yaml` (if present) are approved and all open questions resolved.**
+**Do not proceed to Phase 4 (Manifest) until both the delivery file and `api-spec.yaml` (if present) are approved and all open questions resolved.**
 
 ## Phase 4 — Manifest
 
@@ -82,9 +84,9 @@ Determine scope from the PRD epic count:
 
 `Language` must be populated from the Architect's Tech Stack decision — carries runtime, version, and framework (e.g. `Go 1.26.2`, `TypeScript 5 / Next.js 14`, `Java 21 / Spring Boot 3`). Every downstream agent reads Language from the Manifest — never inferred.
 
-Each task/sub-task must be **independently testable** — expressible as one or more failing tests written before its implementation. If a row cannot be stated as a test-first unit, split it until it can.
+Each task/sub-task must be **independently testable** — expressible as one or more Test Case rows, each with an observable result and a named break that would falsify it. If a row cannot be stated that way, split it until it can.
 
-Write to: `epic-manifest.md` or `task-manifest.md` at project root. Show: `✓ epic-manifest` or `✓ task-manifest`
+Write to: `docs/deliveries/{key}/epic-manifest.md` or `docs/deliveries/{key}/task-manifest.md` — beside the delivery file, keyed the same. Show: `✓ epic-manifest` or `✓ task-manifest`
 
 ## Phase 5 — Plan Summary
 
@@ -96,10 +98,10 @@ Print the manifest and halt (standalone invocation only):
 Plan ready.
 
 Artifacts produced:
-  ✓ product-brief.md
-  ✓ PRD.md
-  ✓ architecture.md
-  ✓ [epic-manifest | task-manifest]
+  ✓ docs/deliveries/{key}/product-brief.md
+  ✓ docs/deliveries/{key}/PRD.md
+  ✓ docs/deliveries/delivery-{slug}-{key}.md
+  ✓ docs/deliveries/{key}/[epic-manifest | task-manifest].md
 
 To implement:
   → /multi-agent-coding-pipeline   — multiple epics (full BMAD v6 pipeline)

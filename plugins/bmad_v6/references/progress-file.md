@@ -29,7 +29,8 @@ _Last updated: <YYYY-MM-DD HH:MM> — <branch>_
 - **One fact per bullet.** Each `Done`/`Failed` line is independently verifiable.
 - **Convert relative dates to absolute** (`2026-06-26`, not "today").
 - **Never log secrets, tokens, or PII** — same rule as application logs.
-- **Tie to the Sensors.** A `Done` item should reference the test or gate that proves it (TDD: the test that went RED → GREEN, the coverage gate that passed).
+- **Tie to the Sensors.** A `Done` item should reference the test or gate that proves it — the test that was falsified (and the break that made it fail), the gate that passed.
+- **Prefix every entry with the delivery key** — `` `[a8f3c1]` STORY-3 cart totals — … `` — so concurrent deliveries interleave readably in one root-level file, and a resumed session can filter to its own. Bug fixes use their hotfix slug instead: `` `[hotfix/null-cart]` ``. See `references/delivery-and-worktree.md`.
 - **Atomic-commit discipline.** Each `Done` entry maps to one atomic commit where possible, so the progress log and git history agree.
 
 ## Who writes it

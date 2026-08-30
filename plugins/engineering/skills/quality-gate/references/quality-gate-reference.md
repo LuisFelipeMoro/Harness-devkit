@@ -26,6 +26,18 @@
 
 > Build is a required gate for every JS/TS project, not just Next.js — `tsc --noEmit` catches type errors but not bundler-specific failures (unresolved imports, case-sensitive path mismatches, SSR/hydration issues). Skip only for a library published as source with no bundle step.
 
+**Enforcement integrity** — run before trusting the Lint gate; a green lint proves nothing if
+the rules were silenced. Any hit = FAIL (rationale + fixes:
+`bmad_v6/references/frontend-hardening-reference.md`):
+
+| Check | Command | Pass |
+|-------|---------|------|
+| Security severity | `grep -rEn '"(security\|no-secrets\|regexp)/[^"]+"[[:space:]]*:[[:space:]]*"warn"' eslint.config.*` | No match — all at `"error"` |
+| Rule shadowing | `grep -c "no-restricted-syntax" eslint.config.*` | If > 1, no two blocks' `files` globs overlap |
+| Warning tolerance | `grep -rn "eslint" package.json .github/ .gitlab-ci.yml 2>/dev/null` | Every invocation has `--max-warnings 0` |
+| Coverage config | `grep -rn "coverageConfigDefaults.exclude.filter" vitest.config.* jest.config.*` | No match — defaults extended, never filtered |
+| Dead CI | `ls .github/workflows/ 2>/dev/null` | Every file present runs on the project's real CI system |
+
 ## Rust
 | Gate | Command | Pass |
 |------|---------|------|

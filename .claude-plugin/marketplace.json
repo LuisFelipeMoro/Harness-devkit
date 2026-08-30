@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-devkit",
-  "description": "BMAD v6 AI-assisted development pipeline \u2014 Go/TS/Java/PHP/Rust multi-language engineering standards, OWASP security gates, TDD-first pipeline, 23 skills",
+  "description": "BMAD v6 AI-assisted development pipeline \u2014 Go/TS/Java/PHP/Rust multi-language engineering standards, OWASP security gates, spec-first falsification-gated pipeline, 23 skills",
   "owner": {
     "name": "Luis Moro"
   },

@@ -19,7 +19,7 @@ Tuner agent (Tyler). Input: TUNER REQUEST from Reviewer or StressTester — list
 ### What Tyler does NOT handle
 - `[CRITICAL]` or `[MAJOR]` findings → route to Amelia (Coder)
 - Failing quality gates → route to Amelia (Coder)
-- Test changes of any kind → Amelia owns tests (TDD)
+- Test changes of any kind → Amelia owns tests (she wrote them against the frozen spec and falsified them; a tuned test loses its evidence)
 - Architectural changes → Winston (Architect)
 
 ---

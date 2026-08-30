@@ -3,16 +3,23 @@ name: bug-fix
 description: Use when investigating and fixing a behavioral bug — dispatches Sam (Bug Investigator) and Amelia (Coder) as sub-agents to keep exploration out of main context. Trigger phrases — "bug", "fix", "broken", "not working", "wrong behavior", "unexpected", "crash", "regression", "debug", "fails with".
 ---
 
-> **Discipline**: Failing test written RED before any fix. Never modify existing tests to fit the fix.
+> **Discipline**: Failing reproduction test written RED before any fix. Never modify existing tests to fit the fix.
+>
+> This is the **one deliberate exception** to the devkit's spec-first testing rule (feature work
+> implements first, then writes and falsifies the specified tests — see CLAUDE.md). A bug fix
+> keeps test-first because the RED run is the evidence that the root cause was actually found
+> rather than guessed: a fix applied without a test that failed beforehand can just as easily be
+> masking the symptom. The RED here *is* the falsification step, obtained for free.
 
 Behavior contract: [skill.spec.yml](skill.spec.yml) · dependency ledger: [deps.toml](deps.toml). Sub-agent dispatch prompts and report templates: [references/dispatch.md](references/dispatch.md).
 
 ## Contract
 
 - **Input**: bug description + reproduction steps (ask if not provided).
-- **Output**: a minimal fix that turns a RED test GREEN, a green full suite, a Reviewer score, and a Bug Fix Summary.
+- **Output**: a minimal fix that turns a RED test GREEN, a green full suite, a Reviewer score, a Bug Fix Summary, and a PR from `hotfix/{slug}` to `main`.
 - **Boundary**: never weaken/delete/rewrite an existing test to make the fix pass; Reviewer sees changed files only.
-- **Steps**: 1) Investigate (Sam) → 2) Fix (Amelia) → 3) Verify (Quinn) → 4) Review → 5) Summary.
+- **Branching**: a bug fix uses a **hotfix branch cut from `main`** — `hotfix/{slug}` — and nothing else. No delivery file, no release branch, no feature branches, no worktree: the fix commits straight onto the hotfix branch. The terminal step is a PR to `main`; never commit or merge to `main` directly. See [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md).
+- **Steps**: 0) Cut `hotfix/{slug}` from `main` → 1) Investigate (Sam) → 2) Fix (Amelia) → 3) Verify (Quinn) → 4) Review → 5) Summary + PR to `main`.
 
 ## Phase 1 — Investigate (Sam sub-agent)
 

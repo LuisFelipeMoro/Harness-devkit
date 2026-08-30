@@ -19,19 +19,25 @@ Load and follow `skills/planning.md` starting from **Phase 1 (Architecture)**.
 ## Phase 2 — Sub-Task Loop (repeat per sub-task)
 
 **A. Story** — `agents/scrum-master.md`
-Input: Task Manifest row + Architecture → Output: `story-{slug}.md`
+Input: Task Manifest row + the delivery file → Output: `docs/deliveries/{key}/story-{slug}.md`
 
-**B. Code (TDD)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
+**B. Code (Spec→Implement→Test→Falsify)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
+
+> Runs **inside the delivery worktree** (`.worktrees/dlv-{key}/`) on the release branch, and
+> **one sub-task at a time** — sub-tasks share that single worktree, so two concurrent Coders
+> would overwrite each other. Optionally cut `feature/{key}-{story-slug}` for a substantial
+> sub-task and merge it back with `--no-ff` once its Verdict passes; small sub-tasks commit
+> straight to the release branch. Never commit or merge to `main`.
 - **Stack-aware dispatch**: pick the overlay by the sub-task's Tier — `agents/coder-backend.md` (server/API/domain) or `agents/coder-frontend.md` (UI/SSR/client). Load only the `language-rules-reference.md` section for the sub-task's `Language` — never all. Full-stack sub-tasks were split BE/FE around the `api-spec.yaml` contract (BE producer first, then FE consumer). No frontend stack → frontend coder never spawned.
   - **Frontend sub-task creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` for a compact design plan (palette, type pairing, layout concept, signature element) and include it in the coder's dispatch prompt. Skip for backend-only sub-tasks and frontend sub-tasks that don't touch visual surface.
 - The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
-- Coder runs Phase 0 Analysis, then the Red→Green→Refactor cycle: failing test first, minimum impl, refactor — owns both test and impl files
-- Coder emits `CODER DONE` (with TDD evidence: RED → GREEN) when the cycle is complete
+- Coder runs Phase 0 Analysis, then Phase 1 implement to the frozen Test Case table → Phase 2 write exactly the specified tests → Phase 3 falsify each one (apply the row's break, confirm the assertion fails, restore) — owns both test and impl files
+- Coder emits `CODER DONE` with spec coverage ({n}/{N} rows) and one falsification evidence line per test
 - Orchestrator stores compact ref: `"ST1: {file}.{ext} + tests, {N} lines, implements {Interface}"`
 
 **C. QA audit + gates** — `agents/qa.md`
 Input: ACs from Task Manifest (including Security ACs) + Amelia's tests + full code
-Quinn audits the tests (intent-encoding, corner cases, no tautologies — see qa.md Test Audit), then runs all quality gates. Quinn authors no tests. Route on Quinn's output signal:
+Quinn audits the tests (spec-row completeness, falsification evidence + spot-checks, intent-encoding, corner cases, no tautologies — see qa.md Test Audit), then runs all quality gates. Quinn authors no tests. Route on Quinn's output signal:
 
 - `QA→REVIEWER APPROVAL` → proceed to D (Review + Stress in parallel)
 - `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → Bug-Fix Loop
@@ -66,7 +72,7 @@ After each sub-task Verdict, append a `PROGRESS.md` entry at the repo root (Done
 
 **Post-verdict (PRODUCTION READY)**: load `agents/devops.md` (Ops) — generates Dockerfile, .dockerignore, docker-compose.yml, optional CI/k8s.
 
-> **Context Budget**: After each sub-task: drop code + story. Retain: Architecture + Manifest + all scores.
+> **Context Budget**: After each sub-task: drop code + story. Retain: the delivery file + Manifest + all scores.
 > If running 4+ sub-tasks or context >75% full: summarize completed sub-tasks to one-line refs:
 > `"ST{N}: {slug} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never drop scores.
 

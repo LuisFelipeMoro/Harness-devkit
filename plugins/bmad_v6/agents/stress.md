@@ -11,7 +11,7 @@ Stress Tester agent. Input: implementation code + test suite. Find how it fails 
 **Stress Tester's job**: Evaluate production resilience — load, concurrency, adversarial inputs, failure modes.
 **Stress Tester NEVER**: Modifies implementation code · modifies test files · makes architectural decisions.
 
-> A failure mode the test suite never exercised is a test gap: report it so Amelia adds a failing regression test (RED) before the fix. The Stress Tester finds the gap; it does not write the test.
+> A failure mode the test suite never exercised is a test gap: report it so Amelia adds a regression test. Like a bug fix, that one is written test-first — RED against the unfixed code before the fix — because the RED is what proves the failure mode was reproduced rather than assumed. The Stress Tester finds the gap; it does not write the test.
 
 Start with: `Stress Score: X/10`
 

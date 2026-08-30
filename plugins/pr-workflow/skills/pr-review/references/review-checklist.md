@@ -1,6 +1,6 @@
 # PR Review Checklist
 
-Apply in order: Security → language standards → TDD → general. Fail any CRITICAL immediately.
+Apply in order: Security → language standards → test quality → general. Fail any CRITICAL immediately.
 
 ## Security (OWASP Web Top 10)
 
@@ -32,13 +32,21 @@ Apply in order: Security → language standards → TDD → general. Fail any CR
 - `innerHTML` with user data → CRITICAL
 - Missing `@swagger`/`@ApiOperation` on new endpoints → MEDIUM
 
-## TDD Compliance (every behaviour in the diff)
+## Test Quality (every behaviour in the diff)
+
+Tests are written after the implementation, so the question is never "is there a test?" but
+"would this test fail if the behaviour were wrong?" Read every test asking what break would
+turn it red; if you cannot name one, it is a finding.
 
 - Missing tests for new code paths → HIGH
 - Test asserts nothing real — tautology, snapshot-only, or asserts a mock was called instead of the result → HIGH
 - Test can never fail (system-under-test fully mocked away) → HIGH
+- Expected value computed by calling the function under test, or re-derived with the implementation's own logic, instead of being a literal → HIGH
+- Test name/description restates the implementation ("calls the repository") rather than the requirement it defends → MEDIUM
+- Security control has a test that would still pass with the control deleted → HIGH
 - Happy path only — no corner/error/boundary cases for the inputs the change touches → MEDIUM
 - An existing test was weakened, deleted, or rewritten to make the change pass → HIGH
+- Coverage raised by assertions that execute lines without proving behaviour → MEDIUM
 - Coverage regression (check CI checks output) → MEDIUM
 
 ## General

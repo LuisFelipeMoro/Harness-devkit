@@ -28,15 +28,17 @@ Scrum Master (Bob)
   └─ story references operationId(s) from spec
        ↓
 Coder — Backend (producer)
-  └─ Phase 0 reads api-spec.yaml → writes failing contract tests first (status, schema, auth)
-  └─ Implements to spec exactly until those tests pass; annotations match spec (not vice versa)
+  └─ Phase 0 reads api-spec.yaml → implements to spec exactly; annotations match spec (not vice versa)
+  └─ Then writes contract tests (status, schema, auth) and falsifies each by dropping a
+     required field / changing the status — confirming the test catches spec drift
 Coder — Frontend (consumer)
-  └─ writes failing tests that mock the spec'd endpoints (msw/nock) and assert the UI
-     handles every spec response (success + each error shape) → then implements to those mocks
+  └─ implements against the spec'd endpoints → then writes tests that mock them (msw/nock)
+     and assert the UI handles every spec response (success + each error shape), falsifying
+     each by returning a different status or a missing field
   └─ the api-spec is the shared contract between the two coders — neither invents shapes
        ↓
 QA (Quinn)
-  └─ Audits the contract tests exist per operationId (else QA→CODER TEST GAP)
+  └─ Audits the contract tests exist per operationId AND carry falsification evidence (else QA→CODER TEST GAP)
   └─ Spectral lint: spec quality gate · Schema validation: response shapes match spec
        ↓
 Reviewer
