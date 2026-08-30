@@ -1,6 +1,6 @@
 # Reference: quality-gate — Gate Commands by Stack
 
-> **Coverage thresholds — single source of truth.** The per-language minimums are defined in `bmad_v6/references/quality-gate-reference.md` and **only** there: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. This file mirrors that table for standalone `engineering` plugin use (no `bmad_v6` dependency) — on conflict, `bmad_v6`'s copy wins; change it there first, then propagate here.
+> **Coverage thresholds — single source of truth.** The per-language minimums are defined in `coding-pipeline/references/quality-gate-reference.md` and **only** there: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. This file mirrors that table for standalone `engineering` plugin use (no `coding-pipeline` dependency) — on conflict, `coding-pipeline`'s copy wins; change it there first, then propagate here.
 
 > **RTK**: All commands below use `rtk` prefix. The `rtk hook claude` PreToolUse hook also intercepts every Bash call transparently — so even without an explicit prefix, RTK filters output. Use `rtk proxy <cmd>` when you need raw unfiltered output (debugging, structured parsing). Never prefix RTK meta-commands (`rtk gain`, `rtk discover`, `rtk proxy`) with `rtk` again.
 
@@ -28,7 +28,7 @@
 
 **Enforcement integrity** — run before trusting the Lint gate; a green lint proves nothing if
 the rules were silenced. Any hit = FAIL (rationale + fixes:
-`bmad_v6/references/frontend-hardening-reference.md`):
+`coding-pipeline/references/frontend-hardening-reference.md`):
 
 | Check | Command | Pass |
 |-------|---------|------|

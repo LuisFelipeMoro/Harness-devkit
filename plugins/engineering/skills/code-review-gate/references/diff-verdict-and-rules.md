@@ -10,7 +10,7 @@ rtk git diff --name-only --cached
 
 ## Reviewer payload
 
-Dispatch the Reviewer subagent — `bmad_v6:reviewer` (or `reviewer` in a flat `~/.claude/agents` install). The subagent already carries its Reviewer persona; do not read the agent file into the main context. Pass:
+Dispatch the Reviewer subagent — `coding-pipeline:reviewer` (or `reviewer` in a flat `~/.claude/agents` install). The subagent already carries its Reviewer persona; do not read the agent file into the main context. Pass:
 
 1. Full content of each changed file (not a diff — the Reviewer needs complete context for context-sensitive checks).
 2. One-line gate summary: `"Gates: all green — {X}% coverage, {N} tests"`

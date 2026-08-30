@@ -2,13 +2,13 @@
 
 Dispatch the autonomous rote-adapter sub-agent with this call. The dispatched
 subagent already carries its persona; do not read the agent file into the main
-context. Use `subagent_type: "bmad_v6:rote-adapter"` in a plugin install, or
+context. Use `subagent_type: "coding-pipeline:rote-adapter"` in a plugin install, or
 `"rote-adapter"` in a flat `~/.claude/agents` install.
 
 ```text
 Agent(
   description: "rote-adapter — autonomous adapter creation",
-  subagent_type: "bmad_v6:rote-adapter",
+  subagent_type: "coding-pipeline:rote-adapter",
   model: "sonnet",
   prompt: """
 You are the rote-adapter agent — follow your full 8-phase persona.

@@ -1,5 +1,209 @@
 # Changelog
 
+## [2.0.0] — 2026-08-30
+
+### Changed — BREAKING
+
+- **`bmad_v6` plugin renamed to `coding-pipeline`.** The pipeline used BMAD v6 as its
+  starting point, but it has diverged far enough that the name was actively misleading:
+  delivery worktrees and release branches, spec-first falsification instead of TDD, a
+  per-agent model-tier table, an independent Reviewer/Stress/Verdict chain, and a Tuner and
+  DevOps stage that BMAD has no equivalent of. The name now describes what the plugin is
+  rather than where it came from.
+
+  Namespaces move with it: `bmad_v6:coder` → `coding-pipeline:coder` (all 18 agents), and
+  `/bmad_v6:<skill>` → `/coding-pipeline:<skill>` (all 6 pipeline skills).
+
+- **Two pipeline skills renamed to remove the stutter** the new plugin name introduced:
+  - `multi-agent-coding-pipeline` → `multi-agent` (`/coding-pipeline:multi-agent`)
+  - `task-coding-pipeline` → `task` (`/coding-pipeline:task`)
+
+  `analysis`, `planning`, `architecture`, and `bug-fix` are unchanged.
+
+- **`references/bmad-artifacts.md` → `references/pipeline-artifacts.md`.** Same schemas and
+  handoff contracts; the artifacts were never BMAD's.
+
+- Marketplace and plugin descriptions rewritten to drop the BMAD framing, and the demo
+  asset `assets/pipeline-ui.html` relabelled (its `bmad-*` CSS classes are now `plan-*`).
+
+### Added — session sensors (deterministic, no model in the loop)
+
+Ideas mined from [affaan-m/ecc](https://github.com/affaan-m/ecc) and adapted to this harness
+rather than imported. ECC's catalog breadth was deliberately not taken; only the mechanisms that
+close a gap the devkit already had were.
+
+- **`destructive-guard.sh`** (PreToolUse → Bash) blocks force-push, remote branch deletion,
+  `reset --hard`/`clean -fd` on a checked-out mainline, recursive deletes aimed at `/` or `$HOME`,
+  `curl | sh`, `chmod 777`, and `DROP`/`TRUNCATE` issued from the shell. "A delivery ends in a PR,
+  never a rewritten remote branch" was a Guide with no Sensor behind it; now it has one.
+
+- **`secret-write-guard.sh`** (PreToolUse → Write/Edit) blocks writing a recognisable live
+  credential into the tree. `env-guard` covered reading secrets; nothing covered writing one.
+  Only provider-specific high-entropy prefixes are matched — a generic `password\s*=` rule would
+  fire on documentation and fixtures, and a guard that cries wolf gets switched off.
+
+- **`session-tracker.sh` + `delivery-gate.sh`** (PostToolUse / Stop) record which source files
+  changed and whether any test, lint, or type-check ever ran, then refuse to call the session done
+  when code changed and no gate did. CLAUDE.md already required `/engineering:code-review-gate`
+  after every coding task; that requirement held only when the model remembered it.
+
+- **Hook profiles.** `DEVKIT_HOOK_PROFILE=off|standard|strict` and
+  `DEVKIT_DISABLED_HOOKS=<id>,<id>`. `strict` makes `delivery-gate` block — but only once per
+  session, because a Stop hook that blocks forever traps the operator rather than the mistake.
+
+- **`.github/scripts/test-hooks.sh`** — 30 behaviour assertions covering both directions for every
+  guard (blocks what it must, stays out of the way otherwise) plus malformed-payload fail-open.
+  Every case was falsified: the guard's logic was removed, the suite observed RED, then restored.
+  Two delivery-gate tests were rewritten during that pass — they asserted only an exit code, and
+  a warn and a clean pass both exit 0, so deleting the logic left them green.
+
+- **`.github/scripts/validate-wiring.py`** — walks marketplace ↔ plugin manifests, hooks.json ↔
+  scripts, every in-repo markdown link and path reference, and every `plugin:agent` reference.
+  Each is a file pointing at another file that nothing executes at authoring time, so a rename
+  breaks them silently. Both scripts run as CI jobs.
+
+### Fixed
+
+- **`env-guard.sh` had stopped blocking anything.** It read `file_path`/`command` from the top
+  level of the hook payload only, while Claude Code sends them nested under `tool_input`. Every
+  `.env` read had been passing the guard. Payload access now goes through a shared
+  `hook-lib.sh` helper that accepts both shapes, and the regression is covered by six assertions.
+
+- **Five `SKILL.md` files linked to `skill.spec.yml` and `deps.toml` as clickable relative
+  links.** Both are git-ignored skillspec artifacts, so the links were dead in every clone and
+  install. They now read as plain backticked filenames, matching how `pr-workflow`'s skills
+  already referenced them.
+
+- **`install-global.sh` copied `references/*.md` with a flat glob**, which would have shipped the
+  new per-language index without the files it points at.
+
+### Added — machine bootstrap
+
+- **`install.sh` at the repo root.** One command takes a bare machine to a configured setup:
+  detect the OS (macOS, Linux, WSL) and architecture, pick the package manager (Homebrew, apt,
+  dnf, yum, pacman, zypper, apk), install what is missing, resolve the source tree, copy the
+  devkit into `~/.claude`, wire the hooks, and record the installed commit. Flags: `--check`
+  (report only, writes nothing), `--yes`, `--no-deps`, `--dry-run`, `--home DIR`.
+
+  Re-running is the expected case, not the exception. The installed commit is recorded in
+  `~/.claude/devkit/install-state.json` and compared against the source commit, so a second run
+  reports "up to date" instead of redoing work. When run from inside a checkout it uses that
+  checkout and fast-forwards it if it is behind its remote — but never touches a tree that is
+  dirty or has diverged, because resolving that is the operator's call, not an installer's.
+  Run from outside a checkout, it clones to `~/.local/share/claude-devkit`.
+
+  It does not pipe anything into a shell. The devkit's own `destructive-guard` blocks
+  `curl | sh`, and an installer that breaks its own rule is not worth shipping: the Claude Code
+  installer is fetched to a file, its path shown, and executed only after confirmation — and
+  `npm` is preferred where available so nothing is downloaded at all.
+
+- **`wire-claude-settings.py`.** The hook wiring used to be printed as JSON for the operator to
+  paste by hand, which meant a machine could have every guard installed and none of them active.
+  It is now merged into `~/.claude/settings.json` directly, with the hook graph read from the
+  plugin's own `hooks.json` so the two cannot drift.
+
+  The merge is conservative because that file holds the operator's permissions and model config:
+  unrelated keys and non-devkit hooks are preserved, devkit entries are replaced rather than
+  appended (re-running never double-registers a hook), entries pointing at scripts the devkit no
+  longer ships are dropped — which is what heals the `bmad_v6` → `coding-pipeline` rename — and a
+  `settings.json` that is not valid JSON aborts the install instead of being overwritten.
+
+- **claude-mem wired into the bootstrap.** [claude-mem](https://github.com/thedotmack/claude-mem)
+  persists context across sessions, which is the same Memory leg `PROGRESS.md` serves from the
+  other end: `PROGRESS.md` is the deliberate record a pipeline writes at each checkpoint,
+  claude-mem compresses and replays the conversation itself. Installed with
+  `npx claude-mem install` rather than a global npm install, because its own docs are explicit
+  that the global install does not register its hooks.
+
+  Treated as optional throughout: a preflight gates on Node >= 20 and `npx`, an already-installed
+  copy is left alone, `--no-claude-mem` opts out, and a failure warns instead of aborting — a
+  third-party tool must never take the devkit install down with it. The preflight is a separate
+  function from the install so the gating is testable without a network call.
+
+- **`install.sh` verifies its own work.** After the copy, it asserts every shipped hook script is
+  referenced by `settings.json` and fails loudly otherwise. Staging the scripts and activating
+  them are separate steps, and a machine with all seven guards on disk and none referenced is a
+  silent failure worth catching.
+
+- **`.github/scripts/test-install.sh`** — 20 assertions against a throwaway `HOME`, covering the
+  merge semantics, the platform detection helpers, `--check` making no changes, the state file,
+  and the up-to-date path. All 18 mutations were observed RED before the suite was accepted.
+
+  Three defects surfaced during that falsification pass and were fixed: `install.sh` wired the
+  hooks a second time after `install-global.sh` had already done it (dead duplication, now a
+  verification step); sourcing `install.sh` leaked its `set -euo pipefail` into the test shell, so
+  a failing assertion aborted the suite instead of reporting; and `detects_os` put a
+  `$(detect_os)` call inside its own failure message, where the command substitution reset `$?`
+  before it could be asserted — the test could not fail.
+
+### Removed
+
+- **`plugin.sh`.** A thin wrapper around `claude plugin marketplace add` / `install`, which is
+  done directly in Claude Code. The README documents those two commands for anyone who prefers
+  the plugin manager; the installer deliberately stays out of it.
+
+- **`assets/pipeline-ui.html`.** Nothing referenced it, it re-implemented the agent personas as
+  inline prompt strings that had already drifted from `agents/*.md`, and it called
+  `api.anthropic.com` directly from a browser page — a shape this devkit tells people not to
+  ship. Recoverable from history if it is ever wanted back.
+
+### Changed — token and validation
+
+- **`references/language-rules-reference.md` (343 lines, 11 languages) split into
+  `references/languages/<language>.md`.** Agents were already told to "load only the section for
+  the story's Language", but a section of one file costs the whole file — ~340 lines to read ~40.
+  Each language file now repeats the test rule, the context7 rule, and the frontend-hardening
+  rule so a single-file load is self-sufficient; the old path is now a 40-line index.
+
+- **Architect gained a brownfield spec-mining step.** When a delivery modifies existing code, the
+  behaviour it has today is an unwritten spec, and the Test Case table only covers what is being
+  added — so anything the change silently alters is untested by construction. The architecture now
+  inventories current observable behaviour with its callers and a Preserve/Change/Drop
+  disposition, and folds it into the frozen table (Preserve rows become characterization rows and
+  still need a falsifying break; Change rows need two entries; Drop rows need the caller search).
+
+- **Verdict gained a five-axis self-check** — Evidence, Traceability, Independence, Residual risk,
+  Actionability — with the rule that any axis below 5 must name the specific gap. A verdict is the
+  one artifact nobody downstream re-checks. Evidence or Independence below 3 blocks PRODUCTION
+  READY; Traceability below 3 is NOT READY.
+
+- **Loop Integrity added to `quality-gate-reference.md`**, applying to every fix loop: the verifier
+  may never be moved to reach it (lowering a coverage threshold, adding `skip`, weakening an
+  assertion, downgrading a lint rule, editing a frozen Test Case row to match the code, widening a
+  type to `any` — all blocking defects, not fixes); an iteration whose failing test, gate, and
+  message are identical to the previous one stops the loop instead of spending the budget; and
+  compaction happens at story boundaries, never between a story's dispatch and its Verdict.
+
+- **`PROGRESS.md` gained a `Lessons` section** — the only part meant to outlive the delivery. A
+  rule plus the evidence that produced it, project-scoped, deleted when it turns out to be wrong.
+
+- The Bug-Fix Loop Protocol's "tests are written RED-first" rule is now scoped to that loop
+  explicitly, where every iteration is fixing a known defect. Stated unscoped, it contradicted the
+  spec-first discipline that governs everywhere else.
+
+### Versions
+
+| Plugin | Version | Why |
+|---|---|---|
+| `coding-pipeline` | 1.3.0 → **2.0.0** | Renamed from `bmad_v6`; skill names changed. Breaking for every install. |
+| `engineering` | 1.1.2 → **1.2.0** | Depends on the renamed namespace (`coding-pipeline:reviewer`, coverage-threshold reference). |
+| `devtools` | 1.1.1 → **1.2.0** | Dispatches `coding-pipeline:rote-adapter`. |
+| `pr-workflow` | 1.1.0 | Unchanged. |
+
+### Upgrading
+
+There is no alias mechanism for renamed plugins, so an existing install must be replaced:
+
+```
+/plugin uninstall bmad_v6@claude-devkit
+/plugin install coding-pipeline@claude-devkit
+```
+
+Anything that hardcodes the old namespace needs updating — most commonly a personal
+`~/.claude/CLAUDE.md` skill table and the `enabledPlugins` key in `~/.claude/settings.json`.
+Historical entries below intentionally keep their original `bmad_v6` paths; they describe
+the tree as it was at the time.
+
 ## [1.3.0] — 2026-08-30
 
 ### Changed

@@ -5,7 +5,7 @@ description: Cut a release by determining the semver bump from conventional comm
 
 The version bump follows the conventional commits since the last tag, and the GitHub release stays a draft for the human to review before publishing — nothing publishes automatically.
 
-> **Not the same thing as a `release/*` branch.** A pipeline delivery works on `release/{slug}-{key}` and stops at opening a PR (see `bmad_v6/references/delivery-and-worktree.md`). This skill is the step *after* a human has merged that PR: it tags an already-merged `main` and drafts the GitHub release. Run it on `main` after the merge — never on an unmerged delivery branch, and never as a way to get delivery work onto `main`.
+> **Not the same thing as a `release/*` branch.** A pipeline delivery works on `release/{slug}-{key}` and stops at opening a PR (see `coding-pipeline/references/delivery-and-worktree.md`). This skill is the step *after* a human has merged that PR: it tags an already-merged `main` and drafts the GitHub release. Run it on `main` after the merge — never on an unmerged delivery branch, and never as a way to get delivery work onto `main`.
 
 ## Contract
 - Input: a repository on `main`, with the delivery PR already merged, and conventional-commit history since the last tag.
