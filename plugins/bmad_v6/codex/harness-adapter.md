@@ -72,3 +72,12 @@ run a full pipeline under Codex, record what broke (or didn't) here.
 - `analysis`, `planning`, `architecture` (single-agent dispatch, likely portable, but
   untested)
 - `rote-adapter` (dispatches `rote-adapter` agent)
+
+**Delivery isolation is harness-neutral and should port cleanly.** The delivery model
+(`references/delivery-and-worktree.md`) — keyed delivery file under `docs/deliveries/`, one
+`git worktree` per delivery on a `release/{slug}-{key}` branch, sequential stories inside it,
+never committing or merging to `main` — is plain `git` and plain paths, with no Claude-specific
+mechanism behind it. A Codex session following the same `SKILL.md` phases gets the same
+isolation. The unvalidated part is the same as above: whether the orchestrating session
+actually *performs* the Phase 0 setup and the terminal PR step in order, not whether the
+commands work.

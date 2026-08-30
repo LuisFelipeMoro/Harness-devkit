@@ -399,7 +399,7 @@ rote sensitivity apply <id> --json
 
 **Goal**: Confirm the adapter works end-to-end. ALL THREE steps must pass.
 
-> **Contract-first (TDD for a generator)**: Before running the Phase 6 create command, write down the acceptance test you expect to pass here — which read-only tool you will call and what a valid (non-error) response looks like. That predefined expectation is the adapter's "done" contract. The adapter is not complete until this exact test passes. Defining the expected result first stops you from rationalizing a broken adapter as working.
+> **Contract-first (spec-first testing for a generator)**: Before running the Phase 6 create command, write down the acceptance test you expect to pass here — which read-only tool you will call and what a valid (non-error) response looks like. That predefined expectation is the adapter's "done" contract. The adapter is not complete until this exact test passes. Defining the expected result first stops you from rationalizing a broken adapter as working.
 
 **IMPORTANT**: Verification must run inside a workspace. If no workspace exists, create one first:
 

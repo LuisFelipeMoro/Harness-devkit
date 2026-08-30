@@ -26,6 +26,18 @@
 
 > Build is a required gate for every JS/TS project, not just Next.js — `tsc --noEmit` catches type errors but not bundler-specific failures (unresolved imports, case-sensitive path mismatches, SSR/hydration issues). Skip only for a library published as source with no bundle step.
 
+**Enforcement integrity** — run before trusting the Lint gate; a green lint proves nothing if
+the rules were silenced. Any hit = FAIL (rationale + fixes:
+`references/frontend-hardening-reference.md`):
+
+| Check | Command | Pass |
+|-------|---------|------|
+| Security severity | `grep -rEn '"(security\|no-secrets\|regexp)/[^"]+"[[:space:]]*:[[:space:]]*"warn"' eslint.config.*` | No match — all at `"error"` |
+| Rule shadowing | `grep -c "no-restricted-syntax" eslint.config.*` | If > 1, no two blocks' `files` globs overlap |
+| Warning tolerance | `grep -rn "eslint" package.json .github/ .gitlab-ci.yml 2>/dev/null` | Every invocation has `--max-warnings 0` |
+| Coverage config | `grep -rn "coverageConfigDefaults.exclude.filter" vitest.config.* jest.config.*` | No match — defaults extended, never filtered |
+| Dead CI | `ls .github/workflows/ 2>/dev/null` | Every file present runs on the project's real CI system |
+
 ## Rust
 | Gate | Command | Pass |
 |------|---------|------|
@@ -102,7 +114,7 @@ See `references/spec-driven-reference.md` for `.spectral.yaml` template, annotat
    Gate: [which gate failed — lint / race / coverage / test]
    Classification: LOGIC | TYPING | CONCURRENCY | SECURITY | PERFORMANCE
    ```
-2. Pipeline routes BUG REPORT to Amelia — Amelia writes a failing test reproducing the bug (RED) if absent, then fixes implementation to GREEN.
+2. Pipeline routes BUG REPORT to Amelia — Amelia writes a test reproducing the bug and confirms it RED against the unfixed code (bug fixes are the one place a test comes first — the RED is what proves the root cause was found, not guessed), then fixes implementation to GREEN.
 3. Amelia emits `CODER DONE — BUGFIX [N]: [one-line description]` (N = iteration number).
 4. Quinn re-runs ALL quality gates from scratch.
 5. Repeat until PASS or max iterations reached.
@@ -118,13 +130,13 @@ Reviewer receives the FAIL-status artifact and scores accordingly.
 **Test-gap sub-path** (an AC lacks a real test — caught by Quinn's audit):
 
 - Quinn emits `QA→CODER TEST GAP` (the AC + why the existing test is missing/weak).
-- Amelia writes the failing test (RED) then the minimum code for GREEN; emits `BUGFIX COMPLETE`.
+- Amelia rewrites the test so it asserts the row's Expected Observable Result, then falsifies it with the row's Falsified By break (apply, confirm the assertion fails, restore); emits `BUGFIX COMPLETE` with the evidence line.
 - Quinn re-audits and re-runs gates (counts as one bug-fix iteration).
 
 **Coverage failure sub-path** (distinct from bug failures):
 
 If coverage < threshold AND uncovered paths are reachable behaviour with no test:
-- Quinn emits `QA→CODER TEST GAP` — Amelia adds the failing test, then the code.
+- Quinn emits `QA→CODER TEST GAP` citing the missing Test Case row — Amelia adds the behaviour if absent, writes the test asserting its observable result, and falsifies it. Tests added only to raise the percentage are rejected by the tautology audit.
 - Quinn re-runs coverage gate.
 
 If coverage < threshold AND uncovered paths are dead code or framework-generated:

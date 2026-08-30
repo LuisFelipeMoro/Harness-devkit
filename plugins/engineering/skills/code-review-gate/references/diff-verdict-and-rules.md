@@ -15,7 +15,7 @@ Dispatch the Reviewer subagent — `bmad_v6:reviewer` (or `reviewer` in a flat `
 1. Full content of each changed file (not a diff — the Reviewer needs complete context for context-sensitive checks).
 2. One-line gate summary: `"Gates: all green — {X}% coverage, {N} tests"`
 
-The Reviewer runs the full Security Deep-Dive checklist, language-specific checks, and the **TDD-compliance check**: every behaviour shipped in the diff has a test that asserts an observable outcome (not a tautology, not mock-call-only), corner/error cases are covered, and no existing test was weakened to pass. Absent or tautological tests for shipped behaviour = MAJOR finding.
+The Reviewer runs the full Security Deep-Dive checklist, language-specific checks, and the **test-falsifiability check**: every behaviour shipped in the diff has a test that asserts an observable outcome (not a tautology, not mock-call-only), each test has been falsified — the code path broken, the assertion observed to fail, the break reverted — corner/error cases are covered, and no existing test was weakened to pass. Because tests here are written after the code, read them adversarially: a test whose expected value is re-derived with the implementation's own logic, or whose name describes the code rather than the requirement, proves nothing. Absent, unfalsified, or tautological tests for shipped behaviour = MAJOR finding, regardless of coverage percentage.
 
 ## Phase 3 — Verdict table
 

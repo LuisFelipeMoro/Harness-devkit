@@ -1,8 +1,10 @@
 # claude-devkit
 
-BMAD v6 AI-assisted development pipeline for [Claude Code](https://claude.ai/code). Drop this into any repository under `.claude/` (or install globally in one command) to get a full agentic development kit: every piece of code is driven test-first (Red → Green → Refactor) and clears quality gates plus an independent reviewer before it's considered done.
+BMAD v6 AI-assisted development pipeline for [Claude Code](https://claude.ai/code). Drop this into any repository under `.claude/` (or install globally in one command) to get a full agentic development kit: every piece of code is built against a frozen test specification, proven by falsification, and clears quality gates plus an independent reviewer before it's considered done.
 
-- **Test-first by default** — the Coder writes a failing test before any implementation; the QA agent audits those tests instead of writing them. No code ships without a test that was red first.
+- **Spec-first testing** — the Architect freezes a Test Case table (expected observable result · why it matters · what break falsifies it) before any code. The Coder implements to it, writes exactly those tests, then **breaks the code to prove each test fails**. The QA agent audits that evidence instead of writing tests.
+- **Tautology is the blocking defect, not low coverage** — a green suite at 90% coverage that survives having its guards deleted fails the audit. Coverage is a floor; falsifiability is the gate.
+- **Isolated per delivery** — each pipeline run gets its own git worktree (`.worktrees/dlv-{key}/`) and release branch, and writes its plan to `docs/deliveries/delivery-{slug}-{key}.md` instead of clobbering your repo's own `architecture.md`. Two deliveries never share a file or a working tree. The pipeline never commits or merges to `main` — the furthest it goes on its own is opening a PR.
 - **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
 - **11-agent coding pipeline** — Analyst → PM → Architect → grill-me plan stress → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps
 - **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap.
@@ -15,32 +17,45 @@ BMAD v6 AI-assisted development pipeline for [Claude Code](https://claude.ai/cod
 
 ---
 
-## How It Works — Harness + TDD
+## How It Works — Harness + Spec-First Testing
 
 This devkit is structured as an agentic **Harness** — four components that keep an
 autonomous agent on the rails:
 
 | Component | What it is here |
 |-----------|-----------------|
-| **Guides** (feed-forward) | `CLAUDE.md`, `architecture.md`, API specs, per-language standards — the right context injected before each task |
+| **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
 | **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. A task isn't done until they pass. |
-| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next). A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
+| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
 | **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. |
 
-### Test-Driven by construction
+### Spec-first, falsification-proven
 
-Every code path is driven **test-first**:
+Tests are written **after** the implementation, against a specification frozen **before** it.
+The rigour moves from ordering to specification tightness plus proof that each test can fail:
 
-1. **Red** — the Coder (Amelia) writes the failing test for an acceptance criterion and confirms it fails for the right reason.
-2. **Green** — she writes the least code to make it pass.
-3. **Refactor** — she cleans up with the test staying green.
+1. **Spec** — the Architect (Winston) freezes a Test Case table: for every AC, edge case, and
+   security control, one row giving the literal test name, the input, the **expected observable
+   result**, **why it matters**, and the **break that falsifies it**. The Scrum Master copies the
+   relevant rows verbatim into each story. A behaviour with no row does not get built.
+2. **Implement** — the Coder (Amelia) builds to that table. Anything the spec didn't decide is
+   flagged, never invented.
+3. **Test** — she writes exactly those rows, no more, no fewer, asserting observable results.
+4. **Falsify** — for each test she applies the row's break (invert the condition, delete the
+   guard, return the zero value), confirms the test **fails on its own assertion**, and restores.
+   A test never observed failing is unproven and does not ship.
 
-The QA agent (Quinn) does **not** write these tests — she audits them. She checks every
-AC has a test, that tests assert real behaviour (catching tautological and over-mocked
-tests that can never fail), that corner cases are covered (boundaries, nulls, overflow,
-unicode, concurrency, time, error paths), and that no existing test was weakened to make
-a change pass. Missing or weak tests route back to the Coder via a `QA→CODER TEST GAP`
-signal.
+The QA agent (Quinn) does **not** write these tests — she audits them. She checks every Test
+Case row is implemented, that every test carries valid falsification evidence (and re-breaks the
+highest-risk ones herself to verify), that assertions are real rather than tautological or
+over-mocked, that corner cases are covered (boundaries, nulls, overflow, unicode, concurrency,
+time, error paths), and that no existing test was weakened to make a change pass. A tautological
+or unfalsified test is a MAJOR finding that caps the QA score at 4 — the same weight as a failing
+gate, no matter how high coverage is. Gaps route back to the Coder via `QA→CODER TEST GAP`.
+
+**The one exception is bug fixes**: there, a failing reproduction test is written and observed
+RED *before* the fix, because that RED is what proves the root cause was found rather than
+guessed.
 
 Plans are stress-tested with `/grill-me` **before** any code is written — gaps the
 requirements can answer get decided into the architecture; the rest are escalated to the
@@ -265,20 +280,25 @@ plugins/
 For large features and epics. Runs up to 11 agents (9 core + Tuner + DevOps):
 
 ```
-PLANNING
-  Mary (Analyst)      → product-brief.md
-  John (PM)           → PRD.md
-  Winston (Architect) → architecture.md
-  /grill-me           → stress the plan (mandatory) ← human resolves open questions
-  Bob (ScrumMaster)   → story-{slug}.md per task (ACs = frozen contract)
+DELIVERY SETUP
+  orchestrator        → slug + key from the feature name
+                        .worktrees/dlv-{key}/ on branch release/{slug}-{key}
+                        (existing worktree for the key = resume, not recreate)
 
-IMPLEMENTATION (per story — strict agent protocol, TDD)
-  Amelia (Coder)      → failing test FIRST → impl → refactor (owns tests + code)  [emits CODER DONE]
+PLANNING  (all artifacts keyed under docs/deliveries/{key}/)
+  Mary (Analyst)      → {key}/product-brief.md
+  John (PM)           → {key}/PRD.md
+  Winston (Architect) → docs/deliveries/delivery-{slug}-{key}.md  (+ api-spec.yaml at repo root)
+  /grill-me           → stress the plan (mandatory) ← human resolves open questions
+  Bob (ScrumMaster)   → {key}/story-{slug}.md per task (ACs + Test Case table = frozen contract)
+
+IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree)
+  Amelia (Coder)      → impl to spec → write specified tests → falsify each (owns tests + code)  [emits CODER DONE]
      stack-aware: shared core + backend OR frontend overlay (chosen by story Tier);
      frontend overlay covers SSR/RSC; loads only the detected language's rules;
      full-stack stories split BE/FE around the api-spec contract (BE producer, FE consumer)
         ↕ QA loop (max 3 iterations)
-  Quinn (QA)          → audits tests (intent, corner cases, no tautologies) + runs gates  [one tier-aware auditor]
+  Quinn (QA)          → audits spec rows + falsification evidence (spot-checks breaks), no tautologies, corner cases + runs gates  [one tier-aware auditor]
         │ gate fail   → QA→CODER BUG REPORT  → Amelia fixes → Quinn re-runs
         │ weak/missing test → QA→CODER TEST GAP → Amelia writes it → Quinn re-audits
         │ coverage gap → QA→CODER COVERAGE REQUEST → Amelia refactors
@@ -295,11 +315,16 @@ TUNING (optional — score ≥ 7, MINOR/NIT/optimization only)
 
 POST-VERDICT (if PRODUCTION READY)
   Ops (DevOps)        → Dockerfile + .dockerignore + docker-compose.yml + optional CI/k8s
+
+DELIVERY CLOSE (terminal — the pipeline stops here)
+  orchestrator        → push release/{slug}-{key} (asks first) → open PR to main
+                        never commits or merges to main; a human merges
+                        then /release-management tags the merged main
 ```
 
 ### Fast Pipeline — `/task-coding-pipeline <task>`
 
-Skips Analyst + PM. Starts directly at Architecture → grill-me plan stress → Decompose into sub-tasks → Implement per sub-task (TDD). Same agent protocol (Coder TDD → QA audit loop → QA approval → Reviewer).
+Skips Analyst + PM. Starts directly at Architecture → grill-me plan stress → Decompose into sub-tasks → Implement per sub-task. Same agent protocol (Coder implements to the frozen Test Case table, writes those tests, falsifies each → QA audit loop → QA approval → Reviewer).
 
 ### Progressive Workflow
 
@@ -307,7 +332,7 @@ Skips Analyst + PM. Starts directly at Architecture → grill-me plan stress →
 Exploring requirements only
   → /analysis <task>                   Brief + PRD only
          ↓
-  → /planning                          Load Brief+PRD → architecture.md + manifest
+  → /planning                          Load Brief+PRD → delivery file + manifest
          ↓
   → /multi-agent-coding-pipeline       Full Epic Loop → Verdict
          — or —
@@ -316,8 +341,8 @@ Exploring requirements only
 Fast path (one known task)
   → /task-coding-pipeline <task>       Architect → sub-tasks → code → QA → Verdict
 
-Ad-hoc code change (test-first, direct edit)
-  → write the failing test first, then code  (Red → Green → Refactor)
+Ad-hoc code change (spec-first, direct edit)
+  → list the test cases first, then code, then write those tests and falsify each
          ↓ (mandatory final step)
   → /code-review-gate                  Gates + Reviewer on changed files
 ```
@@ -389,7 +414,7 @@ What are you trying to do?
 
 **Use when:** building a large feature, epic, or new service from scratch.
 
-**What happens:** Runs all 11 agents in sequence. Mary (Analyst) writes a product brief → John (PM) writes a PRD → Winston (Architect) designs the architecture and API spec → **`/grill-me` stresses the plan + human resolves open questions** → Bob (ScrumMaster) decomposes into stories (ACs = frozen contract) → Amelia (Coder) drives TDD: failing test first, then code, then refactor → Quinn (QA) audits the tests and runs the gates → Reviewer + StressTester score in parallel → Tyler (Tuner) polishes minor findings → Verdict issues PRODUCTION READY / NOT READY → Ops (DevOps) generates Dockerfile + docker-compose.
+**What happens:** Runs all 11 agents in sequence. Mary (Analyst) writes a product brief → John (PM) writes a PRD → Winston (Architect) designs the architecture and API spec → **`/grill-me` stresses the plan + human resolves open questions** → Bob (ScrumMaster) decomposes into stories (ACs + Test Case table = frozen contract) → Amelia (Coder) implements to the spec, writes exactly the specified tests, then falsifies each one → Quinn (QA) audits the falsification evidence and runs the gates → Reviewer + StressTester score in parallel → Tyler (Tuner) polishes minor findings → Verdict issues PRODUCTION READY / NOT READY → Ops (DevOps) generates Dockerfile + docker-compose.
 
 **Example:**
 ```
@@ -404,7 +429,7 @@ What are you trying to do?
 
 **Use when:** implementing a single known task — a new endpoint, a refactor, a small feature. You already know what needs to be built.
 
-**What happens:** Skips Analyst + PM. Winston architects the solution + writes API spec → **`/grill-me` stresses the plan + human validates** → Bob writes a story → Amelia drives TDD (failing test → code → refactor) → Quinn audits tests + gates → Reviewer + StressTester → Tuner → Verdict → DevOps. Same quality bar as the full pipeline, faster start.
+**What happens:** Skips Analyst + PM. Winston architects the solution + writes API spec → **`/grill-me` stresses the plan + human validates** → Bob writes a story with its frozen Test Case table → Amelia implements to spec → writes those tests → falsifies each → Quinn audits evidence + gates → Reviewer + StressTester → Tuner → Verdict → DevOps. Same quality bar as the full pipeline, faster start.
 
 **Example:**
 ```
@@ -418,7 +443,7 @@ What are you trying to do?
 
 **Use when:** something is broken — wrong behavior, crash, regression, or a test that fails.
 
-**What happens:** Sam (Bug Investigator) explores the codebase, finds root cause, and writes a RED failing test. Amelia makes it GREEN with the minimum fix (and may add regression tests — never weakening Sam's RED test). Quinn verifies all gates still pass. Reviewer scores the fix. Maximum 3 fix iterations before escalation.
+**What happens:** Sam (Bug Investigator) explores the codebase, finds root cause, and writes a RED failing test — bug fixes are the one place a test comes first, because the RED proves the root cause was found rather than guessed. Amelia makes it GREEN with the minimum fix (and may add regression tests — never weakening Sam's RED test). Quinn verifies all gates still pass. Reviewer scores the fix. Maximum 3 fix iterations before escalation.
 
 **Example:**
 ```
@@ -447,7 +472,7 @@ What are you trying to do?
 
 **Use when:** you have requirements (or run `/analysis` first) and want an execution plan — architecture + epic/task manifest — but no implementation yet.
 
-**What happens:** Runs Architect (Winston) to produce `architecture.md` + `api-spec.yaml` (if HTTP endpoints) → **human validates both** → ScrumMaster produces the epic or task manifest. Stops before any code. Use `/grill-me` on the spec before approving.
+**What happens:** Runs Architect (Winston) to produce the delivery file + `api-spec.yaml` (if HTTP endpoints) → **human validates both** → ScrumMaster produces the epic or task manifest. Stops before any code. Use `/grill-me` on the spec before approving.
 
 **Example:**
 ```
@@ -465,7 +490,7 @@ or:
 
 **Use when:** you want a standalone architecture design for a domain or component, not tied to an active pipeline run.
 
-**What happens:** Winston produces a full `architecture.md` — threat model, component design, data flow, API contracts, Mermaid diagrams, ADRs. No story decomposition, no implementation.
+**What happens:** Winston produces a full delivery file (`docs/deliveries/delivery-{slug}-{key}.md`) — threat model, component design, data flow, API contracts, Test Case Specification, Mermaid diagrams, ADRs. No story decomposition, no implementation.
 
 **Example:**
 ```
@@ -479,7 +504,7 @@ or:
 
 #### `/code-review-gate` ← mandatory after any non-pipeline code change
 
-**Use when:** you wrote or modified code outside a pipeline (TDD session, direct edit, ad-hoc fix). This is a hard rule — never push without running this first.
+**Use when:** you wrote or modified code outside a pipeline (inline spec-first session, direct edit, ad-hoc fix). This is a hard rule — never push without running this first.
 
 **What happens:** Detects changed files → runs all quality gates for your stack (format, lint, types, coverage, race, vuln, spec) → loads Reviewer on changed files only → issues APPROVED / BLOCK / APPROVE WITH CHANGES.
 

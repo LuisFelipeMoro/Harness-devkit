@@ -20,7 +20,7 @@ Per component:
 - **Interface** (language-idiomatic — Go `interface`, TS `interface`, etc.)
 - **Responsibility** (one sentence — if more is needed, split the component)
 - **Dependencies** (what it calls; direction must flow inward)
-- **Testable seam** (how it is driven test-first: dependencies behind interfaces, I/O injectable/mockable, pure logic separable from side effects — so a failing test can be written before the implementation)
+- **Testable seam** (how it is verified: dependencies behind interfaces, I/O injectable/mockable, pure logic separable from side effects — so each Test Case row can assert an observable result and be falsified by a named break in this component)
 
 Clean Architecture layers (outermost → innermost):
 `transport` → `application` → `domain` ← `infrastructure`

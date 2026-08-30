@@ -16,6 +16,9 @@
 # Local Claude Code settings (machine-specific permissions/state — never shared)
 .claude/settings.local.json
 
+# Local-only planning notes (never shared/pushed — machine-specific scratch)
+/.local/
+
 # Generated SkillSpec doctor report (regenerable; not read by Claude)
 SKILLSPEC-REPORT.md
 
@@ -28,3 +31,6 @@ SKILLSPEC-REPORT.md
 # Rust build output (if skillspec is built from source in-tree)
 /target/
 **/*.rs.bk
+
+# Pipeline delivery worktrees (per-delivery isolated checkouts — never committed)
+/.worktrees/

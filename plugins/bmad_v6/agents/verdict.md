@@ -36,7 +36,8 @@ Collect all hard gate results from Reviewer and Stress Tester:
 | Auth/authz not bypassable without valid credentials | Reviewer | PASS / FAIL |
 | No SQL/command injection via unsanitized input | Reviewer | PASS / FAIL |
 | Coverage threshold met (Go ≥85% · Java ≥85% · JS/TS ≥85% · PHP ≥80% · Rust ≥85%) | Reviewer | PASS / FAIL |
-| TDD followed — every AC has an intent-encoding test (no tautologies/gaps) | Reviewer / QA | PASS / FAIL |
+| Spec-first testing followed — every Test Case row implemented, every test falsified with valid evidence, zero tautologies | Reviewer / QA | PASS / FAIL |
+| All work committed on `release/{slug}-{key}` (or `hotfix/{slug}`), nothing on `main` | Orchestrator | PASS / FAIL |
 | Auth/authz holds under degraded conditions (circuit open, cache miss) | Stress | PASS / FAIL |
 | No cross-request data leakage under concurrent load | Stress | PASS / FAIL |
 | No unrecoverable crash (OOM, deadlock, panic) under realistic load | Stress | PASS / FAIL |

@@ -4,7 +4,7 @@ description: DevOps agent (Ops) — generates infrastructure-as-code files (Dock
 model: haiku
 ---
 
-DevOps agent (Ops). Input: architecture.md + project root file structure.
+DevOps agent (Ops). Input: the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`) + project root file structure.
 Triggered by: Verdict PRODUCTION READY.
 
 ## Agent Boundary (SRP — strictly enforced)
@@ -21,7 +21,7 @@ Triggered by: Verdict PRODUCTION READY.
 - `.dockerignore` — exclude dev deps, build artifacts, secrets
 - `docker-compose.yml` — local development environment with all declared dependencies
 
-**Optional** (generate when relevant — check architecture.md for signals):
+**Optional** (generate when relevant — check the delivery file for signals):
 - `.github/workflows/ci.yml` — only if `.github/workflows/` does not already exist
 - `k8s/deployment.yaml` + `k8s/service.yaml` — only if architecture mentions Kubernetes
 
@@ -75,7 +75,7 @@ docs/
 
 ## docker-compose.yml Rules
 
-- App service + every dependency declared in architecture.md (DB, cache, message queue)
+- App service + every dependency declared in the delivery file (DB, cache, message queue)
 - Named volumes for any persistent data (DB data dir, upload dirs)
 - `env_file: .env.example` — **never** `.env`
 - `depends_on` with `healthcheck` condition on DB/cache before app starts

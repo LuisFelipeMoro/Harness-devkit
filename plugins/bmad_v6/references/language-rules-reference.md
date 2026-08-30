@@ -2,11 +2,18 @@
 
 Shared reference for Coder (Amelia) and Reviewer. Load on demand. Do not pre-load.
 
-> **TDD rule**: Amelia writes the failing test first, then the implementation that satisfies these rules. Amelia owns both test and implementation files; Quinn (QA) audits the tests but authors none. Coverage thresholds below are the floor, met by tests written test-first — never back-filled to hit a number.
+> **Test rule**: Amelia implements to the story's frozen Test Case table, then writes exactly the tests it specifies, then falsifies each one (apply the row's break, confirm the assertion fails, restore). Amelia owns both test and implementation files; Quinn (QA) audits the tests but authors none. Coverage thresholds below are a floor, not a target — a tautological or unfalsified test is a blocking defect no matter what the percentage says.
 
 > **context7 rule**: Before applying any rule that references a specific library, linter, annotation tool, or framework — fetch its current docs via context7. Rules in this file reflect known-good patterns; library APIs evolve and the current version may differ. Always verify import paths, method signatures, and config keys against live docs before writing code.
 
 For quality gate commands, see `references/quality-gate-reference.md`.
+
+> **Frontend rule**: when the story's language is JS/TS, React, Next.js, HTMX, or HTML/CSS,
+> load `references/frontend-hardening-reference.md` alongside the section below. It carries the
+> enforcement-integrity checks — lint-config shadowing, security rules left at `warn`, vacuous
+> tests, validator format matrices, ReDoS regex, coverage-config filtering, dead CI files — that
+> catch controls which *look* enforced but cannot fail. The rows tagged **[FH]** below are
+> summaries of it; the reference has the fix and the gate command for each.
 
 ---
 
@@ -77,7 +84,11 @@ For quality gate commands, see `references/quality-gate-reference.md`.
 `const` > `let`, never `var`; async/await; no `any`; schema-validate inputs (zod/joi/yup); no `eval()`/`innerHTML` with user data; `crypto.randomBytes` not `Math.random()` for secrets; `helmet` for HTTP headers; `httpOnly`+`secure`+`sameSite` on cookies; every HTTP handler must have OpenAPI annotations — `swagger-jsdoc` JSDoc `@swagger` blocks for Express/Fastify, or `@nestjs/swagger` decorators for NestJS; request/response types must be fully typed interfaces/classes (no `any`); run doc generation — must succeed with zero errors before handoff.
 
 ### Linting Commands
-`eslint --max-warnings 0` (with `@typescript-eslint` + `eslint-plugin-security`) · `prettier --check`
+`eslint --max-warnings 0` (with `@typescript-eslint` + `eslint-plugin-security` + `eslint-plugin-regexp`) · `prettier --check`
+
+Every `security/*`, `no-secrets/*`, and `regexp/*` rule must be `"error"` — `warn` is not
+enforcement. `--max-warnings 0` is required on every invocation, in `package.json` scripts and
+in CI. Staged files are linted pre-commit (`lint-staged`) with the identical command CI runs.
 
 ### Review Flags *(required linters: `eslint` with `@typescript-eslint` + `eslint-plugin-security`, `prettier`)*
 | Issue | Severity |
@@ -97,6 +108,15 @@ For quality gate commands, see `references/quality-gate-reference.md`.
 | `any` type used in request/response schema definition | MAJOR |
 | New or modified endpoint not reflected in swagger docs (stale) | MAJOR |
 | Swagger doc generation fails | BLOCK |
+| Regex applied to user input with overlapping adjacent character classes (ReDoS) **[FH]** | CRITICAL |
+| `security/*` · `no-secrets/*` · `regexp/*` rule set to `warn` instead of `error` **[FH]** | MAJOR |
+| Lint invoked without `--max-warnings 0` in any script or CI step **[FH]** | MAJOR |
+| Two lint-config blocks with overlapping `files` globs declaring the same rule key **[FH]** | MAJOR |
+| Test loop with an empty body, or a spy no `expect` ever reads **[FH]** | MAJOR |
+| Validator/parser tested only on canonical format — no format-variant or real-caller case **[FH]** | MAJOR |
+| `coverageConfigDefaults.exclude` filtered instead of extended **[FH]** | MAJOR |
+| CI config file present for a CI system the project does not run **[FH]** | MAJOR |
+| No pre-commit lint on staged files, or a pre-commit command weaker than CI's **[FH]** | MINOR |
 | `eslint` error with `@typescript-eslint` rules | MAJOR |
 | `eslint-plugin-security` finding | MAJOR |
 | `prettier --check` fails | MINOR |
@@ -169,13 +189,22 @@ No `unwrap()` in prod — use `?` or `match`; ownership over clone; `thiserror` 
 Functional components + hooks only; `eslint-plugin-react-hooks` zero violations; `@testing-library/react` for tests (no Enzyme); `eslint-plugin-jsx-a11y` zero warnings; no `dangerouslySetInnerHTML` with user data — sanitize via `DOMPurify`; Tailwind utility classes if `tailwind.config.*` present; `memo`/`useCallback`/`useMemo` only when profiled; `crypto.randomUUID()` not `Math.random()` for IDs.
 
 ### Linting Commands
-`eslint --max-warnings 0` (with `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `eslint-plugin-tailwindcss` if Tailwind present) · `prettier --check` · `tsc --noEmit`
+`eslint --max-warnings 0` (with `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `eslint-plugin-security`, `eslint-plugin-regexp`, `eslint-plugin-tailwindcss` if Tailwind present) · `prettier --check` · `tsc --noEmit`
+
+The XSS and a11y `no-restricted-syntax` selectors that guard component files are the exact
+rules a later overlapping config block silences without warning — see
+`references/frontend-hardening-reference.md` §1, and prove they still fire with a lint
+integration test rather than assuming.
 
 ### Review Flags *(required linters: `eslint-plugin-react-hooks`, `eslint-plugin-jsx-a11y`, `prettier`, `tsc --noEmit`)*
 | Issue | Severity |
 |-------|----------|
 | `dangerouslySetInnerHTML` with user data — no `DOMPurify` | CRITICAL |
+| XSS/a11y `no-restricted-syntax` selector silenced by an overlapping config block **[FH]** | CRITICAL |
+| Regex on user input with overlapping adjacent character classes (ReDoS) **[FH]** | CRITICAL |
 | `eslint-plugin-react-hooks` violations (missing deps, conditional hooks) | MAJOR |
+| No lint integration test proving each `no-restricted-syntax` selector category still fires **[FH]** | MAJOR |
+| Snapshot or empty-bodied loop standing in for a behavioural assertion **[FH]** | MAJOR |
 | State mutation — direct array push or object property assignment | MAJOR |
 | Missing error boundary around async/suspense subtrees | MAJOR |
 | `Math.random()` for keys or IDs — use `crypto.randomUUID()` | MAJOR |
@@ -197,6 +226,11 @@ App Router for new projects (Pages Router only for legacy); Server Components by
 ### Linting Commands
 `next lint` (eslint-config-next) — zero warnings · `tsc --noEmit` · `next build` (catches SSR/hydration issues `tsc` misses) · tests via Vitest/Jest + `@testing-library/react`, Playwright for E2E
 
+`eslint-config-next` does not carry the security, regexp, or restricted-syntax rules — add
+`eslint-plugin-security` and `eslint-plugin-regexp` explicitly, all rules at `"error"`, and
+verify the flat-config blocks do not shadow one another
+(`references/frontend-hardening-reference.md` §1–§2).
+
 ### Review Flags *(required linters: `next lint`, `tsc --noEmit`, `next build`)*
 | Issue | Severity |
 |-------|----------|
@@ -207,6 +241,9 @@ App Router for new projects (Pages Router only for legacy); Server Components by
 | Bare `<img>` instead of `next/image` | MINOR |
 | External font CDN instead of `next/font` | MINOR |
 | `next build` not run before handoff | MAJOR |
+| `security/*` or `regexp/*` rules absent from the config, or present at `warn` **[FH]** | MAJOR |
+| `coverageConfigDefaults.exclude` filtered in `vitest.config.*` / `jest.config.*` **[FH]** | MAJOR |
+| `.github/workflows/` file present when the project deploys through another CI system **[FH]** | MAJOR |
 | coverage < 85% | BLOCK (score ≤ 5) |
 
 ---
@@ -250,6 +287,8 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Missing ARIA live region on `hx-swap` target | MINOR |
 | `hx-trigger` without debounce/throttle on high-frequency events | MINOR |
 | Missing `hx-indicator` on slow server responses | MINOR |
+| Playwright spec whose loop body is empty or whose assertion cannot fail **[FH]** | MAJOR |
+| CI config file present for a CI system the project does not run **[FH]** | MAJOR |
 
 ---
 
@@ -299,5 +338,6 @@ Semantic HTML — `<section>`, `<article>`, `<nav>`, `<main>`, `<header>`, `<foo
 | Tailwind arbitrary value (e.g. `w-[347px]`) without justification | MINOR |
 | Animation on layout-triggering property (use `transform`/`opacity`) | MINOR |
 | Fixed-width layout — not responsive (`min-width` breakpoints required) | MAJOR |
+| `stylelint` `overrides` block silently replacing a rule declared in a wider block **[FH]** | MAJOR |
 | `htmlhint` error | MAJOR |
 | `stylelint` warning | MINOR |

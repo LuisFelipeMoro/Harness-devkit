@@ -3,18 +3,42 @@
 ## Harness Model (Guides · Sensors · Memory · Orchestration)
 
 This devkit is a Harness. Four components, all mandatory:
-- **Guides** (feed-forward): this CLAUDE.md, `architecture.md`, specs, conventions — inject the right context per task.
+- **Guides** (feed-forward): this CLAUDE.md, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), specs, conventions — inject the right context per task.
 - **Sensors** (feedback): linters in ERROR mode + test runners that return exit 0/1, never prose to interpret. `git-hooks/pre-commit` (format+lint), `git-hooks/pre-push` (tests+coverage+vuln), and CI mirror each other. A task is not done until the sensors pass.
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
 - **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code.
 
-## TDD Discipline (non-negotiable — all code)
+## Spec-First Test Discipline (non-negotiable — all code)
 
-Every skill, agent, and pipeline drives code test-first:
-- **Red → Green → Refactor**: failing test first, observed to fail for the right reason, minimum code to pass, refactor under green.
-- No implementation line before a failing test exists for it. Coverage thresholds are met by tests written first — never back-filled to hit a number.
-- **Coder (Amelia) owns tests + implementation; QA (Quinn) audits** the tests (intent-encoding, corner cases, no tautologies/over-mocking) and runs the gates — QA authors no primary tests.
-- Plans are stress-tested with `/grill-me` before coding; questions the plan cannot resolve go to the human — never deferred into implementation.
+Tests are written **after** the implementation, against a test specification frozen **before**
+it. The rigour moves from ordering (test-first) to specification tightness and proof of
+falsifiability. Four steps, in order, for every change:
+
+1. **Spec** — the Test Case table is frozen before any code. Every row names the test, its
+   input/precondition, its expected *observable* result, the AC it proves, and **why it
+   matters** (the intent it encodes). Written by the Architect, filtered into the story by
+   the Scrum Master. A behaviour with no row does not get built.
+2. **Implement** — Coder (Amelia) builds to the frozen spec. No design decisions at code
+   time: anything the spec did not decide is flagged, not invented.
+3. **Test** — Amelia writes exactly the rows in the table, no more, no fewer. A row she
+   cannot write is a spec defect, reported upward — never silently dropped or reshaped.
+4. **Falsify** — the evidence step that replaces RED. For every test, break the code path it
+   covers (invert the condition, return the zero value, delete the guard), run the test,
+   observe it FAIL, then restore. A test that still passes against broken code is worthless
+   and must be rewritten before handoff.
+
+Rules:
+- **Tautology is the blocking defect, not low coverage.** Asserting a literal you just set,
+  asserting only that a mock was called, or mocking the system-under-test away = MAJOR,
+  blocks handoff. Coverage stays a hard floor (per-language, see the gate table) but is
+  never the goal — a green 85% of tautologies fails the audit.
+- **Coder (Amelia) owns tests + implementation; QA (Quinn) audits** — falsification evidence,
+  spec-row completeness, intent-encoding, corner cases, no over-mocking — and runs the gates.
+  QA authors no primary tests.
+- **Bug fixes are the one exception**: a failing reproduction test is written and observed RED
+  *before* the fix, because it is what proves the root cause was found rather than guessed.
+- Plans are stress-tested with `/grill-me` before coding; questions the plan cannot resolve go
+  to the human — never deferred into implementation.
 
 ## Sub-agent Discipline
 
@@ -29,7 +53,7 @@ Every skill, agent, and pipeline drives code test-first:
 |------|-------|----------|
 | Architecture design | `opus` | Architect — system design, ADRs, tech stack, data-flow decisions the whole plan depends on |
 | Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
-| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation or TDD red→green |
+| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation against a frozen Test Case table |
 
 Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason.
 
@@ -37,7 +61,7 @@ Front-load reasoning into planning and architecture so execution is mechanical: 
 - **LSP first**: Use LSP (go-to-definition, find-references, diagnostics) for code navigation — grep only when LSP not applicable
 - **context7 for docs**: Always fetch current docs via context7 for any library/framework/SDK/API — never rely on training data alone
 - **Notifications**: Use PushNotification when waiting >30s on external process, CI, or user input
-- **Parallel work**: Use native `git worktree` for parallel feature branches
+- **Isolation**: every pipeline run is a *delivery* with its own worktree (`.worktrees/dlv-{key}/`) and release branch. Stories run sequentially inside it. The pipeline never commits or merges to `main` — the terminal step is a PR from a `release/*` or `hotfix/*` branch. See `references/delivery-and-worktree.md`
 - **Never read `.env` or `.envrc`**: May contain production secrets — never read, never echo, never log
 - **After git push**: Hook surfaces open PR comments automatically — for each: if valid issue (bug/missing test/security hole), fix the code + reply via `gh pr comment` explaining what changed; if not actionable (style preference/opinion/already done), reply explaining why. Never leave PR comments unanswered.
 
@@ -64,7 +88,7 @@ Before writing code, designing architecture, reviewing security, or running qual
 | Performance investigation | `/performance-profiling` | "performance", "slow", "profiling", "optimize", "latency", "throughput", "memory leak", "high CPU", "pprof", "benchmark", "bottleneck", "p99" |
 | Run existing integration flow | `/rote` | "run my flow", "search flows", "list adapters", "use existing integration", "what flows do I have", "fetch from", "call the API", "list my tickets", "get data from" |
 | Create a NEW integration adapter | `/rote-adapter` | "connect to X for the first time", "build adapter", "create integration", "new connector", "add new integration", "integrate with X" |
-| Direct code change (test-first) | inline TDD → `/code-review-gate` | direct code ask outside a pipeline — "write this function", "implement this method", "add this helper", "quick implement"; write the failing test first (Red→Green→Refactor), then run `/code-review-gate` |
+| Direct code change (spec-first) | inline Spec→Implement→Test→Falsify → `/code-review-gate` | direct code ask outside a pipeline — "write this function", "implement this method", "add this helper", "quick implement"; list the test cases (name · input · expected observable result · why it matters) first, implement, write exactly those tests, falsify each one, then run `/code-review-gate` |
 | Gate + review after any code change | `/code-review-gate` | "gate and review", "pre-push check", "ready to push", "sign off my code", "check before PR", "done coding", "is my code ready", "review my changes" |
 | Stress-test a plan/design | `/grill-me` | "grill me", "challenge this", "stress-test", "poke holes", "pick this apart", "interview me about", "find gaps in my plan", "what am I missing", "red team this" |
 | Architectural health review | `/improve-codebase-architecture` | "improve architecture", "zoom out", "architectural review", "find coupling", "codebase health", "architectural debt", "tech debt audit", "refactor architecture" |
@@ -73,7 +97,7 @@ Before writing code, designing architecture, reviewing security, or running qual
 
 **Rule**: If the user's message contains any trigger phrase above — or the intent clearly matches a row — invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
 
-**Mandatory gate rule**: After ANY coding task that is NOT inside a pipeline (TDD, ad-hoc code change, direct implementation request), ALWAYS run `/code-review-gate` as the mandatory final step before declaring the task done. Gates without a reviewer are insufficient — logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
+**Mandatory gate rule**: After ANY coding task that is NOT inside a pipeline (inline spec-first session, ad-hoc code change, direct implementation request), ALWAYS run `/code-review-gate` as the mandatory final step before declaring the task done. Gates without a reviewer are insufficient — logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 
 **Agents are loaded by pipeline skills** — never load `agents/*.md` files manually unless a pipeline skill instructs it.
 

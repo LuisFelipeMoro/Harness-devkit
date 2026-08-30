@@ -17,7 +17,7 @@ Load agent files on demand — never pre-load both at once. Use `references/outp
 Load `agents/analyst.md`. Run against the task description.
 
 - Include: language context, security constraints, business goals
-- Output: **product-brief.md** (show in full)
+- Output: **`docs/deliveries/{key}/product-brief.md`** (show in full) — derive the slug + key from the feature name per `references/delivery-and-worktree.md`; a root-level `product-brief.md` would be clobbered by the next delivery
 
 ---
 
@@ -26,7 +26,7 @@ Load `agents/analyst.md`. Run against the task description.
 Load `agents/pm.md`. Run against the Brief from Step 1.
 
 - Security ACs are mandatory for any I/O, auth, or data-handling epic
-- Output: **PRD.md** (show in full)
+- Output: **`docs/deliveries/{key}/PRD.md`** (show in full)
 
 ---
 
