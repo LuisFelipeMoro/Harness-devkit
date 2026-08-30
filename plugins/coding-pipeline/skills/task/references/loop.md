@@ -1,0 +1,79 @@
+# Task pipeline — sub-task loop detail
+
+## Phase 1 — Planning (once)
+
+> **Backend-Driven Architecture check (mandatory):** Verify tier placement for every component: **Frontend** = render only; **BFF** = orchestrate + shape for UI; **Core** = domain logic. Flag and push back on any AC asking the wrong tier to own logic.
+
+Load and follow `skills/planning/SKILL.md` starting from **Phase 1 (Architecture)**.
+
+- Skip Phase 0 — task description is the input; Brief + PRD not required.
+- Derive tech stack from existing codebase if present.
+- Phase 2 (grill-me plan stress) and Phase 3 (human validation of unresolved questions) are mandatory before any coding.
+- Produce **Task Manifest** (Phase 4 single-task path). Confirm before continuing.
+
+**Sub-task sizing rules:**
+- Max ~200 lines of production code per sub-task
+- Each sub-task has a clear interface boundary (function, class, module, endpoint)
+- Sub-tasks must be independently testable — split if not
+
+## Phase 2 — Sub-Task Loop (repeat per sub-task)
+
+**A. Story** — `agents/scrum-master.md`
+Input: Task Manifest row + the delivery file → Output: `docs/deliveries/{key}/story-{slug}.md`
+
+**B. Code (Spec→Implement→Test→Falsify)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
+
+> Runs **inside the delivery worktree** (`.worktrees/dlv-{key}/`) on the release branch, and
+> **one sub-task at a time** — sub-tasks share that single worktree, so two concurrent Coders
+> would overwrite each other. Optionally cut `feature/{key}-{story-slug}` for a substantial
+> sub-task and merge it back with `--no-ff` once its Verdict passes; small sub-tasks commit
+> straight to the release branch. Never commit or merge to `main`.
+- **Stack-aware dispatch**: pick the overlay by the sub-task's Tier — `agents/coder-backend.md` (server/API/domain) or `agents/coder-frontend.md` (UI/SSR/client). Load only `references/languages/<language>.md` for the sub-task's `Language` — never the index. Full-stack sub-tasks were split BE/FE around the `api-spec.yaml` contract (BE producer first, then FE consumer). No frontend stack → frontend coder never spawned.
+  - **Frontend sub-task creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` for a compact design plan (palette, type pairing, layout concept, signature element) and include it in the coder's dispatch prompt. Skip for backend-only sub-tasks and frontend sub-tasks that don't touch visual surface.
+- The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
+- Coder runs Phase 0 Analysis, then Phase 1 implement to the frozen Test Case table → Phase 2 write exactly the specified tests → Phase 3 falsify each one (apply the row's break, confirm the assertion fails, restore) — owns both test and impl files
+- Coder emits `CODER DONE` with spec coverage ({n}/{N} rows) and one falsification evidence line per test
+- Orchestrator stores compact ref: `"ST1: {file}.{ext} + tests, {N} lines, implements {Interface}"`
+
+**C. QA audit + gates** — `agents/qa.md`
+Input: ACs from Task Manifest (including Security ACs) + Amelia's tests + full code
+Quinn audits the tests (spec-row completeness, falsification evidence + spot-checks, intent-encoding, corner cases, no tautologies — see qa.md Test Audit), then runs all quality gates. Quinn authors no tests. Route on Quinn's output signal:
+
+- `QA→REVIEWER APPROVAL` → proceed to D (Review + Stress in parallel)
+- `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → Bug-Fix Loop
+- `QA ESCALATION` (after 3 iterations) → proceed to D with FAIL status
+
+See `references/quality-gate-reference.md` **Bug-Fix Loop Protocol** (and **Loop Integrity** — no goalpost-moving, stop on an identical repeat failure, compact only at story boundaries) for exact procedure, iteration counting, and coverage failure sub-path.
+
+**D. Review + Stress** *(triggered by QA signal — never before QA approval or escalation)*:
+- `agents/reviewer.md` → full code, language-specific checks
+- `agents/stress.md` → full code + tests, Security Under Stress
+
+If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Tyler):
+- Tyler applies MINOR/NIT fixes; emits `TUNER COMPLETE`
+- Reviewer re-scores only changed files; use higher score for Verdict
+- Maximum 2 iterations; on `TUNER LIMIT REACHED` → proceed to E
+
+**E. Verdict** — `agents/verdict.md`
+Input: Review score + Stress score + QA summary + AC checklist + Gate Report
+Unmitigated CRITICAL security = automatic NOT READY.
+
+**F. Checkpoint**
+
+| Score | Security | Gates | Action |
+|-------|----------|-------|--------|
+| ≥ 8.0 | No CRITICAL | All green | Next sub-task or final summary |
+| ≥ 8.0 | CRITICAL | Any | NOT READY — fix security first |
+| < 8.0 | Any | Any | Show issues; ask: *"Fix and re-run / skip / stop?"* |
+
+On re-run: pass only delta (CRITICAL/MAJOR issues + failing ACs + failed gates).
+
+After each sub-task Verdict, append a `PROGRESS.md` entry at the repo root (Done / Failed / Current State / Next — see `references/progress-file.md`) so the next session boots with state.
+
+**Post-verdict (PRODUCTION READY)**: load `agents/devops.md` (Ops) — generates Dockerfile, .dockerignore, docker-compose.yml, optional CI/k8s.
+
+> **Context Budget**: After each sub-task: drop code + story. Retain: the delivery file + Manifest + all scores.
+> If running 4+ sub-tasks or context >75% full: summarize completed sub-tasks to one-line refs:
+> `"ST{N}: {slug} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never drop scores.
+
+Use `references/output-format.md` headers. Show Pipeline Summary after each Verdict. Load agent files on demand — never pre-load all at once.

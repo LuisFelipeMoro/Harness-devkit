@@ -49,3 +49,38 @@ jobs:
               && echo "OK $f" || { echo "BAD JSON: $f"; fail=1; }
           done < <(git ls-files '*.json')
           exit $fail
+
+  wiring:
+    name: wiring — manifests, hooks, cross-references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: python syntax
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            python3 -m py_compile "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
+          done < <(git ls-files '*.py')
+          exit $fail
+      - name: validate wiring
+        # Every capability here is one file pointing at another. None of those links
+        # is exercised at authoring time, so a rename breaks them silently.
+        run: python3 .github/scripts/validate-wiring.py
+
+  hooks:
+    name: hooks — guards behave
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: hook behaviour tests
+        run: bash .github/scripts/test-hooks.sh
+
+  install:
+    name: install — bootstrap and settings merge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: installer behaviour tests
+        # The settings merge edits a file holding the operator's permissions and
+        # model config; a bad merge destroys work that is not recoverable from git.
+        run: bash .github/scripts/test-install.sh

@@ -1,6 +1,6 @@
 # claude-devkit
 
-BMAD v6 AI-assisted development pipeline for [Claude Code](https://claude.ai/code). Drop this into any repository under `.claude/` (or install globally in one command) to get a full agentic development kit: every piece of code is built against a frozen test specification, proven by falsification, and clears quality gates plus an independent reviewer before it's considered done.
+Spec-first AI development harness for [Claude Code](https://claude.ai/code). Drop this into any repository under `.claude/` (or install globally in one command) to get a full agentic development kit: every piece of code is built against a frozen test specification, proven by falsification, and clears quality gates plus an independent reviewer before it's considered done.
 
 - **Spec-first testing** — the Architect freezes a Test Case table (expected observable result · why it matters · what break falsifies it) before any code. The Coder implements to it, writes exactly those tests, then **breaks the code to prove each test fails**. The QA agent audits that evidence instead of writing tests.
 - **Tautology is the blocking defect, not low coverage** — a green suite at 90% coverage that survives having its guards deleted fails the audit. Coverage is a floor; falsifiability is the gate.
@@ -25,7 +25,7 @@ autonomous agent on the rails:
 | Component | What it is here |
 |-----------|-----------------|
 | **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
-| **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. A task isn't done until they pass. |
+| **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. |
 | **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
 | **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. |
 
@@ -161,63 +161,81 @@ Install: `claude plugin install context7@claude-plugins-official`
 
 ## Quick Start
 
-Three installation paths. Pick one based on your situation. Supports Linux and macOS.
-
----
-
-### Option A — Plugin only (no git hooks needed)
+One command per machine. Detects the OS, installs what is missing, puts the devkit in
+`~/.claude`, and wires the hooks into `settings.json` so the guards are live rather than
+merely present. Supports macOS, Linux, and WSL.
 
 ```bash
-claude plugin install github:LuisFelipeMoro/claude-devkit
-```
-
-**Use when:** you only care about Claude Code skills and agents (no format/lint/push enforcement via git), or you're evaluating the pipeline before committing to full setup, or your team already has git hooks in place.
-
-**What you get:** all skills, all agents, CLAUDE.md standards, env-guard hook — everything Claude-facing.
-
-**What you don't get:** `pre-commit` format check, `pre-push` quality gates, `commit-msg` enforcement.
-
-Updates: `claude plugin update LuisFelipeMoro/claude-devkit`
-
----
-
-### Option B — Plugin + git hooks (recommended for teams)
-
-**Step 1:** install Claude Code integration via plugin manager
-```bash
-claude plugin install github:LuisFelipeMoro/claude-devkit
-```
-
-**Step 2:** wire OS-level git hooks (plugin can't touch `.git/hooks/`)
-```bash
-git clone https://github.com/LuisFelipeMoro/claude-devkit .claude-tmp
-bash .claude-tmp/plugins/bmad_v6/scripts/install-git-hooks.sh
-rm -rf .claude-tmp
-```
-
-**Use when:** you want quality gates enforced at commit/push time, not just during AI sessions. Onboarding teammates — they each run these two commands once per machine.
-
-**What you get:** everything in Option A plus `pre-commit` (format + lint), `pre-push` (full quality gates), `commit-msg` (Conventional Commits).
-
-Updates: `claude plugin update LuisFelipeMoro/claude-devkit` (re-run install-git-hooks after hook changes)
-
----
-
-### Option C — Full manual install (no plugin manager)
-
-```bash
-git clone https://github.com/LuisFelipeMoro/claude-devkit
+git clone https://github.com/LuisFelipeMoro/Harness-devkit
 cd claude-devkit
-bash plugins/bmad_v6/scripts/install-global.sh
+bash install.sh
 ```
 
-**Use when:** private internal fork not on public GitHub; no internet at install time; or you're iterating on the devkit itself — edit locally, run the script, changes land in `~/.claude/` immediately.
+Re-running is the normal case: it compares the installed commit against the source commit
+and does nothing expensive when they match.
 
-**Safe on existing `~/.claude/`:** same-named files updated; your custom files untouched. `~/.claude/CLAUDE.md` is **never overwritten** — an `@include` line is injected once. Re-running is idempotent.
+```bash
+bash install.sh --check      # report only — never writes
+bash install.sh --yes        # no prompts (CI, provisioning)
+bash install.sh --no-deps    # skip package installation
+bash install.sh --no-claude-mem   # skip the claude-mem memory layer
+bash install.sh --dry-run    # print what would happen
+```
+
+**What it does, in order**
+
+| Step | Detail |
+|---|---|
+| Source | Uses the clone you ran it from; if run outside a checkout, clones to `~/.local/share/claude-devkit`. Fast-forwards when the checkout is behind its remote — never touches a dirty or diverged tree. |
+| Dependencies | Required: `git`, `python3`, `curl`. Recommended: `gh`, `shellcheck`, `ripgrep`. Installed via the detected manager — Homebrew, apt, dnf, yum, pacman, zypper, or apk. |
+| Claude Code | Installs the CLI if absent, via `npm` when available. |
+| claude-mem | Installs [claude-mem](https://github.com/thedotmack/claude-mem) via `npx claude-mem install` — cross-session context persistence. Optional: needs Node ≥ 20, skipped cleanly without it, opt out with `--no-claude-mem`. |
+| Devkit files | Agents, skills, references, and `CLAUDE.md` into `~/.claude`, plus git-hook templates. |
+| Hook wiring | Merges the hook graph into `~/.claude/settings.json`, then verifies every shipped hook is referenced. |
+| State | Records the installed commit in `~/.claude/devkit/install-state.json`. |
+
+It never pipes a downloaded script into a shell. The devkit's own `destructive-guard`
+blocks that shape, and an installer that breaks its own rule is not worth shipping —
+anything downloaded is written to disk, its path shown, and run only after confirmation.
+
+**Safe on an existing `~/.claude/`.** Same-named files are updated; your own files are
+untouched. `~/.claude/CLAUDE.md` is never overwritten — an `@include` line is injected once.
+In `settings.json`, your `model`, `permissions`, `env`, and non-devkit hooks are preserved;
+only devkit-owned hook entries are replaced, and entries pointing at scripts the devkit no
+longer ships are dropped. A `settings.json` that is not valid JSON aborts the install rather
+than being rewritten.
+
+**On claude-mem.** It fills the same Memory role as `PROGRESS.md` from the other end:
+`PROGRESS.md` is the deliberate, reviewable record a pipeline writes at each checkpoint,
+while claude-mem compresses and replays the conversation itself. They compose — the installer
+treats claude-mem as optional and never lets it fail the run. It registers its own Claude Code
+lifecycle hooks; the devkit's settings merge preserves them, and theirs preserve the devkit's.
+
+**Environment overrides**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DEVKIT_HOME` | `~/.local/share/claude-devkit` | Where a managed clone lives |
+| `DEVKIT_REPO` | this repo's HTTPS URL | Clone source (use for a private fork) |
+| `TARGET_HOME` | `$HOME` | Install target — also settable with `--home DIR` |
 
 ---
 
-### Adding git hooks to a new repo (after any option)
+### Installing as a Claude Code plugin instead
+
+The installer deliberately does not touch the plugin manager. If you would rather have the
+marketplace manage it, do that yourself in Claude Code:
+
+```
+/plugin marketplace add LuisFelipeMoro/Harness-devkit
+/plugin install coding-pipeline@claude-devkit
+```
+
+Git hooks still need the step below — a plugin cannot write to `.git/hooks/`.
+
+---
+
+### Adding git hooks to a repo
 
 ```bash
 bash ~/.claude/git-hooks/install.sh
@@ -232,7 +250,7 @@ shape Codex CLI's own Skills convention expects. A dedicated installer places th
 Codex scans for skills:
 
 ```bash
-bash plugins/bmad_v6/scripts/install-codex.sh
+bash plugins/coding-pipeline/scripts/install-codex.sh
 ```
 
 **What you get:** every skill installed to `~/.agents/skills/` (Codex's user-level skills
@@ -245,15 +263,15 @@ To also give Codex real, dispatchable subagents (not just reference docs) — on
 Claude model tier (`opus`→`high`, `sonnet`→`medium`, `haiku`→`low`):
 
 ```bash
-bash plugins/bmad_v6/scripts/generate-codex-agents.sh
+bash plugins/coding-pipeline/scripts/generate-codex-agents.sh
 ```
 
 **Scope:** single-agent skills (`security-review`, `quality-gate`, `pr-review`, etc.) work
-identically to Claude Code. Multi-agent pipeline skills (`multi-agent-coding-pipeline`,
+identically to Claude Code. Multi-agent pipeline skills (`multi-agent`,
 `bug-fix`, etc.) now have real per-persona Codex subagents at the right reasoning effort,
 but pipeline **sequencing** — which persona runs when, reading handoff signals like
 `CODER DONE` — hasn't been exercised end-to-end in a live Codex session yet. See
-`plugins/bmad_v6/codex/harness-adapter.md` for the vocabulary mapping and current gaps.
+`plugins/coding-pipeline/codex/harness-adapter.md` for the vocabulary mapping and current gaps.
 
 ---
 
@@ -263,7 +281,8 @@ The devkit is split into focused plugins. Each installs independently or togethe
 
 ```
 plugins/
-├── bmad_v6/            # Core BMAD v6 pipeline — agents, pipeline skills, references
+├── coding-pipeline/    # Core coding pipeline — agents, pipeline skills, hooks,
+│                       #   references (per-language rules split one file per stack)
 ├── engineering/        # Quality skills — security-review, quality-gate, code-review-gate,
 │                       #   DB migration, observability, performance, release management
 ├── devtools/           # Developer tools — architecture review, business/technical analysis,
@@ -275,7 +294,7 @@ plugins/
 
 ## Pipeline Overview
 
-### Full BMAD v6 — `/multi-agent-coding-pipeline <task>`
+### Full pipeline — `/multi-agent <task>`
 
 For large features and epics. Runs up to 11 agents (9 core + Tuner + DevOps):
 
@@ -322,7 +341,7 @@ DELIVERY CLOSE (terminal — the pipeline stops here)
                         then /release-management tags the merged main
 ```
 
-### Fast Pipeline — `/task-coding-pipeline <task>`
+### Fast Pipeline — `/task <task>`
 
 Skips Analyst + PM. Starts directly at Architecture → grill-me plan stress → Decompose into sub-tasks → Implement per sub-task. Same agent protocol (Coder implements to the frozen Test Case table, writes those tests, falsifies each → QA audit loop → QA approval → Reviewer).
 
@@ -334,12 +353,12 @@ Exploring requirements only
          ↓
   → /planning                          Load Brief+PRD → delivery file + manifest
          ↓
-  → /multi-agent-coding-pipeline       Full Epic Loop → Verdict
+  → /multi-agent       Full Epic Loop → Verdict
          — or —
-  → /task-coding-pipeline              Sub-Task Loop → Verdict
+  → /task              Sub-Task Loop → Verdict
 
 Fast path (one known task)
-  → /task-coding-pipeline <task>       Architect → sub-tasks → code → QA → Verdict
+  → /task <task>       Architect → sub-tasks → code → QA → Verdict
 
 Ad-hoc code change (spec-first, direct edit)
   → list the test cases first, then code, then write those tests and falsify each
@@ -367,8 +386,8 @@ Score weighted: Review 35% · StressTest 35% · QA 30%.
 What are you trying to do?
 │
 ├─ Build something new
-│   ├─ Large feature / epic / new service  →  /multi-agent-coding-pipeline
-│   ├─ Single task / small change          →  /task-coding-pipeline
+│   ├─ Large feature / epic / new service  →  /multi-agent
+│   ├─ Single task / small change          →  /task
 │   ├─ Just need a plan, no code yet       →  /planning
 │   └─ Just explore requirements           →  /analysis
 │
@@ -410,7 +429,7 @@ What are you trying to do?
 
 ### Pipeline skills
 
-#### `/multi-agent-coding-pipeline <task>`
+#### `/multi-agent <task>`
 
 **Use when:** building a large feature, epic, or new service from scratch.
 
@@ -418,14 +437,14 @@ What are you trying to do?
 
 **Example:**
 ```
-/multi-agent-coding-pipeline Build a cart service for our e-commerce platform.
+/multi-agent Build a cart service for our e-commerce platform.
   It should support adding/removing items, applying discount codes, and
   persisting carts for logged-in users. Go + PostgreSQL.
 ```
 
 ---
 
-#### `/task-coding-pipeline <task>`
+#### `/task <task>`
 
 **Use when:** implementing a single known task — a new endpoint, a refactor, a small feature. You already know what needs to be built.
 
@@ -433,7 +452,7 @@ What are you trying to do?
 
 **Example:**
 ```
-/task-coding-pipeline Add rate limiting to the POST /checkout endpoint.
+/task Add rate limiting to the POST /checkout endpoint.
   Max 5 requests per minute per user. Return 429 with Retry-After header.
 ```
 
@@ -810,7 +829,7 @@ Spec is the source of truth — code follows spec, never the reverse.
 ### Security
 - OWASP Web Top 10 (2025) enforced at Reviewer + Verdict stages
 - OWASP LLM Top 10 2025 (v2.0) enforced for AI/GenAI workloads
-- `.env` / `.envrc` reads blocked at Claude Code hook level
+- `.env` / `.envrc` reads blocked at Claude Code hook level; credential writes and destructive shell commands blocked the same way
 - Never log PII, secrets, tokens, or card data
 
 ---
@@ -821,10 +840,31 @@ Spec is the source of truth — code follows spec, never the reverse.
 |------|---------|-----------|
 | `session-bootstrap.sh` | SessionStart | Harness memory — prints `PROGRESS.md` so a new session resumes with done/failed/current state |
 | `env-guard.sh` | PreToolUse → Read/Bash/Grep/Glob | Blocks reads of `.env`, `.envrc`, `.env.*` — hard exit, including `cat`/`grep` via Bash |
+| `destructive-guard.sh` | PreToolUse → Bash | Blocks force-push, remote branch deletion, `reset --hard`/`clean -fd` on a checked-out mainline, recursive deletes aimed at `/` or `$HOME`, `curl \| sh`, `chmod 777`, and `DROP`/`TRUNCATE` from the shell |
+| `secret-write-guard.sh` | PreToolUse → Write/Edit | Blocks writing a recognisable live credential into the tree (AWS keys, private-key blocks, Anthropic/OpenAI/GitHub/GitLab/Slack/Google tokens) |
+| `session-tracker.sh` | PostToolUse | Records which source files changed and whether any gate command ran — the evidence `delivery-gate` reads |
+| `delivery-gate.sh` | Stop | Refuses to call a session done when source files changed and no test, lint, or type-check ever ran |
 | `pr-review-responder.sh` | PostToolUse → Bash | After `git push`: surfaces PR comments; Claude fixes valid issues and replies |
 | RTK hook | PreToolUse → Bash | Every Bash command routed through RTK for compact output |
 | Caveman activate | SessionStart | Loads compressed mode; persists across turns |
 | Caveman tracker | UserPromptSubmit | Prevents caveman mode from drifting off mid-session |
+
+The guards are deterministic — regex and exit codes, no model in the loop — and every one of
+them is covered by `.github/scripts/test-hooks.sh`, which asserts both that it blocks what it
+must and that it stays out of the way otherwise. A guard that cannot parse its input exits 0:
+failing open beats blocking every tool call because a payload shape changed.
+
+**Tuning them**
+
+| Variable | Effect |
+|---|---|
+| `DEVKIT_HOOK_PROFILE=off` | Every guard is inert |
+| `DEVKIT_HOOK_PROFILE=standard` | Default. Guards block; `delivery-gate` warns |
+| `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
+| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `post:session-tracker`, `stop:delivery-gate` |
+
+`strict` blocks a given session only once — a Stop hook that blocks forever traps the operator
+rather than the mistake.
 
 ---
 
@@ -861,3 +901,26 @@ Valid types: `feat` · `fix` · `docs` · `style` · `refactor` · `perf` · `te
 | **RTK** | Internal / see RTK repo | 60–90% token savings on all CLI output via automatic filtering |
 | **Caveman** | `claude plugin install caveman@caveman` | 60–70% response compression; mode persists across turns |
 | **Rote** | Internal / see rote repo | Adapter framework; crystallizes API calls into reusable CLI flows |
+| **claude-mem** | `npx claude-mem install` (or `bash install.sh`) | Compresses and replays prior sessions, so context survives a restart |
+
+---
+
+## Developing the devkit
+
+The devkit holds itself to its own Sensor bar — CI fails on an exit code, never on prose.
+Run the same checks locally before pushing:
+
+```bash
+bash .github/scripts/test-hooks.sh        # 30 assertions across the session guards
+bash .github/scripts/test-install.sh      # 20 assertions across the bootstrap
+python3 .github/scripts/validate-wiring.py  # manifests, hooks, and every cross-reference
+```
+
+`validate-wiring.py` exists because nearly every capability here is one file pointing at
+another — a marketplace entry at a plugin directory, a hook entry at a shell script, a skill at
+a reference, an agent name in a dispatch instruction. Nothing executes those links at authoring
+time, so a rename breaks them silently and the failure only surfaces mid-delivery.
+
+Both test suites were accepted only after every assertion was falsified: the logic under test
+was removed, the suite was observed to fail on its own assertion, and the code was restored. A
+test never observed failing is unproven, and that rule applies to the devkit's own tests first.

@@ -1,0 +1,9 @@
+{
+  "name": "coding-pipeline",
+  "version": "2.0.0",
+  "description": "11-agent spec-first coding pipeline (Analyst → PM → Architect → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps)",
+  "author": {
+    "name": "Luis Moro"
+  },
+  "hooks": "./hooks/hooks.json"
+}

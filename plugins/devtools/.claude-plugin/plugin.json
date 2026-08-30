@@ -1,6 +1,6 @@
 {
   "name": "devtools",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Developer tools \u2014 architectural health review, business/technical analysis, adversarial plan grilling, session handoff, skill authoring, rote adapter creation, rote flow automation",
   "author": {
     "name": "Luis Moro"

@@ -6,7 +6,7 @@ description: 'Use when creating a NEW integration adapter from scratch — disco
 Dispatch the autonomous rote-adapter agent to build a new integration connector from scratch.
 
 ## Anti-patterns
-- Don't read the agent definition directly — dispatch it as the `bmad_v6:rote-adapter` sub-agent to keep the 8-phase discovery out of main context
+- Don't read the agent definition directly — dispatch it as the `coding-pipeline:rote-adapter` sub-agent to keep the 8-phase discovery out of main context
 - Don't use this for integrations that already have an adapter — use `/rote` instead
 - Don't skip verification (Phase 6) — an adapter that doesn't verify is not complete
 
