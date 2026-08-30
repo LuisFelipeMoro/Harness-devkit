@@ -158,6 +158,26 @@
     lines, both plugin manifests parse, and the global/codex installers use globs so the new
     reference files ship without a manifest edit.
 
+  - **Broken skill path in all three pipeline entry points.** `multi-agent-coding-pipeline`,
+    `task-coding-pipeline`, and its `references/loop.md` each instructed the orchestrator to
+    "load and follow `skills/planning.md`" — a file that does not exist. The planning skill is
+    `skills/planning/SKILL.md`. Every pipeline run was pointed at a missing file at its first
+    planning step. Fixed in all three.
+  - **Four unreachable reference files removed** — nothing loaded them and all predated the
+    June restructure, so they drifted without any signal:
+    `bmad_v6/references/api-integration.md` (taught raw `fetch` calls against the Messages API
+    with a stale `claude-sonnet-4-6` model id, while agents actually dispatch via the Task
+    tool), `bmad_v6/references/arch-report-reference.md` and
+    `bmad_v6/references/rote-reference.md` (both outranked by the live copies under
+    `devtools/`), and `engineering/skills/security-review/references/scope-and-checklists.md`
+    (a superseded subset — 28 of its 42 content lines were already inlined verbatim in that
+    skill's `SKILL.md`, which never referenced it).
+  - **`multi-agent-coding-pipeline` description undercounted its own agents** — "all 9 agents"
+    while `plugin.json`, `marketplace.json`, and `README.md` all say 11. Corrected to 11
+    (Tuner and DevOps were missing from the list).
+  - **`/checkcomments` was missing from the CLAUDE.md skill table** — the only one of the 23
+    skills absent, so it would never be routed to by the trigger-phrase rule.
+
 - **`plugins/bmad_v6/.claude-plugin/plugin.json` version corrected to `1.3.0`.** It had been
   left at `1.2.0` through the `1.2.1` release, so the manifest under-reported the installed
   version by two releases. Note the git tags lag further still — the last tag is `v1.1.2`, so

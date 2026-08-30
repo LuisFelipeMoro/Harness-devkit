@@ -1,6 +1,6 @@
 ---
 name: multi-agent-coding-pipeline
-description: Use when running the full BMAD v6 agile pipeline for a large feature or epic — runs all 9 agents (Analyst, PM, Architect, ScrumMaster, Coder, QA, Reviewer, StressTester, Verdict) from planning through verdict. Trigger phrases — "build", "new feature", "epic", "implement from scratch", "greenfield", "MVP".
+description: Use when running the full BMAD v6 agile pipeline for a large feature or epic — runs all 11 agents (Analyst, PM, Architect, ScrumMaster, Coder, QA, Reviewer, StressTester, Verdict, Tuner, DevOps) from planning through delivery. Trigger phrases — "build", "new feature", "epic", "implement from scratch", "greenfield", "MVP".
 ---
 
 Run the BMAD v6 agile pipeline. If no task is provided, ask first.
@@ -28,7 +28,7 @@ from the release branch. Commands, header block, and branch rules:
 
 ## Phase 1 — Planning (once)
 
-Load and follow `skills/planning.md` (Phase 0 through Phase 4). Phase 2 (grill-me plan stress) and Phase 3 (human validation of unresolved questions) are mandatory before any coding.
+Load and follow `skills/planning/SKILL.md` (Phase 0 through Phase 4). Phase 2 (grill-me plan stress) and Phase 3 (human validation of unresolved questions) are mandatory before any coding.
 
 - If `docs/deliveries/{key}/product-brief.md` + `PRD.md` already exist (from a prior `/analysis` run for this key): load them and skip Phase 0 (inline analysis).
 - If the delivery file for this key already exists and was approved: skip Phases 0–2 and proceed directly to Phase 3 (Manifest).

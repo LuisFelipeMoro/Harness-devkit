@@ -4,7 +4,7 @@
 
 > **Backend-Driven Architecture check (mandatory):** Verify tier placement for every component: **Frontend** = render only; **BFF** = orchestrate + shape for UI; **Core** = domain logic. Flag and push back on any AC asking the wrong tier to own logic.
 
-Load and follow `skills/planning.md` starting from **Phase 1 (Architecture)**.
+Load and follow `skills/planning/SKILL.md` starting from **Phase 1 (Architecture)**.
 
 - Skip Phase 0 — task description is the input; Brief + PRD not required.
 - Derive tech stack from existing codebase if present.

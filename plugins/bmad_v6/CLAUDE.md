@@ -80,6 +80,7 @@ Before writing code, designing architecture, reviewing security, or running qual
 | Security audit | `/security-review` | "security", "audit", "vulnerability", "OWASP", "pen test", "check for issues", "prompt injection", "LLM security", "LLM01", "AI security", "GenAI risk", "is this safe", "threat model", "CVE", "auth bypass", "injection" |
 | Quality gates / CI check | `/quality-gate` | "quality gate", "run gates", "CI check", "lint", "coverage", "run tests", "is it green", "does it pass", "type check", "vet", "format check" |
 | PR review or post-push comments | `/pr-review` | "review PR", "check PR", "PR comments", "code review", "review this diff", "address review comments", "look at the pull request" |
+| List open PR comments (read-only) | `/checkcomments` | "check comments", "PR comments", "what comments are open", "show review comments", "any feedback on my PR" |
 | Business rules mapping | `/business-analysis` | "business rules", "business logic", "domain rules", "what does the business require", "validation rules", "domain model", "use cases" |
 | Technical contract mapping | `/technical-analysis` | "technical contract", "interface design", "API contract", "map the interfaces", "routes", "endpoints", "infrastructure overview", "what calls what" |
 | Cut a release | `/release-management` | "release", "cut a release", "ship", "version", "tag", "changelog", "bump version", "semver", "publish", "release notes" |
