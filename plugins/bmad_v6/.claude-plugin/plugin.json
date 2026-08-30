@@ -1,6 +1,6 @@
 {
   "name": "bmad_v6",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "BMAD v6 \u2014 11-agent spec-first coding pipeline (Analyst \u2192 PM \u2192 Architect \u2192 ScrumMaster \u2192 Coder \u2192 QA \u2192 Reviewer \u2192 StressTester \u2192 Tuner \u2192 Verdict \u2192 DevOps)",
   "author": {
     "name": "Luis Moro"

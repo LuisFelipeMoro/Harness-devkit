@@ -62,6 +62,22 @@
 
 ### Added
 
+- **`references/frontend-hardening-reference.md` — enforcement-integrity checks for frontend
+  work.** Distilled from a post-merge review cycle on a production checkout frontend, where
+  every pattern in it was a defect that *passed a green pipeline*: the lint ran, the tests were
+  green, coverage met the floor, the docs claimed the gate was enforced — and the control was
+  not actually in effect. Eight sections: config-merge shadowing (a rule silently replaced by a
+  later block), security rules left at `warn` instead of `error`, vacuous tests, missing
+  boundary-format cases on validators, ReDoS via overlapping regex character classes, fragile
+  coverage config, dead CI files as phantom gates, and enforcement that runs only in CI rather
+  than locally.
+
+  This pairs directly with the spec-first change above — both target controls that *look*
+  enforced but cannot fail. Wired in as mandatory for any web stack in `coder-frontend.md`,
+  as `[FH]`-tagged review flags in `language-rules-reference.md`, as a QA audit lens in
+  `qa.md` (canonical-only validators, vacuous loops, spies no `expect` reads), as a
+  design-time obligation in `architect.md`, and into both `quality-gate-reference.md` copies.
+
 - **`architecture.md` replaced by a keyed delivery file.** The pipeline no longer writes
   `architecture.md` to the project root. It now writes
   `docs/deliveries/delivery-{slug}-{key}.md`, where the key is the first 6 hex chars of the
@@ -141,6 +157,11 @@
   - Verified: every relative `.md` link in the repo resolves, every `SKILL.md` is under 100
     lines, both plugin manifests parse, and the global/codex installers use globs so the new
     reference files ship without a manifest edit.
+
+- **`plugins/bmad_v6/.claude-plugin/plugin.json` version corrected to `1.3.0`.** It had been
+  left at `1.2.0` through the `1.2.1` release, so the manifest under-reported the installed
+  version by two releases. Note the git tags lag further still — the last tag is `v1.1.2`, so
+  `1.2.0`, `1.2.1`, and `1.3.0` are recorded here in the CHANGELOG but untagged.
 
 - **`multi-agent-coding-pipeline` epic-loop detail extracted to `references/loop.md`.** Adding
   the delivery-setup phase pushed `SKILL.md` from 98 to 115 lines, past the devkit's own
