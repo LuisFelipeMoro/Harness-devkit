@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.1] — 2026-08-30
+
+### Fixed
+
+- **`destructive-guard` blocked legitimate commands.** Two checks matched a substring appearing
+  anywhere in the command rather than the command's structure, and both fired during real use:
+
+  - The force-push check scanned the whole line for a space-plus sequence, so a push followed by
+    `&& echo 1 + 2` was refused over an unrelated plus sign. The check now extracts only the
+    `git push` invocation, cut at the first `;`, `&`, or `|`, and inspects that segment. The same
+    fix stops a `-f` belonging to a *later* command in the line from reading as a force push.
+  - The DDL check matched `DROP TABLE` anywhere, so grepping for that string in a migrations
+    directory was refused for reading about DDL rather than running any. It now also requires a
+    database client (`psql`, `mysql`, `sqlite3`, `mongosh`, and similar) in the command.
+
+  Precision is not a nicety for a guard: one that fires on safe commands trains the operator to
+  disable it, and a disabled guard blocks nothing at all. Both false positives were found by the
+  guard blocking this session's own tool calls.
+
+- Coverage widened while tightening: the short `-f` flag, a force refspec (`+branch`), and a
+  delete refspec (`:branch`) are now caught, none of which the previous `--force`-only match
+  detected reliably.
+
+  Seven test cases added (37 total), each falsified — every check removed in turn, the suite
+  observed to fail on its own assertion, then restored. One mutation confirmed the segment
+  extraction is load-bearing: scanning the whole line again made `rm -rf ./build` trip the
+  force-flag check.
+
 ## [2.1.0] — 2026-08-30
 
 ### Added
