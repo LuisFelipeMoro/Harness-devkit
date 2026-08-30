@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a GitHub pull request and post severity-tagged inline comments with file:line evidence. Use when asked to review a PR or code-review a diff, or when the post-push hook surfaces open PR comments. Produces an OWASP + language-standards + test-quality review and a verdict.
+description: Review a GitHub pull request and post severity-tagged inline comments with file:line evidence. Use when asked to review a PR or code-review a diff, or when the post-push hook surfaces open PR comments. Produces an OWASP + language-standards + test-quality + change-discipline review and a verdict.
 ---
 
 # PR Review
@@ -22,7 +22,7 @@ Machine-checkable behavior contract: `skill.spec.yml` (routes, dependencies, clo
 ## Steps
 
 1. **Fetch** the PR diff, metadata, and CI status — commands in `references/output-format.md`. If the PR number is unknown, resolve it from the current branch.
-2. **Analyse** the diff against `references/review-checklist.md`, in order: Security (OWASP) → Go/TypeScript standards → test quality (falsifiability) → general.
+2. **Analyse** the diff against `references/review-checklist.md`, in order: Security (OWASP) → Go/TypeScript standards → test quality (falsifiability) → change discipline (does every changed line trace to the request?) → general.
 3. **Format** each issue as one finding per line per `references/output-format.md` (severity emoji + `path:line` + message + suggested fix).
 4. **Post** findings as inline comments and set the review verdict (`--request-changes` if any CRITICAL, else `--comment`, or `--approve` if clean).
 5. **Summarise**: print the summary block with severity counts and the action taken.
@@ -32,4 +32,5 @@ Machine-checkable behavior contract: `skill.spec.yml` (routes, dependencies, clo
 ## References
 
 - Fetch commands, finding line format, comment-posting templates, verdict commands, and the summary block: `references/output-format.md`.
-- Checklist (OWASP + Go + TypeScript + test quality + general), with severity mapping: `references/review-checklist.md`.
+- Checklist (OWASP + Go + TypeScript + test quality + change discipline + general), with severity mapping: `references/review-checklist.md`.
+- Change-discipline rows with worked ❌/✅ examples (single source of truth): `coding-pipeline/references/change-discipline.md`.
