@@ -28,7 +28,7 @@
 #
 # ┌─ SKIP THIS SCRIPT and use the plugin when ────────────────────────────────┐
 # │  • Distributing to teammates from a public GitHub repo                    │
-# │    → `claude plugin install github:LuisFelipeMoro/claude-devkit`          │
+# │    → `claude plugin install github:LuisFelipeMoro/Harness-devkit`          │
 # │  • You want `claude plugin update` for version management                 │
 # └───────────────────────────────────────────────────────────────────────────┘
 #

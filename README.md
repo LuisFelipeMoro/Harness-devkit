@@ -166,7 +166,7 @@ One command per machine. Detects the OS, installs what is missing, puts the devk
 merely present. Supports macOS, Linux, and WSL.
 
 ```bash
-git clone https://github.com/LuisFelipeMoro/claude-devkit
+git clone https://github.com/LuisFelipeMoro/Harness-devkit
 cd claude-devkit
 bash install.sh
 ```
@@ -227,7 +227,7 @@ The installer deliberately does not touch the plugin manager. If you would rathe
 marketplace manage it, do that yourself in Claude Code:
 
 ```
-/plugin marketplace add LuisFelipeMoro/claude-devkit
+/plugin marketplace add LuisFelipeMoro/Harness-devkit
 /plugin install coding-pipeline@claude-devkit
 ```
 

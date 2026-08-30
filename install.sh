@@ -22,7 +22,7 @@
 # and executed only after confirmation.
 set -euo pipefail
 
-DEVKIT_REPO="${DEVKIT_REPO:-https://github.com/LuisFelipeMoro/claude-devkit.git}"
+DEVKIT_REPO="${DEVKIT_REPO:-https://github.com/LuisFelipeMoro/Harness-devkit.git}"
 DEVKIT_HOME="${DEVKIT_HOME:-$HOME/.local/share/claude-devkit}"
 TARGET_HOME="${TARGET_HOME:-$HOME}"
 PLUGIN_NAME="coding-pipeline"
