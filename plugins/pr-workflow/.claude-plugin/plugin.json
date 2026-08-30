@@ -1,6 +1,6 @@
 {
   "name": "pr-workflow",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "PR workflow skills \u2014 full code review (OWASP + language-specific) and PR comment listing",
   "author": {
     "name": "Luis Moro"

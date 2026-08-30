@@ -20,6 +20,29 @@ This devkit is a Harness. Four components, all mandatory:
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
 - **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code.
 
+## Is the Harness working? (read quarterly, never as a gate)
+
+A Harness that is never measured drifts into ceremony. These five signals are countable from
+artifacts the devkit already produces — no new tooling, no new file:
+
+| Signal | Where it is counted | Healthy |
+|---|---|---|
+| Scope creep | CD1+CD2+CD3 findings in the Reviewer's `Summary:` line | falling toward zero |
+| Question timing | edits to the delivery file's ACs *after* the first Coder dispatch | rare — questions land before code, not after a mistake |
+| Rework | files touched by 2+ commits on one delivery branch (`git log --format= --name-only <branch> \| sort \| uniq -c`) | flat; a rise means the spec was too loose |
+| Sensor escape | gate failures first caught at pre-push or CI instead of locally | falling — a failure caught late cost a full loop |
+| Test honesty | QA MAJORs for tautological or unfalsified tests | zero, *with* coverage steady — zero findings plus climbing coverage is a red flag, not a win |
+
+**These are diagnostics, never targets.** Every one is trivially gamed by suppressing its
+signal — ask fewer questions, soften the review, squash the rework away — and an agent told to
+optimise them will do exactly that. They are read by a human, from `PROGRESS.md` and the
+delivery files, to decide whether the standards are earning their cost.
+
+**What to do with a reading**: scope creep rising means the Guides are not reaching the Coder —
+tighten the story, do not tighten the reviewer. A stretch of healthy readings is licence to
+*remove* ceremony (demote a lane in Proportionality), which is the only way this file gets
+shorter instead of longer.
+
 ## Spec-First Test Discipline (non-negotiable — all code)
 
 Tests are written **after** the implementation, against a test specification frozen **before**
@@ -116,9 +139,12 @@ Before writing code, designing architecture, reviewing security, or running qual
 
 ## Coding Discipline (12 rules — non-negotiable)
 
+These rules are enforced, not aspirational: the reviewer checks them as the CD1–CD7 rows in
+`references/change-discipline.md`, which carries the severities and worked ❌/✅ examples.
+
 1. **Think before coding**: State assumptions, ask questions, stop when confused. Never guess.
-2. **Simplicity first**: Write the minimum code needed. No speculative abstractions.
-3. **Surgical changes**: Modify only necessary code, matching existing style. No drive-by refactors.
+2. **Simplicity first**: Write the minimum code needed. No speculative abstractions. *Test*: an abstraction with one implementation and one call site is a finding (CD2).
+3. **Surgical changes**: Modify only necessary code, matching existing style. No drive-by refactors. *Test*: every changed line traces to a sentence of the request; clean up orphans your change created, never pre-existing dead code (CD1, CD5, CD6).
 4. **Goal-driven execution**: Define clear success criteria before starting. Tasks are verifiable goals.
 5. **Read before you write**: Review existing callers, exports, and related code before implementing.
 6. **Surface conflicts**: Pick one approach, explain the tradeoff, flag contradictions — never average them.
@@ -128,6 +154,33 @@ Before writing code, designing architecture, reviewing security, or running qual
 10. **Do not guess**: State limitations explicitly if code cannot be tested or verified immediately.
 11. **One topic per file**: Split guidelines into focused files — never combine unrelated rules.
 12. **Fail loudly**: Surface uncertainty and errors. Never hide them.
+
+## Proportionality (what scales with size — and what never does)
+
+These standards bias toward caution over speed. That is the right trade at delivery scale and
+the wrong one on a typo, so **ceremony scales with the change; the standards do not.**
+
+**Never scales — applies to a one-line change exactly as to an epic:**
+Security Defaults · the quality-gate table · Spec-First Test Discipline for any behaviour
+change · Change Discipline (CD1–CD7) · never commit or merge to `main` · the session hooks.
+There is no "too small to test" and no "too small to gate."
+
+**Scales — pick the lightest lane that fits:**
+
+| Lane | When | Ceremony |
+|------|------|----------|
+| Trivial | No behaviour change: docs, comments, formatting, or a rename whose callers the compiler verifies | No spec table, no new tests, no delivery file. Run the gates, state the lane. |
+| Inline spec-first | Behaviour change, ≤2 files, no new dependency or external surface | Test Case table inline → implement → test → falsify → `/code-review-gate` |
+| `/task` | One focused feature or a change spanning >2 files | Architecture pass + sub-task loop |
+| `/multi-agent` | Epic, greenfield, or anything needing a PRD | Full pipeline, delivery file, worktree |
+
+**State the lane before starting** — "Trivial: comment fix, gates only." An unstated lane
+defaults to the heavier one. Picking Trivial for something that changes behaviour is itself a
+finding, so when the lane is arguable, take the heavier one and say why.
+
+This does not loosen skill routing: the rule above — *a task that "feels simple" is not an
+exception* — still holds. A lane sets how much spec and artifact ceremony a change carries,
+never whether a matching skill gets invoked.
 
 ## Task Discipline (boundaries required)
 

@@ -13,8 +13,9 @@ Every code change outside a pipeline must clear this gate before it counts as do
 
 ## Steps
 1. **Phase 1 — Quality Gates.** Invoke the `/quality-gate` skill. If any gate fails, show the failing gate and its error output, stop, surface the fix, and wait for a re-run. Phase 2 begins after every gate is green.
-2. **Phase 2 — Reviewer.** Collect the changed files with the commands in `references/diff-verdict-and-rules.md`, then dispatch the Reviewer subagent — `coding-pipeline:reviewer` (or `reviewer` in a flat `~/.claude/agents` install) — handing it the full content of each changed file plus the one-line gate summary. The dispatched subagent already carries its Reviewer persona; do not read the agent file into the main context. It covers the Security Deep-Dive checklist, language-specific checks, and the test-falsifiability check defined in that reference.
+2. **Phase 2 — Reviewer.** Collect the changed files with the commands in `references/diff-verdict-and-rules.md`, then dispatch the Reviewer subagent — `coding-pipeline:reviewer` (or `reviewer` in a flat `~/.claude/agents` install) — handing it the full content of each changed file, the one-line gate summary, and the original request verbatim (the Reviewer needs it to judge change discipline). The dispatched subagent already carries its Reviewer persona; do not read the agent file into the main context. It covers the Security Deep-Dive checklist, language-specific checks, the test-falsifiability check, and the change-discipline check (CD1–CD7) defined in that reference.
 3. **Phase 3 — Verdict.** Apply the verdict table in `references/diff-verdict-and-rules.md`: score ≥ 8.0 with no CRITICAL passes; any CRITICAL blocks; below 8.0 surfaces findings for a decision. After any fix, restart from Phase 1.
 
 ## References
 - `references/diff-verdict-and-rules.md` — diff collection commands, Reviewer payload, falsifiability check, verdict table, and anti-patterns.
+- `coding-pipeline/references/change-discipline.md` — CD1–CD7 rows, severities, and worked ❌/✅ examples (single source of truth).

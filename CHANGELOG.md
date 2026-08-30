@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.1.0] — 2026-08-30
+
+### Added
+
+- **Change Discipline is now a review sensor, not just prose.** Coding Discipline rules 1–3
+  and 6 had no enforcement path: nothing in the review chain ever failed a diff for scope
+  creep, so "surgical changes" was aspirational. `coding-pipeline/references/change-discipline.md`
+  defines CD1–CD7 — untraceable change, single-use abstraction, unrequested surface,
+  unreachable-state handling, pre-existing dead code deleted unasked, self-inflicted orphan,
+  silently-resolved ambiguity — each with a severity for both consumers and a worked ❌/✅
+  pair. The operational test: every changed line must trace to a sentence of the request.
+
+  Wired into all three review paths: `coding-pipeline:reviewer` (new review category),
+  `pr-workflow`'s `review-checklist.md` (mirrored table), and `engineering:code-review-gate`,
+  whose Reviewer payload now carries **the original request verbatim** — without it CD1, CD3,
+  and CD7 are unjudgeable, and the reviewer is told to say so rather than infer intent from
+  the diff under test.
+
+- **Proportionality section in `CLAUDE.md`** — the standards previously read as uniformly
+  "non-negotiable" with no guidance for a typo fix, so ceremony got applied by feel. Now
+  explicit: ceremony scales with the change, standards never do. Security defaults, quality
+  gates, spec-first discipline for behaviour changes, CD1–CD7, and never-merge-to-main apply
+  at every size; the four lanes (Trivial → inline spec-first → `/task` → `/multi-agent`)
+  scale artifacts. The lane is stated before starting; an unstated lane defaults to the
+  heavier one. Lanes do not loosen skill routing.
+
+- **"Is the Harness working?" section in `CLAUDE.md`** — five signals countable from artifacts
+  the devkit already produces (scope-creep findings, question timing, rework, sensor escape,
+  test honesty), with an explicit anti-Goodhart clause: they are human-read diagnostics, never
+  targets and never a gate. A stretch of healthy readings is licence to remove ceremony.
+
+### Changed
+
+- Coding Discipline rules 2 and 3 carry their operational tests inline, pointing at the CD ids.
+
 ## [2.0.0] — 2026-08-30
 
 ### Changed — BREAKING
