@@ -56,6 +56,17 @@ expect "rm -rf root"       destructive-guard.sh '{"tool_input":{"command":"rm -r
 expect "rm -rf build"      destructive-guard.sh '{"tool_input":{"command":"rm -rf ./build"}}' 0
 expect "normal push"       destructive-guard.sh '{"tool_input":{"command":"git push origin release/x"}}' 0
 expect "test command"      destructive-guard.sh '{"tool_input":{"command":"go test ./..."}}' 0
+expect "short force flag"  destructive-guard.sh '{"tool_input":{"command":"git push -f origin main"}}' 2
+expect "force refspec"     destructive-guard.sh '{"tool_input":{"command":"git push origin +main"}}' 2
+expect "delete refspec"    destructive-guard.sh '{"tool_input":{"command":"git push origin :old-branch"}}' 2
+
+# Precision cases. Each of these is a legitimate command that an earlier, looser
+# version of the guard blocked — a guard that cries wolf gets switched off, and a
+# switched-off guard blocks nothing.
+expect "plus after push"   destructive-guard.sh '{"tool_input":{"command":"git push origin main && echo 1 + 2"}}' 0
+expect "-f later in line"  destructive-guard.sh '{"tool_input":{"command":"git push origin main; ls -f /tmp"}}' 0
+expect "ddl in a grep"     destructive-guard.sh '{"tool_input":{"command":"grep -rn \"DROP TABLE\" migrations/"}}' 0
+expect "ddl in a comment"  destructive-guard.sh '{"tool_input":{"command":"echo \"never TRUNCATE TABLE in prod\" >> notes.md"}}' 0
 
 # ── secret-write-guard ───────────────────────────────────────────────────────
 expect "aws key"           secret-write-guard.sh '{"tool_input":{"content":"AKIAIOSFODNN7EXAMPLE"}}' 2

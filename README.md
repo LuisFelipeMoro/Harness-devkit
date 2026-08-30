@@ -840,7 +840,7 @@ Spec is the source of truth — code follows spec, never the reverse.
 |------|---------|-----------|
 | `session-bootstrap.sh` | SessionStart | Harness memory — prints `PROGRESS.md` so a new session resumes with done/failed/current state |
 | `env-guard.sh` | PreToolUse → Read/Bash/Grep/Glob | Blocks reads of `.env`, `.envrc`, `.env.*` — hard exit, including `cat`/`grep` via Bash |
-| `destructive-guard.sh` | PreToolUse → Bash | Blocks force-push, remote branch deletion, `reset --hard`/`clean -fd` on a checked-out mainline, recursive deletes aimed at `/` or `$HOME`, `curl \| sh`, `chmod 777`, and `DROP`/`TRUNCATE` from the shell |
+| `destructive-guard.sh` | PreToolUse → Bash | Blocks force-push, remote branch deletion, `reset --hard`/`clean -fd` on a checked-out mainline, recursive deletes aimed at `/` or `$HOME`, `curl \| sh`, `chmod 777`, and destructive DDL executed through a database client |
 | `secret-write-guard.sh` | PreToolUse → Write/Edit | Blocks writing a recognisable live credential into the tree (AWS keys, private-key blocks, Anthropic/OpenAI/GitHub/GitLab/Slack/Google tokens) |
 | `session-tracker.sh` | PostToolUse | Records which source files changed and whether any gate command ran — the evidence `delivery-gate` reads |
 | `delivery-gate.sh` | Stop | Refuses to call a session done when source files changed and no test, lint, or type-check ever ran |

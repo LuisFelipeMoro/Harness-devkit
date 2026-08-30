@@ -9,7 +9,7 @@ This devkit is a Harness. Four components, all mandatory:
   | Hook | Event | Id (for `DEVKIT_DISABLED_HOOKS`) | Does |
   |---|---|---|---|
   | `env-guard.sh` | PreToolUse | `pre:read:env-guard` | Blocks any read of `.env` / `.envrc` |
-  | `destructive-guard.sh` | PreToolUse(Bash) | `pre:bash:destructive-guard` | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL |
+  | `destructive-guard.sh` | PreToolUse(Bash) | `pre:bash:destructive-guard` | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL run through a database client |
   | `secret-write-guard.sh` | PreToolUse(Write/Edit) | `pre:write:secret-guard` | Blocks writing a recognisable live credential into the tree |
   | `session-tracker.sh` | PostToolUse | `post:session-tracker` | Records which source files changed and whether any gate command ran |
   | `delivery-gate.sh` | Stop | `stop:delivery-gate` | Refuses to call a session done when source changed and no test/lint/typecheck ever ran |
