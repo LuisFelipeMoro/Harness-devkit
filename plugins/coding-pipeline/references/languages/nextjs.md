@@ -46,6 +46,7 @@ verify the flat-config blocks do not shadow one another
 | `security/*` or `regexp/*` rules absent from the config, or present at `warn` **[FH]** | MAJOR |
 | `coverageConfigDefaults.exclude` filtered in `vitest.config.*` / `jest.config.*` **[FH]** | MAJOR |
 | `.github/workflows/` file present when the project deploys through another CI system **[FH]** | MAJOR |
+| Client bundle grew without justification — check with `@next/bundle-analyzer` | MINOR |
 | coverage < 85% | BLOCK (score ≤ 5) |
 
 ---

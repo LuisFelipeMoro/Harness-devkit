@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.2.0] — 2026-08-30
+
+### Added
+
+- **Go reference gained a Structure and Idiom table** — error inspection with `errors.Is` /
+  `errors.As` rather than string matching, concrete types or generics instead of
+  `interface{}` / `any`, the `cmd/` · `internal/` · `business/` · `foundation/` layout, the
+  preferred dependency set, package naming, safe zero values, `init()` avoidance, and the
+  reflection restriction. The file already named Uber Go Style and ardanlabs/service as its
+  authorities but carried none of the structural rules those authorities are consulted for.
+
+- **Next.js reference gained a bundle-growth review flag** (`@next/bundle-analyzer`).
+
+  Both gaps were found by diffing a real operator's personal `CLAUDE.md` against the shipped
+  references: 52 per-language rules were compared, and these six were the only ones the devkit
+  could not account for. They are the reason a personal standards file could not simply be
+  replaced by the devkit `@include` — the rules load on demand now, so it can.
+
 ## [2.1.1] — 2026-08-30
 
 ### Fixed

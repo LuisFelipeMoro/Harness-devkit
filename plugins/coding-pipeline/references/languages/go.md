@@ -19,6 +19,18 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 ## Coding Rules
 `fmt.Errorf("ctx: %w", err)` — no bare `return err`; `context.Context` first param; interfaces in consumer package; no `panic` in library code; `crypto/rand` not `math/rand`; parameterized queries; `ReadTimeout`/`WriteTimeout` on `http.Server`; `defer` for cleanup; every HTTP handler must have complete `swaggo/swag` annotations (`@Summary`, `@Description`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`); request/response types must be fully-typed Go structs (no `any`, no `interface{}`); types consumed across packages must be behind an interface in the consumer package; run `swag init ./...` — zero errors before handoff.
 
+## Structure and Idiom *(authority: [Uber Go Style](https://github.com/uber-go/guide/blob/master/style.md) → [ardanlabs/service](https://github.com/ardanlabs/service) → Effective Go)*
+| Rule | Requirement |
+|------|-------------|
+| Error inspection | `errors.Is` / `errors.As` — never string-match an error message |
+| Types | Concrete types or generics `[T any]` — never `interface{}` / `any` in a signature |
+| Layout | `cmd/` (main only) · `internal/` · `business/` · `foundation/` |
+| Dependencies | Stdlib first; then `go.uber.org/zap` · `testify` · `golang.org/x/sync` · `ardanlabs/conf/v3` |
+| Package names | Lowercase single word — no `utils` / `helpers` / `common` |
+| Zero values | Design types so the zero value is safe and usable without a constructor |
+| `init()` | Avoid unless unavoidable; never in a library package |
+| Reflection | `reflect` only for serialization libraries, with explicit justification |
+
 ## Linting Commands
 `go vet ./...` · `staticcheck ./...` · `golangci-lint run` (with `gosec`, `errcheck`, `revive` enabled)
 
