@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.2.1] — 2026-08-31
+
+### Fixed
+
+- **Coverage gates that could not fail.** `pre-push` announced "tests + coverage" for Rust,
+  PHP, Java (Maven and Gradle) and Kotlin and then compared nothing — the threshold existed
+  only in `quality-gate-reference.md`. Five languages had a declared minimum and a sensor
+  incapable of enforcing it, which reads as green. Each now parses a real number and blocks
+  below it: Rust ≥85% via `cargo tarpaulin`, PHP ≥80% from `--coverage-text`, Java ≥85% from
+  JaCoCo's csv, Kotlin Android ≥85% from Kover's xml (one parser — Kover emits JaCoCo's shape).
+
+  The same hole one step later: Go and Flutter *did* compare their numbers but passed silently
+  when the number came back empty. `coverage_gate` now refuses an unmeasured gate outright.
+  Flutter's percentage extraction also moved off `grep -oP`, which BSD grep has no PCRE for and
+  this hook ships to macOS.
+
+  Where the measuring tool is absent entirely the hooks still WARN rather than block — the
+  file's existing convention for `govulncheck` and `cargo-audit` — but the warning now says
+  UNENFORCED out loud instead of printing nothing.
+
+- **Android projects on the Kotlin DSL got no Gradle gates at all.** Both hooks detected Android
+  with `grep 'android {' build.gradle`, which fails on a `build.gradle.kts`-only project. In
+  `pre-push` the inverted copy of that test then routed such a project into the **Java** branch,
+  where `jacocoTestReport` is not a registered task; in `pre-commit` the Java block correctly
+  excluded it and the Kotlin block never claimed it, so nothing ran. One `is_android_gradle`
+  helper per hook now checks both DSLs.
+
+- **`/handoff` never wrote the one section meant to outlive the delivery.** CLAUDE.md and
+  `coding-pipeline/references/progress-file.md` define `PROGRESS.md` as
+  Done/Failed/Current State/Next/**Lessons**, and assign `Lessons` to `/handoff` explicitly.
+  The handoff skill's schema line and its own divergent copy of `progress-file.md` both stopped
+  at `Next`, so the cheapest cross-session memory the harness has was specified everywhere and
+  written nowhere. The skill now requires it, and the mirror carries the section plus the
+  precedence header the `engineering` mirror already uses (canonical wins on conflict).
+
+### Added
+
+- **`.github/scripts/test-git-hooks.sh` — 19 assertions across `pre-commit` / `pre-push`.**
+  CI ran shellcheck and `bash -n` over these files, proving they parse, never that they gate.
+  Both defect classes above survive a syntax check. Fixtures stub every external the hooks shell
+  out to, so a case exercises the hook's own logic and not the machine's toolchain; each
+  language is asserted below its minimum, at it, and — where the number is parsed from tool
+  output — with it unreadable. Wired into the `hooks` CI job.
+
+  Written RED-first against the unfixed hooks (11 failures reproducing both defects), then every
+  fix falsified in turn: the `.kts` arm removed from each helper, `coverage_gate`'s comparison
+  deleted, its empty-value guard deleted, and the Kover xml parser stubbed out — each break
+  observed to fail exactly the assertions that encode it, then restored.
+
 ## [2.2.0] — 2026-08-30
 
 ### Added

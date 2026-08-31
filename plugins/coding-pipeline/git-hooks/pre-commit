@@ -5,6 +5,14 @@
 # prose for an agent to interpret.
 set -e
 
+# Android declares `android {}` in either Gradle DSL. Matching only build.gradle
+# let a Kotlin-DSL project skip the Kotlin block entirely — and the Java block
+# already excluded it — so such a project got no Gradle gates at all.
+is_android_gradle() {
+    grep -q 'android {' build.gradle 2>/dev/null \
+        || grep -q 'android {' build.gradle.kts 2>/dev/null
+}
+
 # Go
 if [ -f go.mod ]; then
     echo "→ Go: format"
@@ -63,7 +71,7 @@ fi
 # Java (Gradle)
 if [ -f build.gradle ] || [ -f build.gradle.kts ]; then
     # Skip if Android (handled by Kotlin Android block)
-    if ! grep -q 'android {' build.gradle 2>/dev/null && ! grep -q 'android {' build.gradle.kts 2>/dev/null; then
+    if ! is_android_gradle; then
         echo "→ Java/Gradle: checkstyle"
         ./gradlew checkstyleMain --quiet 2>/dev/null || true
     fi
@@ -90,7 +98,7 @@ if [ -f pubspec.yaml ]; then
 fi
 
 # Kotlin Android
-if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && grep -q 'android {' build.gradle 2>/dev/null; then
+if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && is_android_gradle; then
     echo "→ Kotlin: detekt"
     ./gradlew detekt --quiet
 

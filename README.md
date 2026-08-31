@@ -26,7 +26,7 @@ autonomous agent on the rails:
 |-----------|-----------------|
 | **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
 | **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. |
-| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
+| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
 | **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. |
 
 ### Spec-first, falsification-proven
@@ -911,7 +911,8 @@ The devkit holds itself to its own Sensor bar — CI fails on an exit code, neve
 Run the same checks locally before pushing:
 
 ```bash
-bash .github/scripts/test-hooks.sh        # 30 assertions across the session guards
+bash .github/scripts/test-hooks.sh        # 37 assertions across the session guards
+bash .github/scripts/test-git-hooks.sh    # 19 assertions across pre-commit / pre-push
 bash .github/scripts/test-install.sh      # 20 assertions across the bootstrap
 python3 .github/scripts/validate-wiring.py  # manifests, hooks, and every cross-reference
 ```

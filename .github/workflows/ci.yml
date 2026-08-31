@@ -72,8 +72,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: hook behaviour tests
+      - name: session hook behaviour tests
         run: bash .github/scripts/test-hooks.sh
+      - name: git hook behaviour tests
+        # shellcheck proves these parse; only this proves they gate.
+        run: bash .github/scripts/test-git-hooks.sh
 
   install:
     name: install — bootstrap and settings merge

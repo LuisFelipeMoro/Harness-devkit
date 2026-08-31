@@ -5,6 +5,54 @@
 # passes. It returns an exit code, never prose for an agent to interpret.
 set -e
 
+# ── Sensor helpers ───────────────────────────────────────────────────────────
+# Android declares `android {}` in either Gradle DSL. Matching only build.gradle
+# routed a Kotlin-DSL project into the Java branch, where the jacoco tasks this
+# hook calls are not registered — so it never reached its own gates at all.
+is_android_gradle() {
+    grep -q 'android {' build.gradle 2>/dev/null \
+        || grep -q 'android {' build.gradle.kts 2>/dev/null
+}
+
+# coverage_gate <label> <percent> <minimum> — the comparison IS the gate.
+# An unreadable percentage fails rather than passing: a threshold that prints a
+# number it never compares, or skips when the number is missing, renders as green
+# and is worse than no gate, because the absence of one is at least visible.
+coverage_gate() {
+    local label="$1" actual="$2" min="$3"
+    if [ -z "$actual" ]; then
+        echo "FAIL: $label coverage could not be read — refusing to pass an unmeasured gate"
+        exit 1
+    fi
+    if awk "BEGIN {exit !($actual < $min)}"; then
+        echo "FAIL: $label coverage ${actual}% is below ${min}%"
+        exit 1
+    fi
+    echo "$label coverage: ${actual}% ✓"
+}
+
+# jacoco_line_pct <report>... — line coverage from the first report that exists.
+# Kover emits JaCoCo's shape, so Maven, Gradle, and Android share one parser.
+jacoco_line_pct() {
+    local f line m c
+    for f in "$@"; do
+        [ -f "$f" ] || continue
+        case "$f" in
+            *.csv)
+                awk -F, 'NR>1 {m+=$8; c+=$9} END {t=m+c; if (t>0) printf "%.1f", (c*100)/t}' "$f"
+                return 0 ;;
+            *.xml)
+                # report-level counters come last, after every package's own
+                line=$(tr '<' '\n' < "$f" | grep 'counter type="LINE"' | tail -1)
+                m=$(printf '%s' "$line" | sed -n 's/.*missed="\([0-9]*\)".*/\1/p')
+                c=$(printf '%s' "$line" | sed -n 's/.*covered="\([0-9]*\)".*/\1/p')
+                [ -n "$m$c" ] || return 0
+                awk -v m="$m" -v c="$c" 'BEGIN {t=m+c; if (t>0) printf "%.1f", (c*100)/t}'
+                return 0 ;;
+        esac
+    done
+}
+
 echo "→ Full quality gates before push..."
 
 # Go
@@ -13,12 +61,8 @@ if [ -f go.mod ]; then
     go test -race -coverprofile=/tmp/coverage.out -covermode=atomic ./...
 
     echo "→ Go: coverage ≥85%"
-    total=$(go tool cover -func=/tmp/coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
-    if awk "BEGIN {exit !($total < 85)}"; then
-        echo "FAIL: coverage ${total}% is below 85%"
-        exit 1
-    fi
-    echo "Coverage: ${total}% ✓"
+    total=$(go tool cover -func=/tmp/coverage.out 2>/dev/null | tail -1 | awk '{print $3}' | tr -d '%')
+    coverage_gate "Go" "$total" 85
 
     echo "→ Go: vulnerability scan"
     if command -v govulncheck &>/dev/null; then
@@ -62,8 +106,17 @@ fi
 
 # Rust
 if [ -f Cargo.toml ]; then
-    echo "→ Rust: tests + coverage"
+    echo "→ Rust: tests"
     cargo test
+
+    echo "→ Rust: coverage ≥85%"
+    if command -v cargo-tarpaulin &>/dev/null; then
+        pct=$(cargo tarpaulin --skip-clean --out Stdout 2>/dev/null \
+                | grep -oE '[0-9]+\.[0-9]+% coverage' | tail -1 | grep -oE '[0-9]+\.[0-9]+' || true)
+        coverage_gate "Rust" "$pct" 85
+    else
+        echo "WARN: cargo-tarpaulin not found — coverage UNENFORCED. Install: cargo install cargo-tarpaulin"
+    fi
 
     echo "→ Rust: audit"
     if command -v cargo-audit &>/dev/null; then
@@ -75,25 +128,48 @@ fi
 
 # Java (Maven)
 if [ -f pom.xml ]; then
-    echo "→ Java: tests + coverage"
+    echo "→ Java: tests + coverage ≥85%"
     mvn -q verify
+
+    pct=$(jacoco_line_pct target/site/jacoco/jacoco.csv)
+    if [ -n "$pct" ]; then
+        coverage_gate "Java" "$pct" 85
+    else
+        echo "WARN: no JaCoCo csv at target/site/jacoco/jacoco.csv — coverage UNENFORCED. Add the jacoco-maven-plugin report goal."
+    fi
 
     echo "→ Java: dependency vulnerability scan"
     mvn -q dependency-check:check 2>/dev/null || echo "WARN: OWASP dep-check not configured"
 fi
 
 # Java (Gradle — non-Android)
-if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && ! grep -q 'android {' build.gradle 2>/dev/null; then
-    echo "→ Java/Gradle: tests + coverage"
+if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && ! is_android_gradle; then
+    echo "→ Java/Gradle: tests + coverage ≥85%"
     ./gradlew test jacocoTestReport --quiet
+
+    pct=$(jacoco_line_pct build/reports/jacoco/test/jacocoTestReport.csv)
+    if [ -n "$pct" ]; then
+        coverage_gate "Java/Gradle" "$pct" 85
+    else
+        echo "WARN: no JaCoCo csv at build/reports/jacoco/test/ — coverage UNENFORCED. Set csv.required = true on jacocoTestReport."
+    fi
 fi
 
 # PHP
 if [ -f composer.json ]; then
-    echo "→ PHP: tests + coverage"
+    echo "→ PHP: tests + coverage ≥80%"
     if [ -f vendor/bin/phpunit ]; then
-        vendor/bin/phpunit --coverage-text \
-            --coverage-filter src/ 2>/dev/null || vendor/bin/phpunit
+        php_cov="${TMPDIR:-/tmp}/devkit-phpunit-coverage.txt"
+        # --coverage-filter src/ fails on layouts without src/; fall back, but a
+        # genuinely failing suite must still stop the push.
+        if ! vendor/bin/phpunit --coverage-text --coverage-filter src/ > "$php_cov" 2>&1; then
+            vendor/bin/phpunit --coverage-text > "$php_cov" 2>&1 || { cat "$php_cov"; exit 1; }
+        fi
+        cat "$php_cov"
+        pct=$(grep -E '^[[:space:]]*Lines:' "$php_cov" | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        coverage_gate "PHP" "$pct" 80
+    else
+        echo "WARN: vendor/bin/phpunit not found — tests and coverage UNENFORCED"
     fi
 
     echo "→ PHP: audit"
@@ -106,20 +182,27 @@ if [ -f pubspec.yaml ]; then
     flutter test --coverage
 
     echo "→ Flutter: coverage ≥80%"
+    # -oE, not -oP: BSD grep has no PCRE and this hook ships to macOS too.
     if command -v lcov &>/dev/null; then
-        pct=$(lcov --summary coverage/lcov.info 2>&1 | grep 'lines' | grep -oP '\d+\.\d+(?=%)' | head -1)
-        if [ -n "$pct" ] && awk "BEGIN {exit !($pct < 80)}"; then
-            echo "FAIL: Flutter coverage ${pct}% is below 80%"
-            exit 1
-        fi
-        echo "Flutter coverage: ${pct}% ✓"
+        pct=$(lcov --summary coverage/lcov.info 2>&1 | grep 'lines' | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        coverage_gate "Flutter" "$pct" 80
+    else
+        echo "WARN: lcov not found — Flutter coverage UNENFORCED. Install: brew install lcov / apt install lcov"
     fi
 fi
 
 # Kotlin Android
-if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && grep -q 'android {' build.gradle 2>/dev/null; then
-    echo "→ Kotlin Android: tests + coverage"
+if ([ -f build.gradle ] || [ -f build.gradle.kts ]) && is_android_gradle; then
+    echo "→ Kotlin Android: tests + coverage ≥85%"
     ./gradlew test --quiet
+    ./gradlew koverXmlReport --quiet 2>/dev/null || true
+
+    pct=$(jacoco_line_pct build/reports/kover/report.xml)
+    if [ -n "$pct" ]; then
+        coverage_gate "Kotlin Android" "$pct" 85
+    else
+        echo "WARN: no Kover report at build/reports/kover/report.xml — coverage UNENFORCED. Apply the Kover plugin."
+    fi
 
     echo "→ Kotlin Android: lint"
     ./gradlew lint --quiet
