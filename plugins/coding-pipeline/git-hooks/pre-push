@@ -112,7 +112,7 @@ else
     # decision, not a defect. Per-repo tuning (extra ignores, per-language limits)
     # belongs in a committed .jscpd.json, which jscpd reads without this hook knowing.
     "$jscpd_bin" . --threshold 100 --min-lines 8 --min-tokens 50 \
-        --ignore "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md" \
+        --ignore "**/.git/**,**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md" \
         --reporters json --output "$dup_out" >/dev/null 2>&1 || true
 
     if base="$(dup_base)"; then
