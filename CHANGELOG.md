@@ -1,5 +1,94 @@
 # Changelog
 
+## [2.3.0] — 2026-08-31
+
+### Added
+
+- **Codebase discovery before architecture** (planning Phase 0.5). The Architect used to design
+  from the PRD alone — as if the repository were empty — which is where duplicated components
+  originate: a plan that never saw the existing rate limiter specifies a new one, and no gate
+  downstream can compare the two. A read-only `haiku` pass now writes
+  `docs/deliveries/{key}/codebase-map.md` first: blast radius · reusable symbols · **prior art**
+  (the near-miss is the duplication risk) · conventions · extension points · contracts in force ·
+  test conventions, every entry cited `file:line`. Greenfield repos record the empty result
+  rather than skipping — "nothing exists yet" is a fact the plan needs stated, not inferred.
+
+- **Reuse Map in the delivery file.** Every planned component now carries a decided row —
+  `reuse: file:line` / `extend: file:line` / `new:` with the closest existing thing named and why
+  it does not fit. A `new` with no citation is unjustified: "nothing similar exists" is a claim
+  about the codebase and needs the same evidence as any other. The Scrum Master copies the
+  relevant rows (plus the layer's convention exemplar) into each story, so the Coder is told what
+  to reuse instead of being left to search for prior art on her own.
+
+- **Plan Reviewer agent — Priya** (`agents/plan-reviewer.md`, `sonnet`, planning Phase 2.5).
+  `/grill-me` interrogates a plan from inside the context that wrote it and never opens the
+  repository, so a plan could survive it intact and still specify a component that already
+  exists, an interface whose real signature differs, or an AC with two readings — each cheap
+  here and expensive after the Coder has built to it. Priya is a fresh reader **with the
+  codebase open**, and she runs *before* human validation: PR1 already exists · PR2 reuse not
+  declared · PR3 contradicts existing code · PR4 convention breach · PR5 ambiguous AC (CD7 caught
+  at plan time) · PR6 unfalsifiable Test Case row · PR7 untraced requirement · PR8 decision
+  deferred into code · PR9 blast radius unstated · PR10 not independently testable. Any MAJOR
+  returns the plan to the Architect; max 2 rounds, then the remainder goes to the human as
+  questions rather than looping.
+
+- **Duplication gate, ≤ 3%, all stacks.** `jscpd --threshold 3 --min-lines 8` in `pre-push`
+  (language-agnostic, before any per-stack gate), in the QA gate list, in the story Definition of
+  Done, and as a Reviewer hard gate. A perfect duplicate lints clean, types clean and covers
+  clean — no other sensor in the harness can see it, and no reviewer reliably reads two files at
+  once, so it surfaced only as rework weeks later. jscpd owns the comparison itself (it exits
+  non-zero on the threshold), so this hook has no percentage to print-but-never-compare — the
+  failure mode the 2.2.1 coverage gates were written to close. Per-repo tuning belongs in a
+  committed `.jscpd.json`; loosening the hook's flags is not tuning. Missing tool WARNs rather
+  than blocking, matching every other optional tool here.
+
+- **PR review as the pipeline's terminal step.** `/pr-review` existed but no pipeline ever called
+  it, and the story-scoped Reviewer never sees the delivery as one diff — so cross-story
+  duplication and drift from the plan were structurally invisible. `/task` and `/multi-agent` now
+  run it on the PR they open. It gained a **Gaps block** (posted as a general comment, since it
+  has no line to attach to): unimplemented ACs · spec drift · missing Test Case rows · Reuse Map
+  departures · duplication % · untraced changes.
+
+### Changed
+
+- **The Reviewer now receives the acceptance contract**, not just the diff. Both pipeline loops
+  dispatched it with "full code, language-specific checks" — no story, no ACs, no delivery file —
+  which silently fired the Reviewer's own escape clause and disabled CD1, CD3 and CD7 on every
+  run. That is how a diff that builds the wrong thing scores 8/10. It now gets the story, the
+  Reuse Map, and `codebase-map.md`, and states explicitly which checks are disabled if they are
+  ever missing.
+
+- **Correctness became a procedure instead of a one-line list.** It had ~40 lines of security
+  checklist against a single line for logic. Now five ordered steps: trace every AC to a
+  `file:line` and read that path · read the existing callers of every changed exported symbol ·
+  check the diff against the delivery file's data-flow diagram · walk the boundaries (empty, zero,
+  one, max, one-past-max, nil, duplicate, out-of-order, concurrent) · follow one error to its exit.
+
+- **The Reviewer reviews at a principal-engineer bar, in any language** — *would I own this in
+  three years, after the author has left and the requirements have moved twice?* Priority order
+  **correct → legible → durable → small**, judged in the code's own idiom rather than another
+  language's habits. New `Reuse & Duplication` (RD1–RD6) and `Design & Durability` (PE1–PE14:
+  mixed abstraction levels, responsibility sprawl, leaky abstractions, temporal coupling, boolean
+  parameters, primitive obsession on invariants, shared mutable state, hidden side effects,
+  context-stripped errors, untestable seams, deep nesting, what-comments, invented conventions,
+  speculative generality) categories, mirrored into the `/pr-review` checklist.
+
+  **Slop and overengineering are symmetric findings** — a copy-pasted block and an interface with
+  one implementation are both filed, because both ship "for flexibility" and neither is flexible.
+  And strictness is not volume: every finding must pass the **cost test** (name the future change
+  it makes harder, or the concrete way it breaks), style the linter owns is never a finding, and a
+  category with more than ~5 findings reports the 3 that matter plus the pattern behind the rest.
+  Twenty nits bury three MAJORs, and a review nobody finishes reading changes nothing.
+
+### Testing
+
+- `test-git-hooks.sh`: 19 → 25 assertions. The duplication gate is proven to block above
+  threshold, to pass a clean repo, to warn (not block) when jscpd is absent, and to run outside
+  any stack block. Each was falsified before commit — swallow the exit code, force a failure,
+  make the missing-tool branch block, and nest the gate inside the Go block; every break was
+  caught by the assertion written for it.
+
+
 ## [2.2.1] — 2026-08-31
 
 ### Fixed

@@ -21,11 +21,39 @@ Show: `✓ docs/deliveries/{key}/product-brief.md` / `✓ docs/deliveries/{key}/
 
 All planning artifacts are keyed under the delivery — see `references/delivery-and-worktree.md`. Only `api-spec.yaml` stays at the project root.
 
+## Phase 0.5 — Codebase Discovery (MANDATORY — before any architecture)
+
+The Architect designs from the PRD. Without this phase it designs as if the repository were
+empty, which is where duplicated components originate: a plan that never saw the existing
+rate limiter specifies a new one, and no gate downstream compares the two.
+
+Dispatch a **read-only** Explore/mapping subagent on `haiku` (no edits, no plan opinions) and
+write **`docs/deliveries/{key}/codebase-map.md`**:
+
+| Section | Contents |
+|---|---|
+| Blast radius | Modules, packages, and files the feature will touch or sit beside — `path` + one line each |
+| Reusable symbols | Existing helpers, types, constants, validators, clients, middleware the feature could use — `file:line — signature — what it does` |
+| Prior art | Features already solving a **similar** problem, even partially. The near-miss is the duplication risk; name it even when it does not fit |
+| Conventions | Naming, error wrapping/propagation, dependency injection, context threading, layering — with a `file:line` exemplar for each |
+| Extension points | Interfaces, registries, hooks, config surfaces the feature can plug into instead of adding a parallel path |
+| Contracts in force | Existing signatures, error shapes, table/column names, config keys the feature must not contradict |
+| Test conventions | Where tests live, framework, fixture/mock style, how existing tests are named |
+
+Rules: cite `file:line` for every entry — an uncited claim about existing code is not a finding
+· report absence explicitly (`Reusable symbols: none — greenfield package`) rather than omitting
+a section · never propose the design, only report what is there.
+
+For a greenfield repo, run it anyway and record the empty result — "nothing exists yet" is a
+fact the Architect and the Plan Reviewer both need stated, not inferred from a missing file.
+
+Show: `✓ docs/deliveries/{key}/codebase-map.md`
+
 ## Phase 1 — Architecture
 
-Load `agents/architect.md` with Brief + PRD as input.
+Load `agents/architect.md` with Brief + PRD + **`codebase-map.md`** as input.
 
-Required output sections: Security Architecture + OWASP threat table + Mermaid data-flow diagram(s).
+Required output sections: Security Architecture + OWASP threat table + Mermaid data-flow diagram(s) + the **Reuse Map** (every planned component marked `reuse: file:sym` or `new: why nothing existing fits`).
 
 Output: **the delivery file** — write to `docs/deliveries/delivery-{slug}-{key}.md` with the header block from `references/delivery-and-worktree.md` (show in full). Show: `✓ docs/deliveries/delivery-{slug}-{key}.md`
 
@@ -39,6 +67,28 @@ For each gap grill-me raises:
 
 Re-run grill-me until it raises no new gaps the plan can resolve on its own.
 
+## Phase 2.5 — Plan Review (MANDATORY — before the human sees it)
+
+grill-me interrogates the plan from inside the context that wrote it and never opens the
+repository. Phase 2.5 adds the reader that does both: fresh eyes, codebase open.
+
+Load `agents/plan-reviewer.md` (Priya, `sonnet`) with the delivery file, the manifest (if Phase 4
+already ran for a re-review), `codebase-map.md`, the PRD, and the repository. She reads the real
+code and reports PR1–PR10 findings — already exists · reuse not declared · contradicts existing
+code · convention breach · ambiguous AC · unfalsifiable Test Case row · untraced requirement ·
+undecided question deferred into code · blast radius unstated · not independently testable.
+
+Routing on her `Gate:` line:
+- **`PLAN APPROVED`** → Phase 3.
+- **`PLAN CHANGES REQUIRED`** → return the findings to the Architect, update the delivery file,
+  re-review **only the changed sections**. Maximum 2 rounds; a third means the requirements
+  themselves are unclear — carry the remaining findings to Phase 3 as open questions for the
+  human rather than looping.
+
+An `[OPEN QUESTION]` finding is never resolved by the Architect guessing — it goes to Phase 3.
+
+Show: `✓ plan review — {score}/10, {n} findings resolved`
+
 ## Phase 3 — Human Validation
 
 Present to user:
@@ -46,6 +96,7 @@ Present to user:
 - Tech stack decisions
 - Top ADRs and tradeoffs
 - **Open questions grill-me could not resolve from context** — ask the human to decide each before coding
+- **Plan Review result** — Priya's score, her reuse verdict (`{N}/{M} planned components justified`), and any `[OPEN QUESTION]` finding she could not settle from the PRD
 
 Ask: *"Does the architecture make sense? Any changes to libraries, strategies, or design? Please resolve the open questions above. Approve / request changes?"*
 
@@ -100,7 +151,8 @@ Plan ready.
 Artifacts produced:
   ✓ docs/deliveries/{key}/product-brief.md
   ✓ docs/deliveries/{key}/PRD.md
-  ✓ docs/deliveries/delivery-{slug}-{key}.md
+  ✓ docs/deliveries/{key}/codebase-map.md
+  ✓ docs/deliveries/delivery-{slug}-{key}.md   (plan review: {score}/10)
   ✓ docs/deliveries/{key}/[epic-manifest | task-manifest].md
 
 To implement:

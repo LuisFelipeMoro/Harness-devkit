@@ -9,9 +9,9 @@ Run the full multi-agent coding pipeline.  If no task is provided, ask first.
 - **Input**: a feature/epic description (ask if not provided).
 - **Output**: implemented, tested epics with Review/Stress/QA/Verdict scores; a `[{key}]`-prefixed `PROGRESS.md` entry per epic; DevOps artifacts on final PRODUCTION READY; a PR from `release/{slug}-{key}` to `main`.
 - **Boundary**: Coder owns tests + implementation, written against the Architect's frozen Test Case table and falsified before handoff; Reviewer/StressTester run only after QA approval or escalation; unmitigated CRITICAL security is automatic NOT READY.
-- **Done when**: the Pipeline Summary prints after the final epic's Verdict with Security Gate, Falsification evidence, and Coverage shown.
+- **Done when**: the Pipeline Summary prints after the final epic's Verdict with Security Gate, Falsification evidence, Coverage and Duplication shown, **and** `/pr-review` has run on the opened PR and posted its findings.
 
-> **Model assignment** (see CLAUDE.md Model assignment table): dispatch the Architect on `opus`; Analyst, PM, Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-only Explore/mapping sub-agent on `haiku`. Don't run exploration on opus or the Architect's design pass on haiku.
+> **Model assignment** (see CLAUDE.md Model assignment table): dispatch the Architect on `opus`; Analyst, PM, Scrum Master, Plan Reviewer, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-only Explore/mapping sub-agent on `haiku`. Don't run exploration on opus or the Architect's design pass on haiku.
 
 ---
 
@@ -28,13 +28,13 @@ from the release branch. Commands, header block, and branch rules:
 
 ## Phase 1 — Planning (once)
 
-Load and follow `skills/planning/SKILL.md` (Phase 0 through Phase 4). Phase 2 (grill-me plan stress) and Phase 3 (human validation of unresolved questions) are mandatory before any coding.
+Load and follow `skills/planning/SKILL.md` (Phase 0 through Phase 4). Phase 0.5 (codebase discovery), Phase 2 (grill-me plan stress), Phase 2.5 (plan review against the real codebase) and Phase 3 (human validation of unresolved questions) are mandatory before any coding.
 
 - If `docs/deliveries/{key}/product-brief.md` + `PRD.md` already exist (from a prior `/analysis` run for this key): load them and skip Phase 0 (inline analysis).
-- If the delivery file for this key already exists and was approved: skip Phases 0–2 and proceed directly to Phase 3 (Manifest).
+- If the delivery file for this key already exists and was approved: skip Phases 0–2.5 and proceed directly to Phase 4 (Manifest).
 - On changes requested during human validation: update the delivery file → re-confirm before continuing.
 
-Complete Phases 0–4 of the planning skill (Phase 5 is informational when invoked from a pipeline). The plan MUST clear the Phase 2 grill-me stress and Phase 3 human validation before any code. Once the **Epic Manifest** is confirmed, continue with Phase 2 below.
+Complete Phases 0–4 of the planning skill (Phase 5 is informational when invoked from a pipeline). The plan MUST clear the Phase 0.5 codebase map, the Phase 2 grill-me stress, the Phase 2.5 `PLAN APPROVED` gate, and Phase 3 human validation before any code. Once the **Epic Manifest** is confirmed, continue with Phase 2 below.
 
 ---
 
@@ -56,6 +56,17 @@ the Bug-Fix Loop, escalation proceeds to D with FAIL)
 Read-only Explore/mapping subagents may still run in parallel. On the final epic's
 PRODUCTION READY, load `agents/devops.md`, then push the release branch (ask first) and open a
 PR to `main` — never commit or merge to `main` directly.
+
+---
+
+## Phase 3 — PR Review (after the PR is opened — never skipped)
+
+The story-scoped Reviewer never sees the delivery as one diff, so cross-story duplication and
+drift from the plan are invisible to it. Immediately after `gh pr create`, run **`/pr-review`** on
+the new PR with the delivery file, the Reuse Map, and the manifest in context. It posts inline
+severity-tagged comments and prints the **Gaps** block (unimplemented ACs · spec drift · missing
+Test Case rows · duplication %). Report the verdict and leave the PR open for the human — the
+pipeline never merges.
 
 > **Context Budget**: Between epics: drop implementation code, test files, and stories for completed epics. Retain: the delivery file + Manifest + all scores (Review/Stress/QA/Verdict per epic).
 > If running 4+ epics or context >75% full: summarize completed epics to one-line refs:

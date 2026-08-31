@@ -11,17 +11,18 @@ Machine-checkable behavior contract: `skill.spec.yml` · dependency ledger: `dep
 ## Contract
 
 - **Input**: a single coding task (tech stack derived from the existing codebase if present).
-- **Output**: implemented, tested sub-tasks, each with a Verdict and a `[{key}]`-prefixed `PROGRESS.md` entry at repo root; a PR from `release/{slug}-{key}` to `main`.
+- **Output**: implemented, tested sub-tasks, each with a Verdict and a `[{key}]`-prefixed `PROGRESS.md` entry at repo root; a PR from `release/{slug}-{key}` to `main`, reviewed by `/pr-review` with its findings posted.
 - **Boundary**: no full planning phase — starts at Architecture; per sub-task max ~200 lines with a clear interface boundary, split if not independently testable.
 - **Rules**: Coder owns tests + implementation, written against the frozen Test Case table and falsified before handoff; story ACs + that table are the frozen acceptance contract; Reviewer and StressTester run only after QA approval or escalation; unmitigated CRITICAL security is automatic NOT READY. Full forbids in `skill.spec.yml`.
 
 ## Model assignment
 
-Dispatch the Architect on `opus`; Scrum Master, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-side Explore/mapping sub-agent on `haiku` (see CLAUDE.md Model assignment table).
+Dispatch the Architect on `opus`; Scrum Master, Plan Reviewer, QA, Reviewer, Stress, Verdict, and the orchestrator on `sonnet`; the Coder (core + backend/frontend overlay), Tuner, DevOps, and any read-side Explore/mapping sub-agent on `haiku` (see CLAUDE.md Model assignment table).
 
 ## Steps
 
 0. **Delivery setup (once)** — derive the slug + key from the task name, create `.worktrees/dlv-{key}/` on branch `release/{slug}-{key}`, and run everything inside it, per [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md). An existing worktree for the key means resume, not recreate. Never commit or merge to `main` — the terminal step is a PR from the release branch.
-1. **Planning (once)** — follow `skills/planning/SKILL.md` from **Phase 1 (Architecture)**; run the Backend-Driven Architecture tier check; produce and confirm a **Task Manifest** (sizing rules and tier check detail in [references/loop.md](references/loop.md)).
+1. **Planning (once)** — follow `skills/planning/SKILL.md` from **Phase 0.5 (Codebase Discovery)**, then Architecture, then the Phase 2.5 plan review — Priya must return `PLAN APPROVED` (or her leftover findings must reach the human) before any code; run the Backend-Driven Architecture tier check; produce and confirm a **Task Manifest** (sizing rules and tier check detail in [references/loop.md](references/loop.md)).
 2. **Sub-task loop** — repeat per sub-task, **one at a time** (sub-tasks share the delivery worktree, so never dispatch two Coders concurrently): **A** story (ScrumMaster) → **B** code — implement to spec, write the specified tests, falsify each (Coder + one tier overlay) → **C** QA audit + gates → **D** review + stress (after the QA signal) → **E** verdict → **F** checkpoint + `PROGRESS.md`. Exact dispatch, routing signals, Bug-Fix Loop, Tuner limits, checkpoint table, and context budget are in [references/loop.md](references/loop.md).
-3. **Finish** — when a sub-task is PRODUCTION READY, load `agents/devops.md` for Docker/CI artifacts; otherwise continue to the next sub-task. When all sub-tasks are done, push the release branch (ask first) and open a PR to `main`, then print the final summary.
+3. **Finish** — when a sub-task is PRODUCTION READY, load `agents/devops.md` for Docker/CI artifacts; otherwise continue to the next sub-task. When all sub-tasks are done, push the release branch (ask first) and open a PR to `main`.
+4. **PR review** — run `/pr-review` on the new PR with the delivery file, Reuse Map, and manifest in context: the per-sub-task Reviewer never saw the delivery as one diff, so cross-sub-task duplication and plan drift are only visible here. It posts inline comments and prints the **Gaps** block (unimplemented ACs · spec drift · missing Test Case rows · duplication %). Then print the final summary. Never merge — the PR stays open for the human.

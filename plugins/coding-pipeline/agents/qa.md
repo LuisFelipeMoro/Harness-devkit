@@ -108,6 +108,7 @@ Spec: {N}/{N} Test Case rows implemented
 Falsification: {N}/{N} tests have valid evidence · spot-checked: {list of tests Quinn re-broke}
 Tautology audit: CLEAN
 Coverage: {actual}% (≥ {target}% floor)
+Duplication: {actual}% (≤ 3% limit)
 Gates: all green
 Tests: {N} tests across {M} describe blocks
 Security: {n}/{total} security scenarios covered, each falsified by removing its control
@@ -197,6 +198,7 @@ See `references/quality-gate-reference.md` for complete per-language gate comman
 - Verify code annotations compile and match spec: `rtk swag init ./...` (Go) · `rtk mvn compile` (Java) · `rtk tsc --noEmit` (TS)
 
 Key gates per language (all prefixed with `rtk` — hook intercepts automatically if prefix omitted):
+- **All stacks, before the per-language gates**: `rtk jscpd . --threshold 3 --min-lines 8 --reporters console` — Gate PASS = ≤ 3%. Duplication is language-agnostic and invisible to every gate below it: a copy-pasted block lints clean, types clean, and covers clean.
 - **Go**: `rtk golangci-lint run` · `rtk go vet ./...` · `rtk go test -race ./...` · `rtk govulncheck ./...`
 - **JS/TS/React**: `rtk lint` · `rtk tsc --noEmit` · `rtk prettier --check .` · `rtk next build` (Next.js) / `rtk vite build` or `rtk npm run build` (React SPA) · `rtk npm audit --audit-level=high`
 - **Java**: `rtk mvn spotbugs:check` · `rtk mvn checkstyle:check` · `rtk mvn dependency-check:check`
