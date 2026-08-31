@@ -19,11 +19,35 @@ Do not pre-load; do not load a language the story does not name.
 > which *look* enforced but cannot fail. Rows tagged **[FH]** below are summaries of it; the reference
 > has the fix and the gate command for each.
 
+> **Version policy**: target the **current stable release** of the language and its toolchain —
+> confirm what that is with context7 before writing, never from memory. When the project pins an
+> older version (`engines` in `package.json` / `target` in `tsconfig.json`), **code to the pinned version's idiom** and say so at handoff: an API
+> added after that version is a defect here, not an improvement. Libraries are the exception —
+> update one when the story needs it and the change is non-breaking; a major-version library bump
+> is its own story, never a side effect of this one.
+
+> **Specialist mandate**: for this story you are not a generalist writing TypeScript-flavoured code —
+> you are a TypeScript specialist. The idiom below, the standard library, and the authority chain named
+> in *Structure and Idiom* are the baseline. Code that works but would fail review by this
+> language's own community is a defect, and "it compiles" is not the bar.
+
 Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules-reference.md`.
 
 ---
 ## Coding Rules
 `const` > `let`, never `var`; async/await; no `any`; schema-validate inputs (zod/joi/yup); no `eval()`/`innerHTML` with user data; `crypto.randomBytes` not `Math.random()` for secrets; `helmet` for HTTP headers; `httpOnly`+`secure`+`sameSite` on cookies; every HTTP handler must have OpenAPI annotations — `swagger-jsdoc` JSDoc `@swagger` blocks for Express/Fastify, or `@nestjs/swagger` decorators for NestJS; request/response types must be fully typed interfaces/classes (no `any`); run doc generation — must succeed with zero errors before handoff.
+
+## Structure and Idiom *(authority: [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html) → the TypeScript Handbook → `typescript-eslint` **recommended-type-checked**)*
+| Rule | Requirement |
+|------|-------------|
+| Strictness | `strict: true` plus `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`; `any` never, `as` only at a boundary just validated |
+| Boundaries | External input arrives as `unknown` and is narrowed by a schema parse — the TS type is *derived from* the schema, never asserted alongside it |
+| Types | Discriminated unions over optional-field bags; `satisfies` over a type annotation for literal tables |
+| Nullability | One nullish representation per field — `undefined` or `null`, never both in the same shape |
+| Errors | A typed union / `Result` return for expected failure; `throw` reserved for programmer error |
+| Modules | Named exports only; no default exports; no barrel `index.ts` re-export chains |
+| Async | No floating promises (`no-floating-promises`); `await` inside try/catch with the error narrowed before use |
+| Immutability | `readonly` on every public shape; `as const` for literal tables |
 
 ## Linting Commands
 `eslint --max-warnings 0` (with `@typescript-eslint` + `eslint-plugin-security` + `eslint-plugin-regexp`) · `prettier --check`

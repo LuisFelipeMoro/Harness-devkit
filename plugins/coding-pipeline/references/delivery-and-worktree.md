@@ -151,35 +151,67 @@ without asking.
 The pipeline **never commits to `main` and never merges into `main`.** The furthest it goes on
 its own is opening a pull request. A human merges.
 
+Review is where defects are actually caught, so the branch layout exists to serve it: **one story,
+one branch, one PR, one review.** A single PR carrying a whole delivery cannot be reviewed — for a
+human or an agent, a diff that large gets skimmed, and the approval it produces means nothing.
+Splitting also makes the delivery legible commit by commit: what each story actually changed is
+readable on its own, instead of being reconstructed from a 3,000-line merge.
+
+```
+main
+└── release/{slug}-{key}                 delivery integration branch — PR → main at the end
+    ├── feat/{key}-{story-slug}          one per story · PR → release/* · reviewed here
+    ├── feat/{key}-{story-slug}
+    └── …
+hotfix/{slug}                            single fix, cut from main · PR → main · reviewed there
+```
+
 | Branch | Created from | Purpose | Terminal step |
 |--------|--------------|---------|---------------|
-| `release/{slug}-{key}` | `main` | The delivery's integration branch. All pipeline work lands here. | PR → `main` |
-| `feature/{key}-{story-slug}` | `release/{slug}-{key}` | **Optional.** Use when a story is large enough that its own history is worth keeping separate. | Merge → its release branch |
-| `hotfix/{slug}` | `main` | Bug fixes (`/bug-fix`). No release branch, no feature branches — the fix commits straight onto the hotfix branch. | PR → `main` |
+| `release/{slug}-{key}` | `main` | The delivery's integration branch. Story branches merge in; nothing is committed to it directly except merges. | PR → `main` (the delivery review) |
+| `feat/{key}-{story-slug}` | `release/{slug}-{key}` | **Default, one per story.** The unit of review. | PR → its release branch (the story review) |
+| `hotfix/{slug}` | `main` | A single fix (`/bug-fix`). No release branch, no story branches. | PR → `main` |
 
 Rules:
 
-1. **Every delivery gets a release branch**, even a one-story delivery. It is the unit the PR
-   is opened from.
-2. **Feature branches are optional and per-story.** Create one when the story is substantial
-   and you want its work isolated in history; skip it for small stories and commit directly to
-   the release branch. Merge it back into the release branch once the story's Verdict passes —
-   use `--no-ff` so the story stays visible as a unit.
-3. **Bug fixes bypass the release/feature structure entirely.** `/bug-fix` cuts
-   `hotfix/{slug}` from `main`, commits the fix and its RED-proven regression test, and opens a
-   PR to `main`. Do not create a release branch for a hotfix, and do not add feature branches
-   on top of one.
-4. **A PR to `main` may only be opened from a `release/*` or `hotfix/*` branch.** Never from a
-   feature branch, never from a story branch, never from a detached worktree HEAD.
-5. **Opening the PR is the last automated step.** Report the PR URL and stop. Do not merge it,
-   do not enable auto-merge, and do not push to `main` under any circumstance.
+1. **Every delivery gets a release branch**, even a one-story delivery. It is the unit the final
+   PR is opened from and the base every story branch is cut from.
+2. **Every story gets its own branch and its own PR into the release branch.** This is the default,
+   not an optimisation for large stories. The story PR is where `/pr-review` runs with the story's
+   ACs, Test Case table, Reuse Map and Blast Radius in context — the review that has the tightest
+   spec and the smallest diff, and therefore the one most likely to catch something. Merge with
+   `--no-ff` after the Verdict passes, so the story stays visible as a unit in the release history.
+   - The one exception is a story whose diff is genuinely trivial (a config value, a copy fix)
+     **and** which the manifest projected under ~50 lines. Commit those straight to the release
+     branch and say so — an exception taken silently is indistinguishable from the rule not being
+     followed.
+3. **Two reviews, different jobs, neither optional.** The story PR reviews the change against its
+   spec. The release PR reviews the delivery as one diff — cross-story duplication, plan drift, and
+   the Gaps block — which no story-level review can see. A finding at the release stage that a story
+   review should have caught is worth naming as such: it says the story spec was too loose.
+4. **Bug fixes bypass the release/story structure entirely.** `/bug-fix` cuts `hotfix/{slug}` from
+   `main`, commits the fix and its RED-proven regression test, and opens a PR to `main`, reviewed
+   there. No release branch, no story branches on top of one.
+5. **A PR to `main` may only be opened from a `release/*` or `hotfix/*` branch.** Never from a story
+   branch, never from a detached worktree HEAD. Story PRs target the release branch and nothing else.
+6. **Opening a PR is the last automated step of its stage.** Report the URL and stop. Do not merge,
+   do not enable auto-merge, and never push to `main`.
 
 ### Commands
 
 ```sh
-# story done, optional feature branch in use
+# story start — cut from the release branch, inside the delivery worktree
+git checkout -b "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
+  "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
+
+# story done (Verdict passed) — its own PR, reviewed against its own spec
+git push -u origin "feat/${DELIVERY_KEY}-${STORY_SLUG}"
+gh pr create --base "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
+  --head "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
+  --title "${STORY_SLUG}" --body "Delivery-Key: ${DELIVERY_KEY} · Story: ${STORY_SLUG} …"
+# → run /pr-review on it, then merge into the release branch once green
 git checkout "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
-git merge --no-ff "feature/${DELIVERY_KEY}-${STORY_SLUG}"
+git merge --no-ff "feat/${DELIVERY_KEY}-${STORY_SLUG}"
 
 # delivery done — the terminal step
 git push -u origin "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"

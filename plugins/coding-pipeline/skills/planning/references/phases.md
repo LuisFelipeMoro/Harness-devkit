@@ -32,13 +32,36 @@ write **`docs/deliveries/{key}/codebase-map.md`**:
 
 | Section | Contents |
 |---|---|
-| Blast radius | Modules, packages, and files the feature will touch or sit beside — `path` + one line each |
+| Blast radius | **Every existing symbol the feature will change, with every caller of it.** See the rules below — this row decides the size of the work, so getting it wrong misprices everything downstream |
 | Reusable symbols | Existing helpers, types, constants, validators, clients, middleware the feature could use — `file:line — signature — what it does` |
 | Prior art | Features already solving a **similar** problem, even partially. The near-miss is the duplication risk; name it even when it does not fit |
 | Conventions | Naming, error wrapping/propagation, dependency injection, context threading, layering — with a `file:line` exemplar for each |
 | Extension points | Interfaces, registries, hooks, config surfaces the feature can plug into instead of adding a parallel path |
 | Contracts in force | Existing signatures, error shapes, table/column names, config keys the feature must not contradict |
 | Test conventions | Where tests live, framework, fixture/mock style, how existing tests are named |
+
+### Blast radius — the rules
+
+Everything else in the map is context. This row is a measurement, and it is the one most often
+done by guess. A feature that "just adds a field" and turns out to change a shared type with 40
+call sites is not a small feature — it was mis-scoped at the moment nobody counted.
+
+- **Enumerate, do not estimate.** Use LSP find-references for every symbol the feature will change;
+  grep only where LSP cannot reach (templates, config keys, reflection, string-built queries,
+  cross-language boundaries). "Several callers" is not a measurement.
+- **Every caller gets a line**: `file:line — what it assumes — does the change hold for it?`
+- **Go one hop past the direct callers** for anything that changes an error value, a nil-ness, an
+  ordering, or a type's width. Second-order breakage is where the regressions actually live.
+- **Count the non-code callers too**: serialized payloads, DB columns, migrations, API consumers,
+  feature flags, dashboards, alert queries, generated clients. A wire format has callers you cannot
+  find with find-references.
+- **Name the tests that will need to change** — a change requiring 30 test edits is a design signal,
+  not a chore.
+- **State the total**: `Blast radius: N symbols · M callers · K test files · {wire/schema surfaces}`.
+  The Architect uses that number to decide whether the change is a story or an epic, and the Plan
+  Reviewer checks it against the code.
+- **An empty blast radius is a finding, not a formality** — if a feature touches nothing existing,
+  say so explicitly, because it usually means the search was too narrow.
 
 Rules: cite `file:line` for every entry — an uncited claim about existing code is not a finding
 · report absence explicitly (`Reusable symbols: none — greenfield package`) rather than omitting
@@ -123,19 +146,23 @@ Determine scope from the PRD epic count:
 
 **Multiple epics (≥ 2)** → produce **Epic Manifest**:
 
-| Epic | Task | Stories/ACs | Security ACs | Key Constraints | Language |
-|------|------|-------------|--------------|-----------------|----------|
-| Epic 1: {title} | T1.1: {imperative} | AC1, AC2 | SEC-1 | NFR-1 | Go 1.26.2 |
+| Epic | Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language |
+|------|------|-------------|--------------|-----------------|----------------|----------|
+| Epic 1: {title} | T1.1: {imperative} | AC1, AC2 | SEC-1 | NFR-1 | ~140 lines | Go 1.26.2 |
 
 **Single task / small scope (1 epic)** → produce **Task Manifest**:
 
-| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Language |
-|----------|-------------|--------------|-----------------|----------|
-| ST1: {imperative verb phrase} | AC1, AC2 | SEC-1 | NFR-1 | TypeScript 5 |
+| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language |
+|----------|-------------|--------------|-----------------|----------------|----------|
+| ST1: {imperative verb phrase} | AC1, AC2 | SEC-1 | NFR-1 | ~180 lines | TypeScript 5 |
 
 `Language` must be populated from the Architect's Tech Stack decision — carries runtime, version, and framework (e.g. `Go 1.26.2`, `TypeScript 5 / Next.js 14`, `Java 21 / Spring Boot 3`). Every downstream agent reads Language from the Manifest — never inferred.
 
 Each task/sub-task must be **independently testable** — expressible as one or more Test Case rows, each with an observable result and a named break that would falsify it. If a row cannot be stated that way, split it until it can.
+
+It must also be **independently reviewable**. Review is where defects are actually caught, and reviewer effectiveness collapses with diff size — for a human and for an agent alike, a large diff gets skimmed rather than read, and the approval it produces means nothing. Size every row against a projected diff: **≤ 200 changed lines is the target, 400 the soft ceiling, 800 the hard one.** Past 800 the row is split, not justified. Isolate mechanical bulk (generated code, compiler-verified renames, formatting passes) into its own row — 40 lines of logic hidden inside 600 mechanical ones is the worst diff there is to review, and worse than either half alone.
+
+Add the `Projected diff` estimate and the split decision to the manifest. The Plan Reviewer verifies it (PR11).
 
 Write to: `docs/deliveries/{key}/epic-manifest.md` or `docs/deliveries/{key}/task-manifest.md` — beside the delivery file, keyed the same. Show: `✓ epic-manifest` or `✓ task-manifest`
 

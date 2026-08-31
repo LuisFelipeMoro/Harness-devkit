@@ -69,11 +69,40 @@ that traces to no requirement (CD3 at plan time).
 "TBD", "the implementer decides", or leaves a stated open question unanswered without routing it to
 the human. Planning owns these decisions.
 
-**PR9 — Blast radius unstated** (MINOR): the plan changes a shared symbol, schema, or public
-interface without naming the existing callers that will be affected. List them.
+**PR9 — Blast radius wrong or unmeasured** (MAJOR): the plan's Blast Radius table is missing, or it
+disagrees with the code. **Verify it, do not read it** — run find-references on each changed symbol
+yourself and compare counts. A radius the plan understates is the most expensive defect on this
+list, because the whole delivery was sized, split, and scheduled on that number. Report it as
+`plan says N callers, code has M — {the ones it missed}`. Check the non-code callers the plan is
+most likely to have skipped: serialized payloads, DB columns, API consumers, generated clients,
+dashboards, alert queries.
+
+**PR11 — Not reviewable at the planned size** (MAJOR): a story or epic whose blast radius and
+component list project past a reviewable diff (see *PR sizing* below). A change nobody can review
+properly ships unreviewed no matter how many review stages it passes through, so this is caught
+here — at plan time, when splitting is still free — rather than at the PR, when it is not.
 
 **PR10 — Not independently testable** (MINOR): a manifest task that cannot be expressed as Test Case
 rows with observable results, so it cannot be verified without its neighbours.
+
+### PR sizing (checked against the manifest, before any code exists)
+
+Review is where defects are actually caught, and reviewer effectiveness collapses with diff size —
+the industry finding is consistent: attention, not intent, is the scarce resource, and a large diff
+gets skimmed by a human and pattern-matched by an agent. Both produce an approval that means
+nothing.
+
+| Projected diff | Verdict |
+|---|---|
+| ≤ 200 changed lines | ideal — a reviewer holds the whole change in their head |
+| 200–400 | acceptable; expect a slower review |
+| 400–800 | MINOR — state why it cannot be split |
+| > 800 | MAJOR — split it. Not a judgement call |
+
+Mechanical changes with a uniform shape (a generated client, a rename the compiler verifies, a
+formatting pass) are exempt from the count *when they are isolated in their own story* — the
+exemption is the isolation, not the mechanical-ness. Mixing 600 mechanical lines with 40 logic lines
+is the worst case of all: the logic hides in the noise, and that is a MAJOR regardless of totals.
 
 Per finding: `[SEVERITY] PRn — {delivery-file section or manifest row} — description (existing: file:line)`
 Severity: `CRITICAL | MAJOR | MINOR | NIT`.
@@ -89,6 +118,8 @@ Findings:
   [MINOR] PR9 — ADR-2 — changes Store interface; 4 existing callers unnamed
 Reuse verdict: {N}/{M} planned components justified · {list of unjustified ones}
 Requirement trace: {N}/{N} PRD ACs land in a component AND a Test Case row
+Blast radius: plan says {N} callers · verified {M} · {missed, or "matches"}
+PR sizing: {N} stories · largest projected diff ~{L} lines · {within budget | split required}
 Summary: {a} critical, {b} major, {c} minor, {d} nit
 Gate: PLAN APPROVED | PLAN CHANGES REQUIRED
 ```

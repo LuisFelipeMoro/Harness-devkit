@@ -51,7 +51,9 @@ one tier overlay; implement to spec → write the specified tests → falsify ea
 the Bug-Fix Loop, escalation proceeds to D with FAIL)
 → **D** Review + Stress in parallel, only after QA's signal (Tuner on `TUNER REQUEST`, max 2)
 → **E** Verdict (unmitigated CRITICAL security = automatic NOT READY)
-→ **F** Checkpoint + a `[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
+→ **F** Story PR + checkpoint: push `feat/{key}-{story-slug}`, open its PR into `release/*`, run
+`/pr-review` on it with the story's ACs and Test Case table in context, merge `--no-ff` when green,
+then write the `[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
 
 Read-only Explore/mapping subagents may still run in parallel. On the final epic's
 PRODUCTION READY, load `agents/devops.md`, then push the release branch (ask first) and open a
@@ -59,19 +61,32 @@ PR to `main` — never commit or merge to `main` directly.
 
 ---
 
-## Phase 3 — PR Review (after the PR is opened — never skipped)
+## Phase 3 — Delivery PR Review (after the release PR is opened — never skipped)
 
-The story-scoped Reviewer never sees the delivery as one diff, so cross-story duplication and
-drift from the plan are invisible to it. Immediately after `gh pr create`, run **`/pr-review`** on
-the new PR with the delivery file, the Reuse Map, and the manifest in context. It posts inline
+Every story was already reviewed on its own PR into the release branch. This is the second review,
+with a different job: the story reviews saw one diff each against one spec, and neither can see
+cross-story duplication or drift from the plan as a whole. Immediately after `gh pr create` for the
+release branch, run **`/pr-review`** on that PR with the delivery file, the Reuse Map, and the manifest in context. It posts inline
 severity-tagged comments and prints the **Gaps** block (unimplemented ACs · spec drift · missing
 Test Case rows · duplication %). Report the verdict and leave the PR open for the human — the
 pipeline never merges.
 
-> **Context Budget**: Between epics: drop implementation code, test files, and stories for completed epics. Retain: the delivery file + Manifest + all scores (Review/Stress/QA/Verdict per epic).
-> If running 4+ epics or context >75% full: summarize completed epics to one-line refs:
-> `"Epic {N}: {title} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never drop scores.
-> At context >90%: pause, summarize all prior artifacts, confirm with user before continuing.
+> **Context Budget — 80% is a hard ceiling, not a warning.** Model reliability degrades before the
+> window is full: recall of mid-context detail drops and confident invention rises, and a pipeline is
+> exactly where that is most expensive — a hallucinated interface signature or a mis-remembered AC
+> propagates through every stage after it.
+> - **Between epics**: drop implementation code, test files, and completed epic stories. Retain the
+>   delivery file, the Manifest, and every score.
+> - **At 4+ epics, or 60%**: compact completed epics to one-line refs —
+>   `"Epic {N}: {title} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never dropping a score.
+> - **At 80%: stop and hand off.** Run `/handoff`, write the `[{key}]` `PROGRESS.md` entries, push
+>   the current story branch, and start a fresh session that resumes from the delivery file's Status
+>   plus those entries. Do not "push a bit further" — the next thing produced past this line is the
+>   thing least likely to be right, and hardest to spot as wrong.
+> - **Handoff state lives in `PROGRESS.md` and the handoff doc — never in the code.** No `TODO`,
+>   no `FIXME`, no commented-out stub, no placeholder marking where the session stopped. A source
+>   file must not record that an agent ran out of context; that is what the Memory leg is for, and a
+>   marker left behind is a finding (CD6) in the next review.
 
 ---
 

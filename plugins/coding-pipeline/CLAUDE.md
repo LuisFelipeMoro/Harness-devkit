@@ -1,5 +1,19 @@
 # Engineering Standards
 
+## What this Harness optimises for (priority order — the tie-breaker when two rules collide)
+
+1. **Confidence in the generated code** — every claim backed by a sensor that can fail. Falsified tests, exit-code gates, cited `file:line`. An unverifiable claim is worth less than no claim.
+2. **Production-ready on delivery** — security, error handling, idempotency, graceful shutdown and observability are part of "done", never a follow-up story.
+3. **Airtight plans** — ambiguity is resolved at plan time, against the real codebase, before code exists. A question answered in implementation was a planning defect.
+4. **Readable, maintainable code** — the next reader is a stranger or an agent with no context. Legibility outranks cleverness, and *durable* outranks *clever* every time.
+5. **Best practice in the language actually being written** — specialist idiom, named authority chain, current stable version unless the project pins otherwise.
+6. **Scalable and secure by construction** — OWASP as a floor; boundaries, limits and failure modes decided in architecture, not discovered in production.
+7. **Token efficiency** — lazy-load one language file, not eleven; summarise completed epics; the cheapest model that can do the job. This is last because it is a *constraint on how* the six above are achieved, never a reason to skip one of them.
+
+When a rule in this file appears to conflict with another, the higher-numbered concern yields. When
+adding to this file, the same test applies to the addition itself: it must earn its tokens against
+one of these seven, or it does not belong here.
+
 ## Harness Model (Guides · Sensors · Memory · Orchestration)
 
 This devkit is a Harness. Four components, all mandatory:
@@ -17,6 +31,7 @@ This devkit is a Harness. Four components, all mandatory:
   | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md` as resume context |
 
   Dial them with `DEVKIT_HOOK_PROFILE` — `off`, `standard` (default), or `strict`, which makes `delivery-gate` block once instead of warn — or disable a single hook with `DEVKIT_DISABLED_HOOKS=<hook-id>,<hook-id>`. A guard that cannot parse its input exits 0 — failing open beats blocking every tool call on a payload change.
+- **Context ceiling — 80%, hard.** Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a pipeline propagates through every stage downstream. At 80%, stop and `/handoff`: write the `PROGRESS.md` entries, push the branch, resume in a fresh session from the delivery file's Status. Never carry on past it, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
 - **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code. **The plan is validated the same way**: Priya (Plan Reviewer) reads the delivery file against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say.
 

@@ -13,5 +13,13 @@ for hook in pre-commit pre-push commit-msg; do
     fi
 done
 
+# pre-push shells out to this for duplication attribution; it has to land beside
+# the hook, or the gate degrades to whole-repo mode on every push.
+if [ -f "$SCRIPT_DIR/dup-attribution.py" ]; then
+    cp "$SCRIPT_DIR/dup-attribution.py" "$REPO_ROOT/.git/hooks/dup-attribution.py"
+    chmod +x "$REPO_ROOT/.git/hooks/dup-attribution.py"
+    echo "✓ Installed: .git/hooks/dup-attribution.py"
+fi
+
 echo ""
 echo "Git hooks installed. Run 'git commit --allow-empty -m \"test: verify hooks\"' to verify."

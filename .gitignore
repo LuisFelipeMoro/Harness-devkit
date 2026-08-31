@@ -34,3 +34,7 @@ SKILLSPEC-REPORT.md
 
 # Pipeline delivery worktrees (per-delivery isolated checkouts — never committed)
 /.worktrees/
+
+# Python bytecode from local validator/test runs
+__pycache__/
+*.pyc

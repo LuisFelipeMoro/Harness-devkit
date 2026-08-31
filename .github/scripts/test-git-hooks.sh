@@ -172,29 +172,66 @@ chmod +x "$d/.stub-bin/lcov"
 expect_exit "flutter unmeasured coverage blocks" pre-push "$d" 1
 
 # ── Duplication gate (all stacks) ───────────────────────────────────────────
-# Copy-paste passes every other Sensor in the hook — lint, types and coverage
-# are all clean on a perfect duplicate — so this gate is the only thing standing
-# between a reimplemented helper and the rework it causes. Each fixture below
-# carries no stack markers at all: the only gate that can speak is this one,
-# which also proves it is not nested inside one language's block.
-jscpd_stub() {      # jscpd_stub <fixture-dir> <exit-code>
-    printf '#!/bin/sh\necho "jscpd stub ran"\nexit %s\n' "$2" > "$1/.stub-bin/jscpd"
-    chmod +x "$1/.stub-bin/jscpd"
+# Copy-paste passes every other Sensor in the hook — lint, types and coverage are
+# all clean on a perfect duplicate. The hook itself does not decide anything here:
+# it runs jscpd, then honours dup-attribution.py's verdict (whose own split logic
+# is tested in test-dup-attribution.sh). What these cases prove is the wiring —
+# that the verdict is actually obeyed in both directions, that the gate speaks for
+# repos with no stack markers at all, and that a missing tool degrades loudly
+# instead of vanishing.
+
+# dup_fixture <name> — a fixture that is also a git repo with a base commit, so
+# the hook can resolve a merge-base and attribute at all.
+dup_fixture() {
+    local dir; dir="$(fixture "$1")"
+    ( cd "$dir" || exit 1
+      git init -q .; git config user.email t@t; git config user.name t
+      git config commit.gpgsign false
+      seq 1 40 | sed 's/^/legacy line /' > legacy.txt
+      git add -A >/dev/null && git commit -qm base
+      git branch -M main
+      seq 1 30 | sed 's/^/new line /' > new.txt
+      git add -A >/dev/null && git commit -qm delivery )
+    printf '%s' "$dir"
 }
 
-d="$(fixture dup-over)"; jscpd_stub "$d" 1
-expect_exit "duplication above threshold blocks" pre-push "$d" 1
+# dup_stub <dir> <fileA> <startA> <endA> — a jscpd that writes the report the
+# hook will read. The clone's location is what decides the verdict.
+dup_stub() {
+    local dir="$1" out
+    out="${TMPDIR:-/tmp}/devkit-jscpd"
+    python3 - "$dir/canned-report.json" "$2" "$3" "$4" <<'PYEOF'
+import json, sys
+out, f, a, b = sys.argv[1:]
+json.dump({"statistics": {"total": {"lines": 200}},
+           "duplicates": [{"lines": int(b) - int(a) + 1,
+                           "firstFile": {"name": f, "start": int(a), "end": int(b)},
+                           "secondFile": {"name": "legacy.txt", "start": 1, "end": 20}}]},
+          open(out, "w"))
+PYEOF
+    printf '#!/bin/sh\nmkdir -p "%s"\ncp "%s/canned-report.json" "%s/jscpd-report.json"\nexit 0\n' \
+        "$out" "$dir" "$out" > "$dir/.stub-bin/jscpd"
+    chmod +x "$dir/.stub-bin/jscpd"
+}
 
-d="$(fixture dup-ok)"; jscpd_stub "$d" 0
-expect_exit "duplication at threshold passes"    pre-push "$d" 0
-expect_says "clean duplication reaches the end"  pre-push "$d" yes "pre-push gates passed"
-expect_says "duplication gate is stack-agnostic" pre-push "$d" yes "Duplication"
+# A clone in new.txt — a file this delivery added — is the delivery's own.
+d="$(dup_fixture dup-introduced)"; dup_stub "$d" new.txt 1 30
+expect_exit "introduced duplication blocks the push" pre-push "$d" 1
+expect_says "…and names the offending pair"          pre-push "$d" yes "Introduced by this delivery"
+
+# The same-sized clone, entirely inside code the delivery never touched, must not.
+# Blocking here is what makes a team disable the hook on day one.
+d="$(dup_fixture dup-preexisting)"; dup_stub "$d" legacy.txt 21 40
+expect_exit "pre-existing duplication does not block" pre-push "$d" 0
+expect_says "…and is reported as debt"                pre-push "$d" yes "Pre-existing debt"
+expect_says "clean run reaches the end"               pre-push "$d" yes "pre-push gates passed"
+expect_says "duplication gate is stack-agnostic"      pre-push "$d" yes "Duplication"
 
 # Every optional tool in this hook warns when absent rather than blocking; a hook
 # that dies on a machine without jscpd gets uninstalled, which costs every gate.
 d="$(fixture dup-missing)"
-expect_exit "missing jscpd does not block"    pre-push "$d" 0
-expect_says "missing jscpd says UNENFORCED"   pre-push "$d" yes "duplication UNENFORCED"
+expect_exit "missing jscpd does not block"  pre-push "$d" 0
+expect_says "missing jscpd says UNENFORCED" pre-push "$d" yes "duplication UNENFORCED"
 
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"

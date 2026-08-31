@@ -26,14 +26,14 @@ jobs:
           while IFS= read -r f; do
             echo "→ shellcheck $f"
             shellcheck --severity=error "$f" || fail=1
-          done < <(git ls-files '*.sh' 'plugins/*/git-hooks/*' 'plugins/*/hooks/*' | grep -vE '\.(md|json)$')
+          done < <(git ls-files '*.sh' 'plugins/*/git-hooks/*' 'plugins/*/hooks/*' | grep -vE '\.(md|json|py)$')
           exit $fail
       - name: bash -n syntax
         run: |
           fail=0
           while IFS= read -r f; do
             bash -n "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
-          done < <(git ls-files '*.sh' 'plugins/*/git-hooks/*' 'plugins/*/hooks/*' | grep -vE '\.(md|json)$')
+          done < <(git ls-files '*.sh' 'plugins/*/git-hooks/*' 'plugins/*/hooks/*' | grep -vE '\.(md|json|py)$')
           exit $fail
 
   json:
@@ -77,6 +77,10 @@ jobs:
       - name: git hook behaviour tests
         # shellcheck proves these parse; only this proves they gate.
         run: bash .github/scripts/test-git-hooks.sh
+      - name: duplication attribution tests
+        # The gate's value is entirely in the split it makes between what this
+        # delivery wrote and what was already there; nothing else checks it.
+        run: bash .github/scripts/test-dup-attribution.sh
 
   install:
     name: install — bootstrap and settings merge

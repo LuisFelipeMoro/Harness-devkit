@@ -19,11 +19,35 @@ Do not pre-load; do not load a language the story does not name.
 > which *look* enforced but cannot fail. Rows tagged **[FH]** below are summaries of it; the reference
 > has the fix and the gate command for each.
 
+> **Version policy**: target the **current stable release** of the language and its toolchain —
+> confirm what that is with context7 before writing, never from memory. When the project pins an
+> older version (the `next` version in `package.json`), **code to the pinned version's idiom** and say so at handoff: an API
+> added after that version is a defect here, not an improvement. Libraries are the exception —
+> update one when the story needs it and the change is non-breaking; a major-version library bump
+> is its own story, never a side effect of this one.
+
+> **Specialist mandate**: for this story you are not a generalist writing Next.js-flavoured code —
+> you are a Next.js specialist. The idiom below, the standard library, and the authority chain named
+> in *Structure and Idiom* are the baseline. Code that works but would fail review by this
+> language's own community is a defect, and "it compiles" is not the bar.
+
 Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules-reference.md`.
 
 ---
 ## Coding Rules
 App Router for new projects (Pages Router only for legacy); Server Components by default, `'use client'` only when state/events required; fetch data server-side — never expose server secrets to the client; zod/joi validation in Route Handlers + Server Actions before processing (`next-safe-action` for Server Action type safety); `next/image` for all images (no bare `<img>`); `next/font` for custom fonts (no external font CDN); `NEXT_PUBLIC_*` only for intentionally public values; `next/headers` for cookie/header access in Server Components; CSP via `next.config` headers.
+
+## Structure and Idiom *(authority: [Next.js App Router docs](https://nextjs.org/docs/app) (Server Components + caching) → the React rules above → the Vercel production checklist)*
+| Rule | Requirement |
+|------|-------------|
+| Component boundary | Server Component by default; `"use client"` pushed down to the leaf that genuinely needs interactivity |
+| Data | Fetch in Server Components; no client-side fetch for data available at render time |
+| Caching | Every `fetch` states its caching intent explicitly (`cache` / `revalidate`) — accepting the default silently is not a decision |
+| Mutations | Server Actions for writes, with input validated **inside** the action; the client is never trusted, including for the ids it sends |
+| Secrets | Server-only modules for anything holding a key; `NEXT_PUBLIC_` is a publication — treat it as one |
+| Routing | `loading.tsx` / `error.tsx` colocated per segment; a server redirect wherever a client-side one would flash |
+| Streaming | Suspense boundaries around slow segments instead of blocking the whole route |
+| Assets | `next/image` and `next/font` — a raw `<img>` for a content image is a CLS regression |
 
 ## Linting Commands
 `next lint` (eslint-config-next) — zero warnings · `tsc --noEmit` · `next build` (catches SSR/hydration issues `tsc` misses) · tests via Vitest/Jest + `@testing-library/react`, Playwright for E2E

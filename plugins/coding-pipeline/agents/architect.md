@@ -67,6 +67,25 @@ A `new` row with no closest-existing citation is not justified — "nothing simi
 claim about the codebase and needs the same evidence as any other. If the map's **Prior art**
 section named a near-miss, this table must answer it.
 
+### Blast Radius *(mandatory — from `codebase-map.md`, carried into every story)*
+
+The measurement that decides whether this is a story or an epic. Copy it forward; do not re-estimate it.
+
+```
+Blast radius: {N} symbols · {M} callers · {K} test files · {wire/schema surfaces}
+```
+
+| Changed symbol | Callers | Second-order risk | Verdict |
+|---|---|---|---|
+| `pkg.Symbol` (`file:line`) | `file:line`, `file:line` … | error value / nil-ness / ordering / type width that a caller relies on | holds · needs updating · needs a migration |
+
+Non-code callers get rows too — serialized payloads, DB columns, API consumers, generated clients,
+dashboards and alert queries. A wire format has callers `find-references` cannot see, and those are
+the ones that break in production rather than in CI.
+
+If the radius is larger than the story it belongs to, that is the finding: split the work, or make
+the change additive (new symbol alongside the old, callers migrated separately) and say so here.
+
 ### Component Design
 
 #### {ComponentName}
