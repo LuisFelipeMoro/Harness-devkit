@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.1] — 2026-08-31
+
+### Fixed
+
+- **The duplication scan was reading `.git/`.** jscpd's ignore list omitted it, so git's own
+  sample hooks were counted as duplication — noise in the debt report, and a polluted denominator
+  under every percentage the gate prints. Found by running the gate end-to-end against real jscpd
+  output rather than the hand-written report fixtures the suites use: the stubbed tests prove the
+  attribution logic and the hook's wiring, but they stub the invocation itself, so an ignore-list
+  defect is structurally invisible to them. That limitation is now stated in the suite instead of
+  left to be rediscovered.
+
+
 ## [2.4.0] — 2026-08-31
 
 ### Added

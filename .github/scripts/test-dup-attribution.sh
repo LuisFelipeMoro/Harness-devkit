@@ -10,6 +10,13 @@
 # Attribution is line-level, so the case that matters most is the third one: a
 # file the delivery touched, carrying a clone in a region the diff never went
 # near. File-level attribution calls that introduced. It is not.
+#
+# Known limitation, stated rather than papered over: these cases feed the script a
+# report this file writes, and the hook cases stub jscpd entirely. That proves the
+# attribution logic and the hook's wiring — it cannot prove jscpd was *invoked*
+# correctly. An ignore-list defect (the .git/ directory being scanned, say) is
+# invisible here and only shows on a real run. Verify that by hand when the
+# invocation changes.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ATTR="$ROOT/plugins/coding-pipeline/git-hooks/dup-attribution.py"
