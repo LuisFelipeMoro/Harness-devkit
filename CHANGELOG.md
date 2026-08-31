@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.4.3] — 2026-08-31
+
+### Fixed
+
+- **`test-git-hooks.sh` was testing the machine, not the hook.** `run_hook` prepended the stub
+  directory to the *caller's* `PATH`, leaving the real binaries reachable further down — so every
+  case asserting a tool is absent silently depended on that tool not being installed. The suite was
+  green until `jscpd` was installed on the author's machine, then failed nine assertions for a
+  reason with nothing to do with the hooks. It now runs against `<stubs>:/usr/bin:/bin`, which
+  carries git, python3 and the coreutils the hooks need while keeping anything from
+  `/usr/local`, `/opt/homebrew` or an npm prefix out of reach unless a fixture stubs it explicitly.
+  Verified green both with `jscpd` installed and with it hidden, and falsified by reverting to the
+  caller's `PATH`.
+
+- **`install.sh --dry-run` printed `npm install -gjscpd`** — a copy-pasteable command missing its
+  space. The real install path was always correct; only the dry-run message was wrong.
+
+### Changed
+
+- **The engineering standards are no longer `@`-imported by the repo's own `CLAUDE.md`.** Anyone
+  who installed the devkit already has that identical file imported globally, so working on the
+  devkit itself loaded ~6,560 tokens of it twice per session. The repo file now points at the
+  canonical path and tells an uninstalled contributor how to get it. This changes nothing for any
+  other repository, where the file was only ever loaded once.
+
+- **Both install routes documented as first-class, with their difference stated honestly.** A
+  Claude Code plugin cannot write to `.git/hooks/` and cannot ship a `CLAUDE.md`. The skills and
+  agents restate inline the rules they depend on, so the plugin route works correctly standalone —
+  what it does not carry is the repo-wide contract (Coding Discipline, Proportionality, Security
+  Defaults, and the objectives that break ties). The README now says so and gives the three lines
+  that add it, alongside `install.sh` for a machine configured end to end. Neither route is going
+  away.
+
+- `marketplace.json` still described an 11-agent pipeline without the Plan Reviewer.
+
+
 ## [2.4.2] — 2026-08-31
 
 ### Changed
