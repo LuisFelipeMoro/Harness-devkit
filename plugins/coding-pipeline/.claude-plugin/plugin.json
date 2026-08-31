@@ -1,6 +1,6 @@
 {
   "name": "coding-pipeline",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "12-agent spec-first coding pipeline (Analyst \u2192 PM \u2192 Architect \u2192 PlanReviewer \u2192 ScrumMaster \u2192 Coder \u2192 QA \u2192 Reviewer \u2192 StressTester \u2192 Tuner \u2192 Verdict \u2192 DevOps)",
   "author": {
     "name": "Luis Moro"

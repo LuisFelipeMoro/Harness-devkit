@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.4.2] — 2026-08-31
+
+### Changed
+
+- **`reviewer.md` audited against its own new rule** — *additions must earn their tokens* — after it
+  grew 2,894 → 5,972 tokens in one release. It loads on every review, so that growth was the
+  session's worst token regression and had not been audited itself. Now 5,614: **358 tokens removed,
+  zero rules removed.** Verified identical before and after: every PE/RD/CD identifier, all six hard
+  gates, all nine security deep-dive sections, the scoring bands and the output block.
+
+  What went, all of it duplication or prose restating a rule stated elsewhere: the Language-Specific
+  section restated the specialist mandate and version policy that live in the language file the
+  Reviewer is about to load (now a pointer plus the two severities the language file does not
+  assign); the Design & Durability closing paragraph restated the slop/overengineering table twelve
+  lines above it; the Reuse section restated the `jscpd` command that `quality-gate-reference.md`
+  owns; and the Principal Engineer Standard and Correctness procedure were compressed without losing
+  a property, a step, or a severity.
+
+  What deliberately stayed: the three lines in the closing `Rules:` block that repeat the cost test,
+  the linter rule and the idiom rule. Terminal repetition of the governing constraint is
+  load-bearing for adherence, and trading that for ~90 tokens is the wrong side of quality-over-speed.
+
+
 ## [2.4.1] — 2026-08-31
 
 ### Fixed
