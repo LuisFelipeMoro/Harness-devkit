@@ -237,7 +237,26 @@ marketplace manage it, do that yourself in Claude Code:
 /plugin install coding-pipeline@claude-devkit
 ```
 
-Git hooks still need the step below — a plugin cannot write to `.git/hooks/`.
+**Two things the plugin manager cannot do**, by design of the plugin format — both easy to add:
+
+1. **Git hooks.** A plugin cannot write to `.git/hooks/`, so run the step below per repo.
+2. **The engineering standards file.** A plugin cannot ship a `CLAUDE.md`. The skills and agents
+   are written to stand alone — each one restates inline the rules it depends on (model
+   assignment, gate thresholds, the acceptance contract), so **the plugin route works correctly on
+   its own**. What you do not get is the repo-wide contract: Coding Discipline, Proportionality,
+   Security Defaults, and the objectives that break ties between them. To add it, put the standards
+   where your global config can see them:
+
+   ```bash
+   mkdir -p ~/.claude/devkit
+   cp <checkout>/plugins/coding-pipeline/CLAUDE.md ~/.claude/devkit/CLAUDE.md
+   printf '\n@~/.claude/devkit/CLAUDE.md\n' >> ~/.claude/CLAUDE.md
+   ```
+
+   Or just run `bash install.sh`, which does exactly this and keeps it current.
+
+Both routes are supported and neither is going away: use the plugin manager if you want it to
+manage versions, use `install.sh` if you want a machine configured end to end.
 
 ---
 

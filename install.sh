@@ -201,7 +201,7 @@ install_gate_tools() {
         warn "npm not found — duplication gate stays UNENFORCED (needs:$missing)"
         return 0
     fi
-    if [ "$DRY_RUN" = "1" ]; then say "  would run: npm install -g$missing"; return 0; fi
+    if [ "$DRY_RUN" = "1" ]; then say "  would run: npm install -g $missing"; return 0; fi
     say "  the duplication gate (≤3%) needs:$missing"
     if confirm "install with npm?"; then
         for t in $missing; do

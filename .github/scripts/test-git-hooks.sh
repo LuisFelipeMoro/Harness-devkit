@@ -38,9 +38,16 @@ fixture() {
     printf '%s' "$dir"
 }
 
+# Deliberately NOT the caller's PATH. Prepending the stub dir to it leaves the real
+# tools reachable further down, so a case asserting a tool is *absent* silently
+# starts testing the machine instead of the hook — these tests passed until jscpd
+# was installed on the author's box, then failed for a reason having nothing to do
+# with the hook. /usr/bin and /bin carry git, python3 and the coreutils the hooks
+# need; everything optional lives in /usr/local, /opt/homebrew or an npm prefix and
+# stays out of reach unless a fixture stubs it explicitly.
 run_hook() {        # run_hook <hook> <fixture-dir> — echoes output, returns exit code
     local hook="$1" dir="$2"
-    ( cd "$dir" && PATH="$dir/.stub-bin:$PATH" bash "$HOOKS/$hook" 2>&1 )
+    ( cd "$dir" && PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/$hook" 2>&1 )
 }
 
 expect_exit() {     # expect_exit <name> <hook> <fixture-dir> <want-exit>
