@@ -39,38 +39,32 @@ Start with: `Score: X/10`
 
 ## The Principal Engineer Standard (applies to every language)
 
-Review at the bar a principal engineer holds: **would I be willing to own this code in three
-years, after the author has left and the requirements have moved twice?** That is the whole
-standard. It is language-agnostic — judge the code in *its own* idiom, never by another
-language's habits (a Go function returning `(T, error)` is not "missing exceptions"; a Rust
-`match` is not "a switch that should be polymorphism"; a React hook is not "a lifecycle method").
+**Would I be willing to own this code in three years, after the author has left and the
+requirements have moved twice?** That is the whole bar. Judge it in the code's *own* idiom — a Go
+`(T, error)` is not a missing exception, a Rust `match` is not a switch wanting polymorphism, a
+React hook is not a lifecycle method.
 
-Four properties, in priority order. When two conflict, the earlier one wins:
+Four properties, priority order; when two conflict the earlier wins:
 
-1. **Correct** — it does what the AC says, including at the boundaries. Nothing below matters if this fails.
-2. **Legible** — a competent engineer new to the file understands it in one read, without a diagram or the author.
-3. **Durable** — the likely next change touches one place, and the compiler or a test catches it if it is done wrong.
-4. **Small** — the least code and the least structure that delivers 1–3.
+1. **Correct** — does what the AC says, including at the boundaries. Nothing below matters if this fails.
+2. **Legible** — an engineer new to the file understands it in one read, without a diagram or the author.
+3. **Durable** — the likely next change touches one place, and a compiler or a test catches it if done wrong.
+4. **Small** — the least code and least structure that delivers 1–3.
 
-**Strictness is not volume.** A principal engineer does not file twelve nits; they name the three
-things that will hurt and explain the cost. So every finding must pass the **cost test**:
+**Strictness is not volume.** Name the three things that will hurt, not twelve nits. Every finding
+passes the **cost test** — *name the future change it makes harder, or the concrete way it breaks*.
+No cost = a preference, and preferences are not findings. Style the formatter or linter owns is
+never a finding.
 
-> *Name the future change this makes harder, or the concrete way it breaks.*
-
-A finding that cannot state its cost is a preference, and preferences are not findings — drop it.
-Style already covered by the formatter or linter is never a finding. `references/languages/<language>.md`
-carries that language's idiom table; this section carries the part that does not vary.
-
-**The two failure modes are symmetric, and both are findings**:
+**Slop and overengineering are symmetric — both are findings, both ship "for flexibility", neither is flexible:**
 
 | | What it looks like | Cost |
 |---|---|---|
-| **Slop** | Copy-paste, god functions, `data`/`tmp`/`result` names, magic values, dead branches, error swallowing, comments restating the code, patterns invented in this file that exist nowhere else | Every future change costs a re-read, and the reader cannot tell which of the four copies is authoritative |
-| **Overengineering** | An interface with one implementation, a factory for one type, a config knob nothing sets, an event bus for two callers, generics with one instantiation, a layer that only forwards | Every future change costs navigating indirection that buys nothing; CD2/CD3 |
+| **Slop** | Copy-paste, god functions, `data`/`tmp`/`result` names, magic values, dead branches, swallowed errors, comments restating the code, a pattern invented here that exists nowhere else | Every future change costs a re-read, and nobody can tell which of the four copies is authoritative |
+| **Overengineering** | An interface with one implementation, a factory for one type, a knob nothing sets, an event bus for two callers, generics with one instantiation, a layer that only forwards | Every future change costs navigating indirection that buys nothing (CD2/CD3) |
 
-Both ship "for flexibility". Neither is flexible. **Three cases before extracting** (Universal
-scope rule) — and a duplication in the diff is a reuse finding (RD1–RD4), not a licence to invent
-an abstraction the plan did not ask for.
+Three cases before extracting — a duplication in the diff is an RD finding, never a licence to
+invent an abstraction the plan did not ask for.
 
 ## Review Categories
 
@@ -94,23 +88,15 @@ an abstraction the plan did not ask for.
 
 **Spec Compliance** *(if `api-spec.yaml` exists — check first)*: response schema matches spec · status codes match spec · no undocumented endpoints or response fields · annotations (`swaggo/swag`, Springdoc, JSDoc @swagger) reproduce spec `operationId` + all status codes + all `$ref` schemas · `rtk swag init ./...` / `rtk tsc --noEmit` compiles without errors · no drift between spec, annotation, and implementation. Any divergence = MAJOR; undocumented endpoint = MAJOR; annotation that fails to compile = BLOCK.
 
-**Correctness** *(the category that catches what security scanning cannot — work it as a procedure, not a scan)*:
+**Correctness** *(what security scanning cannot catch — work it as a procedure, not a scan)*:
 
-1. **Trace every AC through the code.** For each AC in the story, name the exact `file:line` that satisfies it and read that path end to end. An AC you cannot trace is either unimplemented (MAJOR) or implemented somewhere you have not read.
-2. **Read the callers — the whole blast radius, not a sample.** For every changed exported symbol,
-   enumerate its existing callers and open each one. Check: changed nil-ness · changed error
-   semantics (a new error value a caller does not handle) · changed ordering or timing · a widened
-   or narrowed type · an invariant the caller was relying on. Then go one hop further for anything
-   the change makes *newly reachable*. A caller that breaks is a MAJOR that the diff itself looks
-   perfectly clean about — it is the single most common way a green pipeline ships a regression.
-   Compare what you find against the story's **Blast Radius** section: callers present in the code
-   but missing from the plan are a MAJOR against the plan, and the omission is worth stating
-   because it means the estimate the work was scoped on was wrong.
-3. **Check the diff against the plan's data flow.** The delivery file's Mermaid diagram states which component talks to which. A call the diagram does not have — a handler reaching into a repository past its service, a domain type importing transport — is a MAJOR, not a style note.
-4. **Walk the boundaries, not the happy path.** Empty · zero · one · max · one-past-max · nil/None · duplicate · out-of-order · concurrent. For each, state what the code does; if you cannot tell from reading, that is itself the finding.
-5. **Check error propagation by following one error to its exit.** Pick a failure deep in the call chain and follow it out: wrapped or swallowed, correct status, logged once (not at every level), no internals leaked.
+1. **Trace every AC through the code.** Name the exact `file:line` satisfying each AC in the story and read that path end to end. An untraceable AC is either unimplemented (MAJOR) or implemented somewhere you have not read.
+2. **Read the callers — the whole blast radius, not a sample.** For every changed exported symbol, enumerate its callers and open each: changed nil-ness · changed error semantics (a new error value nobody handles) · changed ordering or timing · a widened or narrowed type · a broken invariant. Then one hop further for anything the change makes newly reachable. A caller that breaks is a MAJOR the diff itself looks clean about — the most common way a green pipeline ships a regression. Compare against the story's **Blast Radius**: callers in the code but missing from the plan are a MAJOR against the plan, and worth stating, because the work was scoped on that number.
+3. **Check the diff against the plan's data flow.** The delivery file's diagram states which component talks to which. A call it does not have — a handler reaching past its service into a repository, a domain type importing transport — is a MAJOR, not a style note.
+4. **Walk the boundaries, not the happy path.** Empty · zero · one · max · one-past-max · nil · duplicate · out-of-order · concurrent. State what the code does for each; if you cannot tell by reading, that is the finding.
+5. **Follow one error to its exit.** Pick a failure deep in the chain: wrapped or swallowed, correct status, logged once rather than at every level, no internals leaked.
 
-Findings: logic bugs · off-by-one · race conditions · incorrect error propagation · missing null/nil/undefined checks · incorrect boundary conditions · **AC satisfied in appearance but not in behaviour** (the code does something adjacent to what the AC asked)
+Findings: logic bugs · off-by-one · race conditions · incorrect error propagation · missing null/nil/undefined checks · incorrect boundary conditions · **an AC satisfied in appearance but not in behaviour** (the code does something adjacent to what was asked)
 
 **Performance**: O(n²) where O(n log n) or better exists · unnecessary re-computation in loops · memory leaks (event listeners, timers, streams, goroutines, DB cursors) · unbounded queries without pagination · N+1 query patterns · synchronous I/O blocking async runtime
 
@@ -151,9 +137,9 @@ Findings: logic bugs · off-by-one · race conditions · incorrect error propaga
 | RD5 | A second pattern introduced into a layer that already has one — parallel error handling, parallel DI, parallel validation | MINOR (MAJOR if it forces future changes in two places) |
 | RD6 | Reused code copied instead of imported because of a package boundary — the boundary is the finding, name it | MINOR |
 
-Run `jscpd . --threshold 3 --min-lines 8 --reporters console` (or read the pre-push output) and
-quote the percentage in the summary. A duplication finding must cite **both** locations —
-`new file:line` and `existing file:line` — otherwise it is a hunch, not a finding.
+Quote the figure from the pre-push output (gate command: `references/quality-gate-reference.md`).
+Every duplication finding cites **both** locations — `new file:line` and `existing file:line`;
+one location is a hunch, not a finding.
 
 **Change Discipline** (rows + severities + worked examples: `references/change-discipline.md` — that file is the single source of truth): every changed line must trace to the request. Read the diff with the story/AC open and ask of each hunk *which sentence asked for this?* — CD1 untraceable change, drive-by refactor/rename/reformat (MINOR; MAJOR if it changes behaviour of untouched code) · CD2 abstraction with one implementation and one call site (MINOR) · CD3 unrequested surface — feature, endpoint, flag, config knob, exported symbol nothing calls (MAJOR) · CD4 defensive branch for an unreachable state (NIT) · CD5 pre-existing dead code deleted without being asked (MAJOR) · CD6 orphan left by this diff — import/var/func it made unused (MINOR) · CD7 ambiguity in the request silently resolved in code where two or more readings existed (MAJOR). If the request/AC text is not available, say so and skip CD1, CD3, CD7 — never infer intent from the diff under test.
 
@@ -211,20 +197,13 @@ Sections to evaluate (report violations only):
 
 ## Language-Specific Checks
 
-Review as a **specialist in the language under review**, at the bar its own community holds. Each
-file in `references/languages/` names an authority chain — Uber Go Style, Effective Java, the Rust
-API Guidelines, react.dev's Rules of React, Effective Dart, PER Coding Style — and a diff that
-violates that chain is a finding even when it compiles, passes, and reads fine to someone who does
-not write the language daily. The inverse binds equally: judge the code in its own idiom and never
-by another language's habits.
+Load `references/languages/<language>.md` for each language the diff touches — **only** those; one
+file each, 60–155 lines, and the full set is ~870 lines a diff never needs. It carries that
+language's authority chain, specialist mandate, version policy, idiom table and issue/severity
+table; review against it rather than restating it here. Two severities it does not assign:
 
-Also check the **version line**: code using an API newer than the version the project pins
-(`go.mod`, `pom.xml`, `engines`, `Cargo.toml`, `pubspec.yaml`, `composer.json`) is a MAJOR — it
-builds on the author's machine and fails on the pinned toolchain. A library upgrade inside a story
-is acceptable only when non-breaking and needed; a major-version bump arriving as a side effect of
-an unrelated story is CD3.
-
-See `references/languages/<language>.md` for that language's issue/severity table, authority chain, and required linters. **Load only the languages the diff actually touches** — one file each, 60–155 lines; the full set is ~870 lines and a diff never needs it. `references/language-rules-reference.md` is a routing index, not a thing to load.
+- A diff violating its language's authority chain is a finding **even when it compiles and passes** — and, inversely, never judge code by another language's habits.
+- An API newer than the version the project pins = MAJOR (builds locally, fails on the pinned toolchain). A library bump arriving as a side effect of an unrelated story = CD3.
 Key coverage hard gates: Go/JS/TS/Java/Rust/React/Kotlin ≥ 85% · PHP/Flutter ≥ 80% — any miss = BLOCK (score ≤ 5).
 
 ---
