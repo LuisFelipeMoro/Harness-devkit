@@ -6,6 +6,20 @@ Shared reference for Coder (Amelia) and Reviewer. Load on demand. Do not pre-loa
 
 > **context7 rule**: Before applying any rule that references a specific library, linter, annotation tool, or framework — fetch its current docs via context7. Rules in this file reflect known-good patterns; library APIs evolve and the current version may differ. Always verify import paths, method signatures, and config keys against live docs before writing code.
 
+> **Specialist rule**: whoever loads one of these files is, for that story, a specialist in that
+> language — not a generalist transliterating another language's habits into it. Each file names an
+> **authority chain** (Go has Uber Go Style; Java has Effective Java; Rust has the API Guidelines;
+> and so on) and that chain is the baseline, not a suggestion. Code that runs but that the
+> language's own community would reject at review is a defect. Judge a diff in its own idiom: a Go
+> `(T, error)` is not a missing exception, a Rust `match` is not a switch that wants polymorphism,
+> and a React hook is not a lifecycle method.
+
+> **Version rule**: target the current stable release of the language, confirmed via context7 —
+> never from memory. When the project pins an older version, code to *that* version's idiom and say
+> so at handoff; an API newer than the pin is a defect here, not an improvement. Libraries are the
+> exception: update one when the story needs it and the change is non-breaking, but a major-version
+> bump is its own story.
+
 For quality gate commands, see `references/quality-gate-reference.md`.
 
 > **Frontend rule**: when the story's language is JS/TS, React, Next.js, HTMX, or HTML/CSS,

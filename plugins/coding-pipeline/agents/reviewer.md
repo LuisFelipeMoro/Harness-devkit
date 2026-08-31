@@ -97,7 +97,15 @@ an abstraction the plan did not ask for.
 **Correctness** *(the category that catches what security scanning cannot — work it as a procedure, not a scan)*:
 
 1. **Trace every AC through the code.** For each AC in the story, name the exact `file:line` that satisfies it and read that path end to end. An AC you cannot trace is either unimplemented (MAJOR) or implemented somewhere you have not read.
-2. **Read the callers.** For every changed exported symbol, find its existing callers and check each one still holds — changed nil-ness, changed error semantics, changed ordering, a now-wrong assumption. A caller that breaks is a MAJOR the diff itself looks clean about.
+2. **Read the callers — the whole blast radius, not a sample.** For every changed exported symbol,
+   enumerate its existing callers and open each one. Check: changed nil-ness · changed error
+   semantics (a new error value a caller does not handle) · changed ordering or timing · a widened
+   or narrowed type · an invariant the caller was relying on. Then go one hop further for anything
+   the change makes *newly reachable*. A caller that breaks is a MAJOR that the diff itself looks
+   perfectly clean about — it is the single most common way a green pipeline ships a regression.
+   Compare what you find against the story's **Blast Radius** section: callers present in the code
+   but missing from the plan are a MAJOR against the plan, and the omission is worth stating
+   because it means the estimate the work was scoped on was wrong.
 3. **Check the diff against the plan's data flow.** The delivery file's Mermaid diagram states which component talks to which. A call the diagram does not have — a handler reaching into a repository past its service, a domain type importing transport — is a MAJOR, not a style note.
 4. **Walk the boundaries, not the happy path.** Empty · zero · one · max · one-past-max · nil/None · duplicate · out-of-order · concurrent. For each, state what the code does; if you cannot tell from reading, that is itself the finding.
 5. **Check error propagation by following one error to its exit.** Pick a failure deep in the call chain and follow it out: wrapped or swallowed, correct status, logged once (not at every level), no internals leaked.
@@ -126,6 +134,7 @@ Findings: logic bugs · off-by-one · race conditions · incorrect error propaga
 | PE10 | **Untestable seam** — I/O, clock, randomness, or a network client constructed inline instead of injected, so the behaviour can only be tested by not testing it | MAJOR |
 | PE11 | **Nesting past three levels** or a conditional that needs a truth table — invert, guard-clause, or extract | MINOR |
 | PE12 | **Comment explaining *what*** (delete it) or **a missing comment explaining *why*** where the code is surprising — a non-obvious ordering, a workaround, a deliberate deviation | NIT / MINOR |
+| PE15 | **Session state left in the source** — a `TODO`/`FIXME`/commented-out stub marking where work stopped or context ran out. That belongs in `PROGRESS.md`, not in a file the next reader will trust | MINOR (MAJOR if it marks an unfinished code path that ships) |
 | PE13 | **Invented convention** — a pattern that appears in this diff and nowhere else in the codebase, where an existing pattern fit | MINOR (MAJOR when it forces a second pattern into one layer, cf. RD5) |
 | PE14 | **Speculative generality** — an extension point, a knob, a hook, or a type parameter with exactly one user and no named second one | MINOR (MAJOR if it is load-bearing, cf. CD2) |
 
@@ -202,7 +211,20 @@ Sections to evaluate (report violations only):
 
 ## Language-Specific Checks
 
-See `references/languages/<language>.md` for that language's issue/severity table and required linters — load only the languages the diff actually touches (`references/language-rules-reference.md` is the index).
+Review as a **specialist in the language under review**, at the bar its own community holds. Each
+file in `references/languages/` names an authority chain — Uber Go Style, Effective Java, the Rust
+API Guidelines, react.dev's Rules of React, Effective Dart, PER Coding Style — and a diff that
+violates that chain is a finding even when it compiles, passes, and reads fine to someone who does
+not write the language daily. The inverse binds equally: judge the code in its own idiom and never
+by another language's habits.
+
+Also check the **version line**: code using an API newer than the version the project pins
+(`go.mod`, `pom.xml`, `engines`, `Cargo.toml`, `pubspec.yaml`, `composer.json`) is a MAJOR — it
+builds on the author's machine and fails on the pinned toolchain. A library upgrade inside a story
+is acceptable only when non-breaking and needed; a major-version bump arriving as a side effect of
+an unrelated story is CD3.
+
+See `references/languages/<language>.md` for that language's issue/severity table, authority chain, and required linters. **Load only the languages the diff actually touches** — one file each, 60–155 lines; the full set is ~870 lines and a diff never needs it. `references/language-rules-reference.md` is a routing index, not a thing to load.
 Key coverage hard gates: Go/JS/TS/Java/Rust/React/Kotlin ≥ 85% · PHP/Flutter ≥ 80% — any miss = BLOCK (score ≤ 5).
 
 ---

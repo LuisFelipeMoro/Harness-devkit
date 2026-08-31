@@ -185,6 +185,33 @@ install_deps() {
     fi
 }
 
+# Tools the git-hook gates shell out to. Not in RECOMMENDED_TOOLS because those go
+# through the system package manager and these ship via npm. Every one of them is
+# optional by design: the hooks WARN and mark the gate UNENFORCED when a tool is
+# absent, because a hook that dies on a fresh machine gets uninstalled, and that
+# costs every gate rather than one.
+GATE_TOOLS_NPM="jscpd"
+
+install_gate_tools() {
+    local missing t
+    missing="$(missing_tools "$GATE_TOOLS_NPM")"
+    [ -z "$missing" ] && { ok "gate tools present ($GATE_TOOLS_NPM)"; return 0; }
+
+    if ! command -v npm >/dev/null 2>&1; then
+        warn "npm not found — duplication gate stays UNENFORCED (needs:$missing)"
+        return 0
+    fi
+    if [ "$DRY_RUN" = "1" ]; then say "  would run: npm install -g$missing"; return 0; fi
+    say "  the duplication gate (≤3%) needs:$missing"
+    if confirm "install with npm?"; then
+        for t in $missing; do
+            npm install -g "$t" || warn "npm install $t failed — that gate stays UNENFORCED"
+        done
+    else
+        warn "skipped:$missing — duplication gate stays UNENFORCED"
+    fi
+}
+
 install_claude_code() {
     if command -v claude >/dev/null 2>&1; then
         ok "claude $(claude --version 2>/dev/null | head -1)"
@@ -387,6 +414,10 @@ if [ "$CHECK_ONLY" = "1" ]; then
     for t in $REQUIRED_TOOLS $RECOMMENDED_TOOLS claude; do
         if command -v "$t" >/dev/null 2>&1; then ok "$t"; else warn "$t missing"; fi
     done
+    for t in $GATE_TOOLS_NPM; do
+        if command -v "$t" >/dev/null 2>&1; then ok "$t (gate tool)"
+        else warn "$t missing — duplication gate UNENFORCED (npm install -g $t)"; fi
+    done
     if [ -d "$HOME/.claude-mem" ]; then
         ok "claude-mem"
     else
@@ -403,6 +434,7 @@ if [ "$SKIP_DEPS" = "1" ]; then
     warn "--no-deps: skipping package installation"
 else
     install_deps
+    install_gate_tools
     install_claude_code
     install_claude_mem
 fi

@@ -13,7 +13,17 @@ This file is the **shared Coder core** — the spec-first test discipline every 
 | Backend / API / domain / data / worker | `agents/coder-backend.md` | Go · Java · JS/TS (Node) · PHP · Rust · Kotlin (server) |
 | Frontend / UI / SSR / client / mobile | `agents/coder-frontend.md` | React · Next.js (SSR/RSC) · HTMX · HTML/CSS · Flutter · Kotlin Android |
 
-**Lazy language loading (token efficiency)**: load ONLY `references/languages/<language>.md` for the story's `Language` (from the Manifest) or the language detected in existing code — one file, ~45 lines, self-sufficient. Never load `references/language-rules-reference.md` itself; it is only an index. The overlay tells you which stacks are in its scope; the story's Language tells you which one to actually load.
+**You are a specialist in the story's language, not a generalist visiting it.** The language file
+you load names an **authority chain** — Uber Go Style for Go, Effective Java for Java, the Rust API
+Guidelines for Rust, react.dev's Rules of React for React, Effective Dart for Flutter, PER Coding
+Style for PHP, and so on. That chain is the baseline the code is written to, not a reading
+suggestion. Two consequences: write in *that* language's idiom rather than transliterating another
+one's habits into it, and target the current stable release — confirmed via context7, never from
+memory — except where the project pins an older version, in which case code to the pinned version's
+idiom and flag it at handoff. A library may be updated when the story needs it and the change is
+non-breaking; a major-version bump is its own story, never a side effect of this one.
+
+**Lazy language loading (token efficiency)**: load **exactly one** file — `references/languages/<language>.md` for the story's `Language` (from the Manifest) or the language detected in existing code. Each is 60–155 lines and self-sufficient: version policy, specialist mandate, authority chain, idiom table, coding rules, lint commands and review flags, all in the one file. Loading the whole set would cost ~870 lines to use ~80 of them. Never load `references/language-rules-reference.md` either; it is a routing index, and everything in it that the work needs is already restated in the language file. The overlay tells you which stacks are in its scope; the story's `Language` tells you which single one to load.
 
 ## Agent Boundary (SRP — strictly enforced)
 
@@ -107,6 +117,12 @@ Before touching any file:
    - How context is threaded
 3. **Find reusable code** — search for existing utility functions, types, constants, or helpers. Never reinvent something that already exists.
 4. **Find the interface** — locate the consumer interface this implementation must satisfy. Confirm method signatures match exactly.
+5. **Walk the blast radius** — for every existing symbol this story will change, list its callers
+   before touching it (LSP find-references; grep only where LSP cannot reach). For each caller,
+   state whether it still holds under the change. A caller you did not open is a caller you are
+   guessing about, and the guess surfaces as a regression in code the story never mentioned. If the
+   story's **Blast Radius** section names fewer callers than you find, that gap is reported at
+   handoff — the plan measured it wrong, which is a planning defect, not something to absorb quietly.
 
 ### Step 3 — Draft Implementation Proposal
 Before creating or modifying any file, write this compact plan:
@@ -134,6 +150,7 @@ Before writing code, confirm:
 - [ ] Approach follows the patterns found in Step 2 (no invented conventions)
 - [ ] All reusable code identified in Step 3 is in the plan (no reinvention)
 - [ ] Interface contract from the story matches what will be implemented
+- [ ] Every caller of every symbol being changed has been opened and judged — none assumed
 - [ ] Security ACs each have a code path
 - [ ] Every Test Case row carries an Expected Observable Result, a Why It Matters, and a Falsified By break — any row that doesn't is reported as a spec defect, not filled in by guesswork
 

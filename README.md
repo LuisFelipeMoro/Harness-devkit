@@ -5,13 +5,16 @@ Spec-first AI development harness for [Claude Code](https://claude.ai/code). Dro
 - **Spec-first testing** — the Architect freezes a Test Case table (expected observable result · why it matters · what break falsifies it) before any code. The Coder implements to it, writes exactly those tests, then **breaks the code to prove each test fails**. The QA agent audits that evidence instead of writing tests.
 - **Tautology is the blocking defect, not low coverage** — a green suite at 90% coverage that survives having its guards deleted fails the audit. Coverage is a floor; falsifiability is the gate.
 - **The plan is reviewed before you see it** — every delivery starts from a `codebase-map.md` (what already exists, cited `file:line`), every planned component carries a decided **Reuse Map** row, and Priya (Plan Reviewer) reads the plan *with the repository open* and blocks on components that already exist, interfaces that contradict real signatures, and ACs with two readings. `/grill-me` interrogates a plan from inside the context that wrote it; this is the reader that does neither.
-- **Duplication is measured, not asserted** — `jscpd --threshold 3` is a gate in pre-push, in QA, and as a Reviewer hard gate. A copy-pasted block lints clean, types clean, and covers clean; no other sensor can see it.
+- **Duplication is measured *and attributed*** — `jscpd --threshold 3` gates pre-push, QA and the Reviewer, and `dup-attribution.py` splits the clones line-level by who wrote them: duplication this delivery introduced blocks, pre-existing debt is reported as debt. A repo-wide percentage would fail every push on day one for code the change never touched, and a gate that fails on day one gets disabled.
+- **Blast radius is counted, not guessed** — every symbol a change touches, every caller of it, one hop past for anything changing an error value or nil-ness, and the non-code callers `find-references` cannot see (wire formats, DB columns, generated clients, dashboards). It sizes the work, so the Plan Reviewer verifies the number against the code rather than reading it.
+- **Sized for review, because review is where defects are caught** — reviewer effectiveness collapses with diff size for an agent exactly as for a human. Manifest rows carry a projected diff (≤200 target · 400 soft · 800 hard), one story is one branch is one PR is one review, and `/pr-review` measures the diff first and reports an oversized one instead of absorbing it.
+- **80% context ceiling, hard** — past it, models lose mid-context recall and invent confidently. At 80% the pipeline hands off to a fresh session via `PROGRESS.md`, and never records that state as a `TODO` in your source.
 - **Reviewed at the principal-engineer bar, in any language** — *correct → legible → durable → small*, judged in the code's own idiom. Slop and overengineering are symmetric findings: a copy-pasted block and an interface with one implementation are filed equally readily. Every finding must name the future change it makes harder, which is what stops a strict reviewer from generating twenty nits that bury three real defects.
 - **Isolated per delivery** — each pipeline run gets its own git worktree (`.worktrees/dlv-{key}/`) and release branch, and writes its plan to `docs/deliveries/delivery-{slug}-{key}.md` instead of clobbering your repo's own `architecture.md`. Two deliveries never share a file or a working tree. The pipeline never commits or merges to `main` — the furthest it goes on its own is opening a PR.
 - **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
 - **12-agent coding pipeline** — Analyst → PM → codebase discovery → Architect → grill-me plan stress → **Plan Reviewer** → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps → PR review
 - **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap.
-- **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Flutter, HTMX, Kotlin Android, HTML/CSS
+- **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Next.js, Flutter, HTMX, Kotlin Android, HTML/CSS. Each file names an **authority chain** (Uber Go Style · Effective Java · Rust API Guidelines · Rules of React · Effective Dart · PER Coding Style · Kotlin Coding Conventions · WAI-ARIA APG) and the agent loads exactly the one in play — a specialist in that language for that story, targeting the current stable release unless the project pins otherwise
 - **Security-first quality gates** — OWASP Web Top 10 + OWASP LLM Top 10 2025 enforced at every stage
 - **23 skills** (slash commands) — architecture, security review, DB migrations, observability, PR review, release management, and more
 - **Git hooks** — pre-commit (format + lint), pre-push (full gates), commit-msg (Conventional Commits)
@@ -344,6 +347,12 @@ TUNING (optional — score ≥ 7, MINOR/NIT/optimization only)
 
 POST-VERDICT (if PRODUCTION READY)
   Ops (DevOps)        → Dockerfile + .dockerignore + docker-compose.yml + optional CI/k8s
+
+PER-STORY REVIEW (each story, before the next one starts)
+  orchestrator        → feat/{key}-{story} → PR into release/{slug}-{key}
+  /pr-review          → reviewed against THIS story's ACs + Test Case table + Reuse Map
+                        + Blast Radius — tightest spec, smallest diff
+                        → merge --no-ff so each story stays legible in history
 
 DELIVERY CLOSE (terminal — the pipeline stops here)
   orchestrator        → push release/{slug}-{key} (asks first) → open PR to main

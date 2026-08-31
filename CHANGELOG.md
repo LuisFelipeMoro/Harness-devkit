@@ -1,5 +1,110 @@
 # Changelog
 
+## [2.4.0] — 2026-08-31
+
+### Added
+
+- **Duplication attribution — pre-existing debt no longer blocks a push it did not cause.**
+  A repo-wide percentage answers the wrong question: on any codebase with history it is dominated
+  by debt the current change never touched, so the gate either fails on day one (and gets disabled,
+  taking the real finding with it) or is set so loose it never fires. `git-hooks/dup-attribution.py`
+  now splits jscpd's clones by *who wrote them*, **line-level, not file-level**: a duplicated line
+  counts against the delivery only when it lies in a range the diff actually added, so touching one
+  function in a 900-line legacy file does not make its other clones yours. Introduced duplication
+  blocks; pre-existing is reported as debt to route to a follow-up. With no merge-base the gate says
+  `ATTRIBUTION UNAVAILABLE` and gates everything — loud, never a silent skip.
+
+- **Blast radius became a measurement instead of a guess.** It is the number the whole delivery is
+  sized and split on, and it was previously one line in the codebase map. Now: enumerate with
+  find-references rather than estimate, one line per caller (`file:line — what it assumes — does the
+  change hold?`), one hop past the direct callers for anything changing an error value, nil-ness,
+  ordering or type width, and **the non-code callers counted too** — serialized payloads, DB
+  columns, API consumers, generated clients, dashboards, alert queries, which `find-references`
+  structurally cannot see. It becomes a table in the delivery file, rows in each story, a verified
+  check in the Plan Reviewer (PR9, now MAJOR — *verify it, do not read it*), and the second step of
+  the Reviewer's correctness procedure.
+
+- **PR sizing, because review is where defects are actually caught.** Reviewer effectiveness
+  collapses with diff size for an agent exactly as for a human: past a few hundred lines reading
+  becomes skimming, and the resulting approval means nothing. Manifest rows now carry a
+  `Projected diff` and are sized ≤ 200 lines (target) / 400 (soft ceiling) / 800 (hard — split, not
+  justified). The Plan Reviewer gains PR11 for stories that cannot be reviewed at their planned
+  size, and `/pr-review` measures the diff **first** and reports > 800 as a finding rather than
+  absorbing it silently. Mechanical bulk mixed with logic is a finding at any size — 40 lines of
+  logic inside 600 mechanical ones is the worst diff there is, and worse than either half alone.
+
+- **One story, one branch, one PR, one review.** Story branches were optional and had no PR of their
+  own; a whole delivery arrived as a single unreviewable diff. `feat/{key}-{story-slug}` is now the
+  default unit of review, cut from the release branch with its own PR into it, where `/pr-review`
+  runs with that story's ACs, Test Case table, Reuse Map and Blast Radius in context — the review
+  with the tightest spec and the smallest diff. The release PR to `main` is the second review with a
+  different job: cross-story duplication and drift from the plan, which no story review can see.
+  Merges are `--no-ff` so each story stays legible as a unit, and the delivery can be read commit by
+  commit instead of reconstructed from one giant merge.
+
+- **`install.sh` installs the gate tools.** `jscpd` ships via npm, so it cannot ride the system
+  package manager list. `--check` now reports it, and the installer offers it. Absent, the hook says
+  UNENFORCED rather than blocking — a hook that dies on a fresh machine gets uninstalled, and that
+  costs every gate rather than one.
+
+### Changed
+
+- **Every language file reaches Go's bar.** Go had a `Structure and Idiom` section with a named
+  authority chain (Uber Go Style → ardanlabs → Effective Go); the other ten had nothing, so the
+  devkit was measurably better at Go than at Java, and better at backend than frontend. All eleven
+  now carry an authority chain and an idiom table: **Java** Effective Java 3e → Google Java Style;
+  **TypeScript** Google TS Style Guide → `typescript-eslint` recommended-type-checked; **React**
+  react.dev Rules of React → Testing Library principles; **Next.js** App Router docs (Server
+  Components + caching); **PHP** PER Coding Style 2.0 → PHPStan level 9; **Rust** Rust API
+  Guidelines → `clippy::pedantic`; **Kotlin** Kotlin Coding Conventions → Now in Android;
+  **Flutter** Effective Dart; **htmx** htmx docs → *Hypermedia Systems*; **HTML/CSS** WHATWG →
+  WAI-ARIA APG. `htmx.md` also gained the Linting Commands section it had been missing.
+
+- **`go.md` deepened well past the others** (69 → 155 lines), with sections the file did not have at
+  all: **Concurrency** (goroutine ownership, context threading, `errgroup` fan-out, channel
+  direction, mutex placement, bounded work, `goleak`), a Go-specific **Security** table
+  (constant-time comparison, `html/template` vs `text/template`, `ReadHeaderTimeout`/Slowloris,
+  `MaxBytesReader`, `filepath.Clean` **plus** a containment check, zip slip, SSRF via a guarded
+  `DialContext`, TLS `MinVersion`, `exec.Command` without a shell, gosec G115 narrowing conversions,
+  JWT algorithm assertion), **Performance and Allocation**, **Testing Idiom** (`t.Parallel`,
+  `t.Helper`, `httptest`, golden files, fuzz targets, `-race` always), **Module and Build Hygiene**,
+  and **Observability**. 26 new review flags with severities. Lazy loading means this costs nothing
+  to a story in another language.
+
+- **Specialist mandate + version policy, in every language file and in the Coder and Reviewer.**
+  For a story's language the agent is a specialist, not a generalist transliterating another
+  language's habits — code that runs but that the language's own community would reject at review is
+  a defect. Target the current stable release, confirmed via context7 rather than from memory; when
+  the project pins an older version, code to *that* version's idiom and say so at handoff, because
+  an API newer than the pin is a defect here, not an improvement. Libraries may be updated when the
+  story needs it and the change is non-breaking; a major-version bump is its own story. The Reviewer
+  flags use of a post-pin API as MAJOR — it builds on the author's machine and fails on the pinned
+  toolchain.
+
+- **Lazy language loading stays one file, and the stale figure is fixed.** The files are now 60–90
+  lines (was "~45"), and the full set is ~790 — so loading one to use one is worth restating: the
+  Coder and Reviewer load exactly the language in play, never the index.
+
+- **CLAUDE.md opens with what the Harness optimises for**, priority-ordered, as the tie-breaker when
+  two rules collide: confidence → production-ready → airtight plans → readability → language best
+  practice → scalable and secure → token efficiency. Token efficiency is last deliberately: it is a
+  constraint on *how* the other six are achieved, never a reason to skip one. Additions to that file
+  must earn their tokens against one of the seven.
+
+### Testing
+
+- New suite `test-dup-attribution.sh` (11 assertions), wired into CI. It proves the split in both
+  directions — a clone the delivery wrote blocks, an identical clone it did not does not — plus the
+  line-level case that decides whether the gate is usable at all: a clone sitting in a file the
+  delivery *did* touch, at lines the diff never went near, must not block.
+- `test-git-hooks.sh` 25 → 27, rewritten for the new contract: the hook's job is now to honour the
+  attribution verdict, and both directions are proven, on fixtures that are real git repos.
+- Every assertion in both suites was falsified before commit — attribute-everything-to-debt,
+  treat-everything-as-introduced, file-level instead of line-level, threshold never compared,
+  no-baseline gating nothing, unreadable report passing, verdict ignored, gate nested inside the Go
+  block. Each break was caught by the assertion written for it.
+
+
 ## [2.3.0] — 2026-08-31
 
 ### Added

@@ -54,7 +54,8 @@ gh pr review <PR_NUMBER> --approve --body "LGTM — no issues found."
 ```text
 PR #N Review Summary
 CRITICAL: X  HIGH: Y  MEDIUM: Z  LOW: W
-Duplication: N% (limit 3%)
+Size: N changed lines (target ≤200 · ceiling 800) — {reviewable | oversized, findings below are best-effort}
+Duplication: introduced N% (limit 3%) · pre-existing debt M%
 Action: [REQUEST CHANGES | APPROVED | COMMENTED]
 ```
 

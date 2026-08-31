@@ -23,11 +23,14 @@ Input: Task Manifest row + the delivery file → Output: `docs/deliveries/{key}/
 
 **B. Code (Spec→Implement→Test→Falsify)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
 
-> Runs **inside the delivery worktree** (`.worktrees/dlv-{key}/`) on the release branch, and
-> **one sub-task at a time** — sub-tasks share that single worktree, so two concurrent Coders
-> would overwrite each other. Optionally cut `feature/{key}-{story-slug}` for a substantial
-> sub-task and merge it back with `--no-ff` once its Verdict passes; small sub-tasks commit
-> straight to the release branch. Never commit or merge to `main`.
+> Runs **inside the delivery worktree** (`.worktrees/dlv-{key}/`) and **one sub-task at a time** —
+> sub-tasks share that single worktree, so two concurrent Coders would overwrite each other.
+> **Cut `feat/{key}-{story-slug}` from the release branch before coding** — that branch is the unit
+> of review, and its own PR into `release/*` is where `/pr-review` runs with this sub-task's ACs,
+> Test Case table, Reuse Map and Blast Radius in context. Merge back with `--no-ff` once the Verdict
+> passes and the story PR is green. Only a genuinely trivial sub-task (manifest projected under ~50
+> lines) commits straight to the release branch, and taking that exception is stated, not silent.
+> Never commit or merge to `main`. Branch table: `../../references/delivery-and-worktree.md`.
 - **Stack-aware dispatch**: pick the overlay by the sub-task's Tier — `agents/coder-backend.md` (server/API/domain) or `agents/coder-frontend.md` (UI/SSR/client). Load only `references/languages/<language>.md` for the sub-task's `Language` — never the index. Full-stack sub-tasks were split BE/FE around the `api-spec.yaml` contract (BE producer first, then FE consumer). No frontend stack → frontend coder never spawned.
   - **Frontend sub-task creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` for a compact design plan (palette, type pairing, layout concept, signature element) and include it in the coder's dispatch prompt. Skip for backend-only sub-tasks and frontend sub-tasks that don't touch visual surface.
 - The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
@@ -72,8 +75,21 @@ After each sub-task Verdict, append a `PROGRESS.md` entry at the repo root (Done
 
 **Post-verdict (PRODUCTION READY)**: load `agents/devops.md` (Ops) — generates Dockerfile, .dockerignore, docker-compose.yml, optional CI/k8s.
 
-> **Context Budget**: After each sub-task: drop code + story. Retain: the delivery file + Manifest + all scores.
-> If running 4+ sub-tasks or context >75% full: summarize completed sub-tasks to one-line refs:
-> `"ST{N}: {slug} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never drop scores.
+> **Context Budget — 80% is a hard ceiling, not a warning.** Model reliability degrades before the
+> window is full: recall of mid-context detail drops and confident invention rises, and a pipeline is
+> exactly where that is most expensive — a hallucinated interface signature or a mis-remembered AC
+> propagates through every stage after it.
+> - **Between sub-tasks**: drop implementation code, test files, and completed sub-task stories. Retain the
+>   delivery file, the Manifest, and every score.
+> - **At 4+ sub-tasks, or 60%**: compact completed sub-tasks to one-line refs —
+>   `"ST{N}: {slug} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never dropping a score.
+> - **At 80%: stop and hand off.** Run `/handoff`, write the `[{key}]` `PROGRESS.md` entries, push
+>   the current story branch, and start a fresh session that resumes from the delivery file's Status
+>   plus those entries. Do not "push a bit further" — the next thing produced past this line is the
+>   thing least likely to be right, and hardest to spot as wrong.
+> - **Handoff state lives in `PROGRESS.md` and the handoff doc — never in the code.** No `TODO`,
+>   no `FIXME`, no commented-out stub, no placeholder marking where the session stopped. A source
+>   file must not record that an agent ran out of context; that is what the Memory leg is for, and a
+>   marker left behind is a finding (CD6) in the next review.
 
 Use `references/output-format.md` headers. Show Pipeline Summary after each Verdict. Load agent files on demand — never pre-load all at once.

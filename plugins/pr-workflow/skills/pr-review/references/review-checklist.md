@@ -49,6 +49,30 @@ turn it red; if you cannot name one, it is a finding.
 - Coverage raised by assertions that execute lines without proving behaviour → MEDIUM
 - Coverage regression (check CI checks output) → MEDIUM
 
+## PR size (check this first — it calibrates every finding below)
+
+Reviewer effectiveness collapses with diff size, for an agent exactly as for a human: past a few
+hundred lines the reading turns into skimming, and an approval produced by skimming means nothing.
+So the size is not a style note — it is a statement about how much this review is worth.
+
+Measure with `git diff --shortstat` against the base, **excluding** lockfiles, generated code, and
+vendored directories.
+
+| Changed lines | Action |
+|---|---|
+| ≤ 200 | review normally |
+| 200–400 | review normally; note the size in the summary |
+| 400–800 | post a MEDIUM: name the seam it should have been split on |
+| > 800 | post a HIGH **as the first comment**, and say plainly in the summary that a diff this size cannot be reviewed to the standard the rest of this checklist assumes |
+
+A large diff of *uniform mechanical change* (generated client, compiler-verified rename, formatting)
+is fine when it is isolated. **Mechanical bulk mixed with logic is the worst case and is a HIGH at
+any size** — the logic hides in the noise, which is precisely how a defect reaches production
+through a PR that three people approved.
+
+Never silently downgrade a review because the diff was big. Say the size out loud and let the human
+decide whether to split it.
+
 ## Reuse & Duplication (the PR-level finding no per-file review can make)
 
 A per-file or per-story review never sees the whole delivery at once, so a helper written twice in

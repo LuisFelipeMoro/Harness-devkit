@@ -64,7 +64,30 @@ echo "→ Full quality gates before push..."
 # no percentage to print-but-never-compare — the failure mode the coverage gates
 # above were written to close.
 DUP_MAX="${DEVKIT_DUP_MAX:-3}"
-echo "→ Duplication ≤${DUP_MAX}%"
+
+# The baseline this delivery is measured against. Without it every clone in the
+# repository is charged to the current push, which on any codebase with history
+# fails on day one — and a gate that fails on day one gets disabled, taking the
+# real finding with it.
+dup_base() {
+    local ref base
+    for ref in origin/main origin/master main master; do
+        git rev-parse --verify -q "$ref" >/dev/null 2>&1 || continue
+        base="$(git merge-base HEAD "$ref" 2>/dev/null)" || continue
+        # On the mainline itself there is nothing ahead of the base, so nothing
+        # would ever be attributed. Fall back to the last commit so a direct
+        # push to main is still measured against something.
+        if [ "$base" = "$(git rev-parse HEAD)" ]; then
+            git rev-parse --verify -q HEAD~1 2>/dev/null && return 0
+            return 1
+        fi
+        printf '%s' "$base"
+        return 0
+    done
+    return 1
+}
+
+echo "→ Duplication ≤${DUP_MAX}% (introduced by this delivery)"
 if command -v jscpd &>/dev/null; then
     jscpd_bin="jscpd"
 elif [ -x node_modules/.bin/jscpd ]; then
@@ -72,14 +95,33 @@ elif [ -x node_modules/.bin/jscpd ]; then
 else
     jscpd_bin=""
 fi
-if [ -n "$jscpd_bin" ]; then
-    # Per-repo tuning (extra ignores, per-language thresholds) belongs in a
-    # committed .jscpd.json — jscpd reads it without this hook knowing.
-    "$jscpd_bin" . --threshold "$DUP_MAX" --min-lines 8 --min-tokens 50 \
-        --ignore "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*" \
-        --reporters console
-else
+dup_attr="$(dirname "$0")/dup-attribution.py"
+[ -f "$dup_attr" ] || dup_attr="$HOME/.claude/git-hooks/dup-attribution.py"
+
+if [ -z "$jscpd_bin" ]; then
     echo "WARN: jscpd not found — duplication UNENFORCED. Install: npm i -g jscpd"
+elif [ ! -f "$dup_attr" ]; then
+    echo "WARN: dup-attribution.py not found beside the hook — duplication UNENFORCED. Re-run: bash ~/.claude/git-hooks/install.sh"
+else
+    dup_out="${TMPDIR:-/tmp}/devkit-jscpd"
+    rm -rf "$dup_out"
+    # --threshold 100 so jscpd never gates: attribution owns the comparison, and a
+    # repo-wide percentage answers the wrong question. Markdown is excluded because
+    # the gate targets code — deliberately repeated prose (a per-language reference
+    # that must stay self-sufficient on a single-file load) is a token-efficiency
+    # decision, not a defect. Per-repo tuning (extra ignores, per-language limits)
+    # belongs in a committed .jscpd.json, which jscpd reads without this hook knowing.
+    "$jscpd_bin" . --threshold 100 --min-lines 8 --min-tokens 50 \
+        --ignore "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md" \
+        --reporters json --output "$dup_out" >/dev/null 2>&1 || true
+
+    if base="$(dup_base)"; then
+        python3 "$dup_attr" --report "$dup_out/jscpd-report.json" --base "$base" --threshold "$DUP_MAX"
+    else
+        # No baseline: every clone is gated as if this push wrote it. Loud, and
+        # deliberately not a silent skip — an unattributable gate is still a gate.
+        python3 "$dup_attr" --report "$dup_out/jscpd-report.json" --threshold "$DUP_MAX"
+    fi
 fi
 
 # Go
