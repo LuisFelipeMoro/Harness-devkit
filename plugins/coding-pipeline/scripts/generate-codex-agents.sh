@@ -112,7 +112,7 @@ $(body_of "$extra_file")"
 
 echo "Generating Codex subagent definitions to $TARGET ..."
 
-for persona in analyst architect bug-investigator devops pm qa reviewer \
+for persona in analyst architect bug-investigator devops plan-reviewer pm qa reviewer \
                rote-adapter rote-analytics rote-datadog rote-github \
                scrum-master stress tuner verdict; do
   write_agent "$persona" "$AGENTS_DIR/$persona.md"

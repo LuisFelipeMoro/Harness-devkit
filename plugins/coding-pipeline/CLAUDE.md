@@ -18,7 +18,7 @@ This devkit is a Harness. Four components, all mandatory:
 
   Dial them with `DEVKIT_HOOK_PROFILE` — `off`, `standard` (default), or `strict`, which makes `delivery-gate` block once instead of warn — or disable a single hook with `DEVKIT_DISABLED_HOOKS=<hook-id>,<hook-id>`. A guard that cannot parse its input exits 0 — failing open beats blocking every tool call on a payload change.
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
-- **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code.
+- **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code. **The plan is validated the same way**: Priya (Plan Reviewer) reads the delivery file against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say.
 
 ## Is the Harness working? (read quarterly, never as a gate)
 
@@ -74,6 +74,16 @@ Rules:
   *before* the fix, because it is what proves the root cause was found rather than guessed.
 - Plans are stress-tested with `/grill-me` before coding; questions the plan cannot resolve go
   to the human — never deferred into implementation.
+- **Nothing is designed against an imagined repository.** Every plan starts from
+  `codebase-map.md` (blast radius · reusable symbols · prior art · conventions · extension
+  points · contracts in force, each cited `file:line`), and every planned component carries a
+  decided **Reuse Map** row — `reuse:` / `extend:` / `new:` with the closest existing thing named.
+  A `new` with no citation is unjustified.
+- **The plan is reviewed before the human sees it.** `agents/plan-reviewer.md` reads the delivery
+  file with the repository open and blocks on PR1–PR10 (already exists · reuse not declared ·
+  contradicts existing code · ambiguous AC · unfalsifiable row · untraced requirement · deferred
+  decision · …). grill-me interrogates the plan from inside the context that wrote it and never
+  opens the repo; this is the reader that does both.
 
 ## Sub-agent Discipline
 
@@ -87,8 +97,8 @@ Rules:
 | Work | Model | Examples |
 |------|-------|----------|
 | Architecture design | `opus` | Architect — system design, ADRs, tech stack, data-flow decisions the whole plan depends on |
-| Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
-| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation against a frozen Test Case table |
+| Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), Plan Reviewer, QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
+| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, the codebase-discovery pass, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation against a frozen Test Case table |
 
 Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason.
 
@@ -161,8 +171,10 @@ These standards bias toward caution over speed. That is the right trade at deliv
 the wrong one on a typo, so **ceremony scales with the change; the standards do not.**
 
 **Never scales — applies to a one-line change exactly as to an epic:**
-Security Defaults · the quality-gate table · Spec-First Test Discipline for any behaviour
-change · Change Discipline (CD1–CD7) · never commit or merge to `main` · the session hooks.
+Security Defaults · the quality-gate table (duplication included) · Spec-First Test Discipline for
+any behaviour change · Change Discipline (CD1–CD7) · the principal-engineer bar (correct →
+legible → durable → small, with every finding naming its cost) · never commit or merge to `main` ·
+the session hooks.
 There is no "too small to test" and no "too small to gate."
 
 **Scales — pick the lightest lane that fits:**
@@ -194,7 +206,7 @@ Tasks that lack defined outputs are not tasks — they are conversations. Conver
 Use `TaskCreate` to track tasks with >1 step. Mark `in_progress` when starting, `completed` when done.
 
 ## Universal
-- **SOLID + DRY**: Single responsibility; no duplication. Composition over inheritance.
+- **SOLID + DRY**: Single responsibility; no duplication — **≤ 3%, measured (`jscpd`), not asserted**. Composition over inheritance. Reuse and extend beat new; three cases before extracting, and a duplication is a reuse finding, never a licence to invent an abstraction the plan did not ask for.
 - **Clean Architecture**: Domain logic isolated from I/O layers. No domain leakage into transport/DB/cache.
 - **Security-First**: OWASP Top 10 (web) + OWASP LLM Top 10 2025 (AI/GenAI) as hard baselines. Validate all inputs; encode all outputs. Fail secure. No secrets in source/logs/errors.
 - **Comments**: Write the *why* only — never the *what*. Remove commented-out code immediately.
@@ -203,6 +215,7 @@ Use `TaskCreate` to track tasks with >1 step. Mark `in_progress` when starting, 
 ## Quality Gates (hard requirement — never skip)
 | Gate | Go | TypeScript |
 |------|-----|------|
+| Duplication | `jscpd --threshold 3` (≤ 3%, all stacks) | `jscpd --threshold 3` (≤ 3%, all stacks) |
 | Format | `gofmt` | `prettier --check` |
 | Lint | `go vet` + `golangci-lint` (0 errors) | `eslint --max-warnings 0` |
 | Types | — | `tsc --noEmit` (`strict: true`) |

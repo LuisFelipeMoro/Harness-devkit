@@ -54,5 +54,25 @@ gh pr review <PR_NUMBER> --approve --body "LGTM — no issues found."
 ```text
 PR #N Review Summary
 CRITICAL: X  HIGH: Y  MEDIUM: Z  LOW: W
+Duplication: N% (limit 3%)
 Action: [REQUEST CHANGES | APPROVED | COMMENTED]
 ```
+
+## Gaps block (printed with the summary, when a delivery file is available)
+
+Findings say what is wrong with the code that is there. Gaps say what is **missing** relative to
+the plan — the class of defect an inline diff comment structurally cannot carry, because it has
+no line to attach to. Post it as one general PR comment as well as printing it.
+
+```text
+Gaps vs. plan (docs/deliveries/delivery-{slug}-{key}.md)
+Unimplemented ACs:     {AC id — text — no code found}                    | none
+Spec drift:            {where the code contracts differ from the delivery file / api-spec.yaml} | none
+Missing Test Case rows:{row name from the frozen table with no test}     | none
+Reuse Map departures:  {component built new where the map said reuse/extend, file:line both sides} | none
+Duplication:           {N}% (limit 3%) — {worst pair: file:line ↔ file:line}
+Untraced changes:      {changed file/symbol matching no AC, epic, or manifest row}  | none
+```
+
+With no delivery file available, print the block with `not available — no delivery file` and skip
+the four plan-relative rows rather than guessing at intent.

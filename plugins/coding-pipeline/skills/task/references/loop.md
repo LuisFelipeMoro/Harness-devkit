@@ -46,7 +46,7 @@ Quinn audits the tests (spec-row completeness, falsification evidence + spot-che
 See `references/quality-gate-reference.md` **Bug-Fix Loop Protocol** (and **Loop Integrity** — no goalpost-moving, stop on an identical repeat failure, compact only at story boundaries) for exact procedure, iteration counting, and coverage failure sub-path.
 
 **D. Review + Stress** *(triggered by QA signal — never before QA approval or escalation)*:
-- `agents/reviewer.md` → full code, language-specific checks
+- `agents/reviewer.md` → full code, language-specific checks, **plus the acceptance contract**: the story (ACs + Test Case table), the delivery file's Reuse Map, and `codebase-map.md`. Without them the Reviewer's own escape clause fires and CD1/CD3/CD7 — every intent and scope check — is skipped silently, which is how a diff that builds the wrong thing scores 8/10.
 - `agents/stress.md` → full code + tests, Security Under Stress
 
 If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Tyler):

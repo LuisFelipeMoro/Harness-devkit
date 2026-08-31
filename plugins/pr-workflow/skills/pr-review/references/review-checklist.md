@@ -49,6 +49,60 @@ turn it red; if you cannot name one, it is a finding.
 - Coverage raised by assertions that execute lines without proving behaviour → MEDIUM
 - Coverage regression (check CI checks output) → MEDIUM
 
+## Reuse & Duplication (the PR-level finding no per-file review can make)
+
+A per-file or per-story review never sees the whole delivery at once, so a helper written twice in
+two different stories is invisible until here. A perfect duplicate lints clean, types clean, and
+covers clean — this is the only place it gets caught before it becomes rework.
+
+Run `jscpd . --threshold 3 --min-lines 8 --reporters console` over the branch and quote the figure.
+
+- RD1 New symbol reimplements one that already exists (cite both `file:line`) → HIGH
+- RD2 Near-copy of an existing block, differing only in literals, types, or field names → HIGH
+- RD3 Component built new where the delivery file's Reuse Map said `reuse:`/`extend:` → HIGH
+- RD4 The same logic appears twice or more **inside this PR** → HIGH
+- RD5 A second pattern introduced into a layer that already has one (parallel error handling, DI, validation) → MEDIUM
+- RD6 Code copied instead of imported because of a package boundary — name the boundary → MEDIUM
+- Duplication above 3% overall → HIGH
+
+Every duplication finding cites **both** locations. One location is a hunch, not a finding.
+
+## Design & Durability (the principal-engineer bar — any language)
+
+The question is: **would a principal engineer own this in three years, after the author has left
+and the requirements have moved twice?** Judge the code in its own language's idiom, never by
+another language's habits. Priority order — when two conflict, the earlier wins: **correct →
+legible → durable → small.**
+
+Every finding must pass the **cost test**: *name the future change it makes harder, or the
+concrete way it breaks.* No cost, no finding — that is a preference. Never file what the
+formatter or linter already owns.
+
+- PE1 Mixed levels of abstraction in one function — orchestration interleaved with byte-level detail → MEDIUM (HIGH if it hides a branch)
+- PE2 Responsibility sprawl — two reasons to change; the test name needs an "and" → HIGH
+- PE3 Leaky abstraction — the caller must know the implementation to use it correctly (call ordering, a field set before a method) → HIGH
+- PE4 Temporal coupling — `init()` then `start()` then `use()` with nothing enforcing the order → HIGH
+- PE5 Boolean or positional parameter deciding behaviour at the call site → MEDIUM
+- PE6 Primitive obsession on a domain invariant — validated id, money, or unit passed as a bare string/int → MEDIUM (HIGH for a security or money invariant)
+- PE7 Shared mutable state reachable from two paths with no single owner → HIGH
+- PE8 Hidden side effect — a name promising a read that writes, logs, mutates an argument, or does I/O → HIGH
+- PE9 Error stripped of context — wrapped without what was attempted, so production logs cannot locate it → HIGH
+- PE10 Untestable seam — I/O, clock, randomness, or a client constructed inline instead of injected → HIGH
+- PE11 Nesting past three levels, or a conditional needing a truth table → MEDIUM
+- PE12 Comment explaining *what* (delete) — or a missing *why* where the code is surprising → LOW
+- PE13 Invented convention — a pattern in this diff and nowhere else, where an existing one fit → MEDIUM
+- PE14 Speculative generality — extension point, knob, hook, or type parameter with exactly one user → MEDIUM
+
+**Overengineering and slop are symmetric findings.** An interface with one implementation, a
+factory for one type, or a layer that only forwards costs every future reader a walk through
+indirection that buys nothing — file it exactly as readily as a copy-pasted block. Three cases
+before extracting; a duplication is an RD finding, not a licence to invent an abstraction the plan
+never asked for.
+
+**Rank, don't enumerate.** More than ~5 findings in a category: post the 3 that matter and one
+line naming the pattern behind the rest. Twenty LOWs bury the HIGHs, and a review nobody finishes
+reading changes nothing.
+
 ## Change Discipline (scope of the diff)
 
 > Mirrored from `coding-pipeline/references/change-discipline.md`, which holds the worked

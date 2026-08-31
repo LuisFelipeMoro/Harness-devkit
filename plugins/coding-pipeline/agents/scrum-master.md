@@ -30,6 +30,8 @@ ID: STORY-{N} | Delivery-Key: {key} | Epic: {Epic Name} | Status: Ready for Dev
 - **Constraints**: {applicable NFRs/ADRs from Manifest}
 - **Security**: {validation rules, auth requirements, data sensitivity constraints from Architecture Security section}
 - **Spec** *(if `api-spec.yaml` exists)*: list the `operationId`(s) this story implements (e.g. `createCart`, `getOrder`). Amelia must satisfy these contracts exactly.
+- **Reuse** *(from the delivery file's Reuse Map + `codebase-map.md` — copy the rows for this story's components)*: for each component, `reuse: file:line — symbol` / `extend: file:line — symbol` / `new: closest existing thing + why it does not fit`, plus the reusable helpers, types, and validators Amelia must call instead of writing her own. A story that ships without this section sends Amelia to search for prior art on her own, which is how the same helper gets written twice.
+- **Conventions** *(from `codebase-map.md`)*: the `file:line` exemplar for this layer's naming, error wrapping, and dependency injection. Amelia follows the exemplar, not her own preference.
 
 ## Acceptance Criteria
 - [ ] {AC from PRD verbatim or clarified}
@@ -88,6 +90,7 @@ the vagueness here — go back to architecture if needed — before marking the 
 - [ ] Security ACs verified — no OWASP Top 10 violations in scope
 - [ ] Lint clean (zero errors): Go — `go vet`, `staticcheck`, `golangci-lint`; Java — `checkstyle`, `SpotBugs`, `PMD`; JS/TS — `eslint --max-warnings 0`, `prettier --check`; PHP — `phpstan` level 8, `phpcs`, `php-cs-fixer`; Rust — `cargo clippy -D warnings`, `cargo fmt --check`, `cargo audit`
 - [ ] Coverage: Go ≥ 85% · Java ≥ 85% · JS/TS ≥ 85% · PHP ≥ 80% · Rust ≥ 85% · React ≥ 85% · Flutter ≥ 80% · Kotlin ≥ 85%
+- [ ] Duplication ≤ 3% (`jscpd --threshold 3`) and every Reuse row honoured — nothing in this story reimplements a symbol the Reuse section named
 - [ ] Error logging only: no `info`/`debug`/`warn` in production paths; every error log includes `request_id`/`trace_id`; no PII, secrets, or card data in any log line
 - [ ] Idempotency keys implemented where required: outbound mutation to external service · token renewal/refresh call · payment handler; duplicate key replays stored result without re-executing side effect
 - [ ] Graceful shutdown: `SIGTERM` handler stops new requests, drains in-flight (≤ 30 s), closes DB/queue connections, exits with code 0

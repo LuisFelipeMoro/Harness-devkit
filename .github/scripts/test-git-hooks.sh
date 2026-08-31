@@ -171,6 +171,31 @@ printf '#!/bin/sh\necho "no valid records found"\nexit 0\n' > "$d/.stub-bin/lcov
 chmod +x "$d/.stub-bin/lcov"
 expect_exit "flutter unmeasured coverage blocks" pre-push "$d" 1
 
+# ── Duplication gate (all stacks) ───────────────────────────────────────────
+# Copy-paste passes every other Sensor in the hook — lint, types and coverage
+# are all clean on a perfect duplicate — so this gate is the only thing standing
+# between a reimplemented helper and the rework it causes. Each fixture below
+# carries no stack markers at all: the only gate that can speak is this one,
+# which also proves it is not nested inside one language's block.
+jscpd_stub() {      # jscpd_stub <fixture-dir> <exit-code>
+    printf '#!/bin/sh\necho "jscpd stub ran"\nexit %s\n' "$2" > "$1/.stub-bin/jscpd"
+    chmod +x "$1/.stub-bin/jscpd"
+}
+
+d="$(fixture dup-over)"; jscpd_stub "$d" 1
+expect_exit "duplication above threshold blocks" pre-push "$d" 1
+
+d="$(fixture dup-ok)"; jscpd_stub "$d" 0
+expect_exit "duplication at threshold passes"    pre-push "$d" 0
+expect_says "clean duplication reaches the end"  pre-push "$d" yes "pre-push gates passed"
+expect_says "duplication gate is stack-agnostic" pre-push "$d" yes "Duplication"
+
+# Every optional tool in this hook warns when absent rather than blocking; a hook
+# that dies on a machine without jscpd gets uninstalled, which costs every gate.
+d="$(fixture dup-missing)"
+expect_exit "missing jscpd does not block"    pre-push "$d" 0
+expect_says "missing jscpd says UNENFORCED"   pre-push "$d" yes "duplication UNENFORCED"
+
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"
 exit $fail

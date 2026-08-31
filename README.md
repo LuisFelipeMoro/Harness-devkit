@@ -4,9 +4,12 @@ Spec-first AI development harness for [Claude Code](https://claude.ai/code). Dro
 
 - **Spec-first testing** — the Architect freezes a Test Case table (expected observable result · why it matters · what break falsifies it) before any code. The Coder implements to it, writes exactly those tests, then **breaks the code to prove each test fails**. The QA agent audits that evidence instead of writing tests.
 - **Tautology is the blocking defect, not low coverage** — a green suite at 90% coverage that survives having its guards deleted fails the audit. Coverage is a floor; falsifiability is the gate.
+- **The plan is reviewed before you see it** — every delivery starts from a `codebase-map.md` (what already exists, cited `file:line`), every planned component carries a decided **Reuse Map** row, and Priya (Plan Reviewer) reads the plan *with the repository open* and blocks on components that already exist, interfaces that contradict real signatures, and ACs with two readings. `/grill-me` interrogates a plan from inside the context that wrote it; this is the reader that does neither.
+- **Duplication is measured, not asserted** — `jscpd --threshold 3` is a gate in pre-push, in QA, and as a Reviewer hard gate. A copy-pasted block lints clean, types clean, and covers clean; no other sensor can see it.
+- **Reviewed at the principal-engineer bar, in any language** — *correct → legible → durable → small*, judged in the code's own idiom. Slop and overengineering are symmetric findings: a copy-pasted block and an interface with one implementation are filed equally readily. Every finding must name the future change it makes harder, which is what stops a strict reviewer from generating twenty nits that bury three real defects.
 - **Isolated per delivery** — each pipeline run gets its own git worktree (`.worktrees/dlv-{key}/`) and release branch, and writes its plan to `docs/deliveries/delivery-{slug}-{key}.md` instead of clobbering your repo's own `architecture.md`. Two deliveries never share a file or a working tree. The pipeline never commits or merges to `main` — the furthest it goes on its own is opening a PR.
 - **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
-- **11-agent coding pipeline** — Analyst → PM → Architect → grill-me plan stress → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps
+- **12-agent coding pipeline** — Analyst → PM → codebase discovery → Architect → grill-me plan stress → **Plan Reviewer** → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps → PR review
 - **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap.
 - **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Flutter, HTMX, Kotlin Android, HTML/CSS
 - **Security-first quality gates** — OWASP Web Top 10 + OWASP LLM Top 10 2025 enforced at every stage
@@ -296,7 +299,7 @@ plugins/
 
 ### Full pipeline — `/multi-agent <task>`
 
-For large features and epics. Runs up to 11 agents (9 core + Tuner + DevOps):
+For large features and epics. Runs up to 12 agents (10 core + Tuner + DevOps):
 
 ```
 DELIVERY SETUP
@@ -307,9 +310,14 @@ DELIVERY SETUP
 PLANNING  (all artifacts keyed under docs/deliveries/{key}/)
   Mary (Analyst)      → {key}/product-brief.md
   John (PM)           → {key}/PRD.md
-  Winston (Architect) → docs/deliveries/delivery-{slug}-{key}.md  (+ api-spec.yaml at repo root)
-  /grill-me           → stress the plan (mandatory) ← human resolves open questions
-  Bob (ScrumMaster)   → {key}/story-{slug}.md per task (ACs + Test Case table = frozen contract)
+  discovery (haiku)   → {key}/codebase-map.md  (what already exists, every entry file:line)
+  Winston (Architect) → docs/deliveries/delivery-{slug}-{key}.md  (+ Reuse Map, + api-spec.yaml at repo root)
+  /grill-me           → stress the plan (mandatory)
+  Priya (PlanReviewer)→ read the plan against the real repo (mandatory, max 2 revision rounds)
+                        PLAN CHANGES REQUIRED → back to Winston · PLAN APPROVED → human
+                        ← human resolves whatever neither could settle
+  Bob (ScrumMaster)   → {key}/story-{slug}.md per task (ACs + Test Case table = frozen contract,
+                        carrying the story's Reuse rows and convention exemplars)
 
 IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree)
   Amelia (Coder)      → impl to spec → write specified tests → falsify each (owns tests + code)  [emits CODER DONE]
@@ -325,6 +333,8 @@ IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree)
 
 REVIEW (parallel — triggered by QA approval only)
   Reviewer            → score X/10  (MINOR/NIT → Tyler)
+                        gets the story + Reuse Map + codebase map, not just the diff —
+                        without them CD1/CD3/CD7 are skipped silently
   StressTester        → score X/10  (optimizations → Tyler)
 
 TUNING (optional — score ≥ 7, MINOR/NIT/optimization only)
@@ -337,13 +347,17 @@ POST-VERDICT (if PRODUCTION READY)
 
 DELIVERY CLOSE (terminal — the pipeline stops here)
   orchestrator        → push release/{slug}-{key} (asks first) → open PR to main
+  /pr-review          → review the whole delivery as ONE diff — the only pass that can see
+                        cross-story duplication — posts inline findings + a Gaps block
+                        (unimplemented ACs · spec drift · missing Test Case rows ·
+                         Reuse Map departures · duplication % · untraced changes)
                         never commits or merges to main; a human merges
                         then /release-management tags the merged main
 ```
 
 ### Fast Pipeline — `/task <task>`
 
-Skips Analyst + PM. Starts directly at Architecture → grill-me plan stress → Decompose into sub-tasks → Implement per sub-task. Same agent protocol (Coder implements to the frozen Test Case table, writes those tests, falsifies each → QA audit loop → QA approval → Reviewer).
+Skips Analyst + PM. Starts at codebase discovery → Architecture → grill-me plan stress → plan review → Decompose into sub-tasks → Implement per sub-task. Same agent protocol (Coder implements to the frozen Test Case table, writes those tests, falsifies each → QA audit loop → QA approval → Reviewer).
 
 ### Progressive Workflow
 
@@ -433,7 +447,7 @@ What are you trying to do?
 
 **Use when:** building a large feature, epic, or new service from scratch.
 
-**What happens:** Runs all 11 agents in sequence. Mary (Analyst) writes a product brief → John (PM) writes a PRD → Winston (Architect) designs the architecture and API spec → **`/grill-me` stresses the plan + human resolves open questions** → Bob (ScrumMaster) decomposes into stories (ACs + Test Case table = frozen contract) → Amelia (Coder) implements to the spec, writes exactly the specified tests, then falsifies each one → Quinn (QA) audits the falsification evidence and runs the gates → Reviewer + StressTester score in parallel → Tyler (Tuner) polishes minor findings → Verdict issues PRODUCTION READY / NOT READY → Ops (DevOps) generates Dockerfile + docker-compose.
+**What happens:** Runs all 12 agents in sequence. Mary (Analyst) writes a product brief → John (PM) writes a PRD → a read-only discovery pass maps what already exists → Winston (Architect) designs the architecture, Reuse Map, and API spec → **`/grill-me` stresses the plan → Priya (Plan Reviewer) reads it against the real codebase → human resolves what neither settled** → Bob (ScrumMaster) decomposes into stories (ACs + Test Case table = frozen contract) → Amelia (Coder) implements to the spec, writes exactly the specified tests, then falsifies each one → Quinn (QA) audits the falsification evidence and runs the gates → Reviewer + StressTester score in parallel → Tyler (Tuner) polishes minor findings → Verdict issues PRODUCTION READY / NOT READY → Ops (DevOps) generates Dockerfile + docker-compose → the PR is opened and `/pr-review` reviews the delivery as one diff, posting findings and the Gaps block.
 
 **Example:**
 ```

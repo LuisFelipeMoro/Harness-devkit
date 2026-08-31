@@ -8,12 +8,12 @@ Every code change outside a pipeline must clear this gate before it counts as do
 ## Contract
 - Input: a working directory with changed files.
 - Output: a gate report (PASS/FAIL per gate), then a Reviewer score (1–10) with structured findings, then a verdict line.
-- Tool boundary: this skill reports and routes; it never auto-fixes failing gates or findings. The Reviewer sees only the changed files, never the full codebase.
+- Tool boundary: this skill reports and routes; it never auto-fixes failing gates or findings. The Reviewer sees the changed files plus whatever existing code a reuse or correctness finding requires it to open — it does not audit the whole codebase.
 - Done when: Phase 3 prints a PASS verdict line, or a BLOCK with the specific finding to fix.
 
 ## Steps
 1. **Phase 1 — Quality Gates.** Invoke the `/quality-gate` skill. If any gate fails, show the failing gate and its error output, stop, surface the fix, and wait for a re-run. Phase 2 begins after every gate is green.
-2. **Phase 2 — Reviewer.** Collect the changed files with the commands in `references/diff-verdict-and-rules.md`, then dispatch the Reviewer subagent — `coding-pipeline:reviewer` (or `reviewer` in a flat `~/.claude/agents` install) — handing it the full content of each changed file, the one-line gate summary, and the original request verbatim (the Reviewer needs it to judge change discipline). The dispatched subagent already carries its Reviewer persona; do not read the agent file into the main context. It covers the Security Deep-Dive checklist, language-specific checks, the test-falsifiability check, and the change-discipline check (CD1–CD7) defined in that reference.
+2. **Phase 2 — Reviewer.** Collect the changed files with the commands in `references/diff-verdict-and-rules.md`, then dispatch the Reviewer subagent — `coding-pipeline:reviewer` (or `reviewer` in a flat `~/.claude/agents` install) — handing it the full content of each changed file, the one-line gate summary (duplication % included), and the original request verbatim (the Reviewer needs it to judge change discipline, and without it CD1/CD3/CD7 are silently skipped). The dispatched subagent already carries its Reviewer persona; do not read the agent file into the main context. It covers the Security Deep-Dive checklist, language-specific checks, **reuse & duplication (RD1–RD6)**, the **principal-engineer design & durability bar (PE1–PE14 — correct → legible → durable → small, every finding naming the future change it makes harder)**, the test-falsifiability check, and the change-discipline check (CD1–CD7).
 3. **Phase 3 — Verdict.** Apply the verdict table in `references/diff-verdict-and-rules.md`: score ≥ 8.0 with no CRITICAL passes; any CRITICAL blocks; below 8.0 surfaces findings for a decision. After any fix, restart from Phase 1.
 
 ## References

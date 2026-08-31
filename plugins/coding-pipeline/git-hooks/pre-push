@@ -55,6 +55,33 @@ jacoco_line_pct() {
 
 echo "→ Full quality gates before push..."
 
+# ── Duplication (all stacks — runs before any per-stack gate) ────────────────
+# Copy-paste is invisible to every other Sensor in this file: a helper
+# reimplemented instead of reused lints clean, types clean and covers clean, then
+# surfaces as rework weeks later. It gets a gate rather than a review nit because
+# no reviewer reads two files at once reliably.
+# jscpd owns the comparison itself (--threshold exits non-zero), so this hook has
+# no percentage to print-but-never-compare — the failure mode the coverage gates
+# above were written to close.
+DUP_MAX="${DEVKIT_DUP_MAX:-3}"
+echo "→ Duplication ≤${DUP_MAX}%"
+if command -v jscpd &>/dev/null; then
+    jscpd_bin="jscpd"
+elif [ -x node_modules/.bin/jscpd ]; then
+    jscpd_bin="node_modules/.bin/jscpd"
+else
+    jscpd_bin=""
+fi
+if [ -n "$jscpd_bin" ]; then
+    # Per-repo tuning (extra ignores, per-language thresholds) belongs in a
+    # committed .jscpd.json — jscpd reads it without this hook knowing.
+    "$jscpd_bin" . --threshold "$DUP_MAX" --min-lines 8 --min-tokens 50 \
+        --ignore "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*" \
+        --reporters console
+else
+    echo "WARN: jscpd not found — duplication UNENFORCED. Install: npm i -g jscpd"
+fi
+
 # Go
 if [ -f go.mod ]; then
     echo "→ Go: tests + race detection"

@@ -62,6 +62,20 @@ the rules were silenced. Any hit = FAIL (rationale + fixes:
 | Vuln | `rtk composer audit` | No vulnerabilities |
 | Coverage | `rtk vendor/bin/phpunit --coverage-text` | ≥ 80% |
 
+## Duplication *(all stacks — language-agnostic, runs regardless of the detected stack)*
+
+**Threshold — single source of truth: ≤ 3%.** Any other file (reviewer.md, scrum-master DoD, the
+pre-push hook, CLAUDE.md) restates it for local context but defers here on conflict.
+
+| Gate | Command | Pass |
+|------|---------|------|
+| Duplication | `rtk jscpd . --threshold 3 --min-lines 8 --min-tokens 50 --reporters console` | ≤ 3% — jscpd exits non-zero itself when the threshold is exceeded |
+
+- **Install**: `npm i -g jscpd` (or as a devDependency — the pre-push hook also accepts `node_modules/.bin/jscpd`).
+- **Tuning belongs in a committed `.jscpd.json`**, which jscpd reads on its own: extra `ignore` globs, per-format thresholds, a `min-lines` suited to the language. Tuning by loosening the hook's flags is not tuning, it is turning the gate off for everyone.
+- **Tool absent = UNENFORCED, not pass.** The pre-push hook WARNs rather than blocking when jscpd is missing (the convention every optional tool here follows — a hook that dies on a fresh machine gets uninstalled, which costs every gate). The Reviewer's hard gate does not have that excuse: an unmeasured duplication figure blocks.
+- **Why it is its own gate**: a perfect duplicate lints clean, types clean, and covers clean. No other Sensor in this file can see it, and no reviewer reliably reads two files at once. It surfaces instead as rework, weeks later.
+
 ## Spec Validation *(run first — only if `api-spec.yaml` exists in project root)*
 
 | Gate | Command | Pass |
@@ -90,6 +104,7 @@ See `references/spec-driven-reference.md` for `.spectral.yaml` template, annotat
 | `eslint` detect-object-injection | User input in bracket notation | `Object.prototype.hasOwnProperty.call(obj, key)` |
 | `cargo clippy` | `unwrap()` in prod | `?` or `match` |
 | Coverage below threshold | Untested paths | Table-driven tests for every error path |
+| `jscpd` above 3% | Copy-pasted block | Extract to the existing helper the Reuse Map named — never a new abstraction invented to absorb the copies (CD2) |
 
 ---
 
