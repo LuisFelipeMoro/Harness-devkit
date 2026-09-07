@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.5.1] — 2026-09-07
+
+### Fixed
+
+- **`destructive-guard` treated every remote ref deletion as a branch deletion.** Deleting a remote
+  tag tripped the branch-deletion block, which surfaced while cutting v2.5.0: the guard refused a
+  legitimate tag cleanup, and working around it would have defeated the point of having it. The two
+  are different risks — a deleted branch can take unmerged commits with it, while a deleted tag is
+  recovered by re-tagging the same SHA.
+
+  Tag deletion is now allowed only when every deleted ref is spelled out as `refs/tags/`. The
+  explicit form is the operator stating intent, so the ambiguous shorthands stay blocked: `-d`,
+  `--delete <name>` and `:<name>` all still fail, as does any refspec touching `refs/heads/` —
+  including a mixed push that would delete a tag and a branch together. Falsified by reverting the
+  guard and observing the two allow-cases turn red. Hook tests: 42, up from 37.
+
 ## [2.5.0] — 2026-09-07
 
 Two sources: the GopherCon Latam 2026 workshop material (concurrency + modern Go testing) and the
