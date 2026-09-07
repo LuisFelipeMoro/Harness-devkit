@@ -41,7 +41,18 @@ if [ -n "$push_seg" ]; then
         block "force-push via a + refspec. A delivery ends in a PR, never a rewritten remote branch."
     fi
     if printf '%s' "$push_seg" | grep -qE '(^|[[:space:]])(--delete|-d)([[:space:]]|$)|[[:space:]]:[A-Za-z0-9_./-]+'; then
-        block "remote branch deletion."
+        # Tag deletion is its own case. A deleted remote branch can take unmerged
+        # commits with it; a deleted tag is recovered by re-tagging the same SHA.
+        # It is allowed only when every deleted ref is spelled out as refs/tags/ —
+        # the explicit form is the operator stating intent, and it leaves every
+        # ambiguous shorthand (-d, --delete <name>, :<name>) blocked as before.
+        refspecs=$(printf '%s' "$push_seg" | grep -oE '(^|[[:space:]]):?refs/(tags|heads)/[A-Za-z0-9_./-]+' | wc -l | tr -d ' ')
+        tagspecs=$(printf '%s' "$push_seg" | grep -oE '(^|[[:space:]]):?refs/tags/[A-Za-z0-9_./-]+' | wc -l | tr -d ' ')
+        if [ "$tagspecs" -gt 0 ] && [ "$tagspecs" -eq "$refspecs" ]; then
+            :   # explicit remote tag deletion — allowed
+        else
+            block "remote branch deletion. To delete a remote tag, spell it out: git push origin :refs/tags/<name>"
+        fi
     fi
 fi
 
