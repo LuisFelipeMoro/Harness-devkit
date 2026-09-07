@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Use when auditing code for security issues. Runs OWASP Web Top 10 (2025) checklist and — if AI/GenAI components present — OWASP LLM Top 10 (2025). Produces severity-tagged findings with file:line evidence.
+description: Use when auditing code for security issues. Runs OWASP Web Top 10 (2025) checklist and — if AI/GenAI components present — OWASP LLM Top 10 (2025). Produces severity-tagged findings with file:line evidence. Trigger phrases — "security", "audit", "vulnerability", "OWASP", "pen test", "check for issues", "prompt injection", "LLM security", "LLM01", "AI security", "GenAI risk", "is this safe", "threat model", "CVE", "auth bypass", "injection".
 ---
 
 # Security Review

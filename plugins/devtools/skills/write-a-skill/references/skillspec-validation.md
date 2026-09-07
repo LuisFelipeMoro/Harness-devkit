@@ -12,7 +12,7 @@ skillspec doctor plugins/<plugin>/skills/<name>     # human-readable findings + 
 skillspec doctor plugins/<plugin>/skills/<name> --markdown   # report to a file
 ```
 
-If `skillspec` is not installed, say so explicitly and skip — do not claim it passed.
+If `skillspec` is not installed or cannot execute, say so explicitly and skip — do not claim it passed. Fall back to `.github/scripts/validate-wiring.py`.
 
 ## Findings and how to fix them
 

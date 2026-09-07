@@ -71,6 +71,10 @@ for the right reason?* Flag as a gap when:
   canonical input format, with no row for the format the real caller actually passes
   (display-formatted, masked, whitespace-padded). Green suite, dead function in production —
   see `references/frontend-hardening-reference.md` §4.
+- **Timing-coupled test**: correctness depends on wall-clock duration (a real `sleep`, a bare
+  timeout, "wait 200ms and check"). It proves the machine was fast enough, not the behaviour.
+- **Probabilistic failure injection**: a stub that fails on a random draw. Non-reproducible, so a
+  red run can never become a committed regression test.
 
 **A tautological test is a MAJOR finding and caps QA Score at 4** — the same weight as a
 failing gate. Coverage earned by tautologies is worse than no coverage: it reports safety
@@ -88,7 +92,7 @@ Demand explicit tests (not just the nominal case) for each input the AC touches:
 - The adversarial inputs in the Security Test Cases table for every security AC.
 
 ### 4. Test quality & optimization
-- **Determinism**: no order dependence, no real sleeps, no real network/clock — flaky tests are a gap.
+- **Determinism**: no order dependence, no real network/clock — flaky tests are a gap.
 - **One reason to fail per test**: split tests asserting unrelated behaviours.
 - **Intent-revealing names** + arrange/act/assert structure; table-driven for input matrices.
 - **No redundancy**: many tests exercising the identical path while a branch sits untested → request the missing branch, suggest collapsing the duplicates.

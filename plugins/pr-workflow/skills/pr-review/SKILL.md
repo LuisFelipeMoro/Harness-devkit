@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a GitHub pull request and post severity-tagged inline comments with file:line evidence. Use when asked to review a PR or code-review a diff, or when the post-push hook surfaces open PR comments. Produces an OWASP + language-standards + test-quality + change-discipline review and a verdict.
+description: Review a GitHub pull request and post severity-tagged inline comments with file:line evidence. Use when asked to review a PR or code-review a diff, or when the post-push hook surfaces open PR comments. Produces an OWASP + language-standards + test-quality + change-discipline review and a verdict. Trigger phrases — "review PR", "check PR", "PR comments", "code review", "review this diff", "address review comments", "look at the pull request".
 ---
 
 # PR Review
@@ -16,8 +16,6 @@ Fetch a PR diff, audit it against a fixed checklist, post severity-tagged inline
 **Dependencies** (verify before starting):
 - `gh` — GitHub CLI, authenticated; used to read the diff and post the review.
 - `git` — to resolve the current branch when no PR number is supplied.
-
-Machine-checkable behavior contract: `skill.spec.yml` (routes, dependencies, closure, trace).
 
 ## Steps
 

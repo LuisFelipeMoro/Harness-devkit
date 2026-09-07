@@ -1,6 +1,6 @@
 ---
 name: rote
-description: 'Use rote BEFORE calling any MCP server or CLI tool directly. rote wraps installed adapters (MCP servers and CLI-based tools) and adds flow reuse, response caching, and crystallized workflows. Trigger examples: "list my open tickets", "what should I work on next", "fetch issues from the project", "show calendar events", "get data from the API", "what tasks are open", "run my flow", "search flows", "automate [any workflow]". Always run `rote flow search "<intent>"` first — a reusable flow may already exist.'
+description: 'rote wraps installed adapters (MCP servers and CLI-based tools) and adds flow reuse, response caching, and crystallized workflows — used in place of calling an MCP server or CLI tool directly. Trigger examples: "list my open tickets", "what should I work on next", "fetch issues from the project", "show calendar events", "get data from the API", "what tasks are open", "run my flow", "search flows", "list adapters", "use existing integration", "what flows do I have", "automate [any workflow]".'
 ---
 
 Claude and the rote CLI are a pair: Claude discovers + executes via the skill; the CLI crystallizes + replays. Every successful Claude operation becomes a reusable CLI flow. Every CLI-crystallized flow is available to Claude on next invocation.

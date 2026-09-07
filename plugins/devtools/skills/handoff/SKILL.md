@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: 'Use when ending a long session or switching context. Compacts the conversation into a structured handoff document saved to /tmp. Trigger phrases: "handoff", "wrap up", "end session", "save context", "create handoff", "compact this session", "summarize for next session".'
+description: 'Use when ending a long session or switching context. Compacts the conversation into a structured handoff document saved to /tmp. Trigger phrases: "handoff", "wrap up", "end session", "save context", "create handoff", "compact this session", "summarize for next session", "update progress", "done for today".'
 ---
 
 Compact the conversation into a single, standalone handoff document. Save to `/tmp/handoff-<YYYY-MM-DD-HHMMSS>.md`. Print the path and a 3-line summary.
@@ -18,6 +18,8 @@ Also update the Harness memory file: write/refresh `PROGRESS.md` at the repo roo
   the session's most durable output. Nothing learned this session is the only valid reason to omit it.
 - The Suggested skills section is mandatory — it helps the next session start with the right tool
 - If arguments provided, tailor the document toward that next-session objective
+- **Editorial pass, not a gate**: before saving, run the handoff document and the `PROGRESS.md`
+  entries it writes past `coding-pipeline/references/prose-standards.md` on demand.
 
 ## Document format
 
