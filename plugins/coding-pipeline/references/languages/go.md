@@ -64,7 +64,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | `errgroup` context | Each `g.Go` closure uses `gctx`, never the outer `ctx` — passing the outer one silently disables first-error cancellation |
 | Atomics | `sync/atomic` for a single `Add`/`CompareAndSwap`/`Swap` only; `Load` then `Store` is a TOCTOU that looks synchronised and is not |
 | Non-blocking ops | `select` with `default` when a send or receive must not block, and the dropped value is a stated decision, not an accident |
-| Generators | Range-over-function iterator over a goroutine-plus-channel generator when the goal is "yield all values" — a channel alone has no lifecycle and no close |
+| Generators | Range-over-function iterator over a goroutine-plus-channel generator when the goal is "yield all values" — the iterator has no goroutine lifecycle to manage and no channel to close |
 
 ## Concurrency Tool Fit *(CD2 for concurrency — right tool per problem, no speculative primitive)*
 | Problem | Right Tool | Overengineering Signal |

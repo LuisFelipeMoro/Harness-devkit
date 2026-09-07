@@ -163,15 +163,29 @@ for pdir in declared.values():
 routing_md = os.path.join(ROOT, "plugins", "coding-pipeline", "CLAUDE.md")
 if os.path.isfile(routing_md):
     text = read(routing_md)
+    # Both anchors are prose and can be reworded. If either moves, this check would
+    # otherwise scan an empty string and pass while verifying nothing — so a miss is
+    # an error, not a silent skip.
     m = re.search(r"## Pipeline & Skills.*?\n(.*?)\n\*\*Rule\*\*:", text, re.S)
+    if not m:
+        err("routing", rel(routing_md), "routing table not found (section heading or '**Rule**:' anchor changed) — this check verified nothing")
     table_block = m.group(1) if m else ""
-    for name in sorted(set(re.findall(r"`/([a-z0-9][a-z0-9-]*)`", table_block))):
+    routed = sorted(set(re.findall(r"`/([a-z0-9][a-z0-9-]*)`", table_block)))
+    if m and not routed:
+        err("routing", rel(routing_md), "routing table matched but lists no skills — table shape changed")
+    for name in routed:
         checked["routing"] += 1
         if name not in all_skill_names:
             err("routing", rel(routing_md), f"routed skill '/{name}' has no matching skills/{name}/SKILL.md")
 
 # ── 6. every skill description carries at least one trigger phrase ──────────
-DESC_FIELD = re.compile(r"^description:\s*(.*)$", re.M)
+# Captures a folded/multi-line YAML description too: continuation lines are indented,
+# so keep consuming them. A first-line-only match would report a valid skill as having
+# no trigger phrase whenever its description wraps.
+DESC_FIELD = re.compile(r"^description:[ \t]*(.*(?:\n[ \t]+\S.*)*)$", re.M)
+# A floor, not a guarantee: this proves a quoted string is present, not that it is a
+# routing trigger. `grill-me` quotes "done"/"enough", which are stop-words. Tightening
+# it means deciding what counts as a trigger, which is a judgement call, not a regex.
 QUOTED_PHRASE = re.compile(r'"[^"]+"')
 for name, pdir in declared.items():
     sdir = os.path.join(pdir, "skills")
