@@ -1,6 +1,6 @@
 ---
 name: grill-me
-description: 'Use when stress-testing a plan, design, or architectural decision before committing to it. Asks one hard question at a time with a concrete recommendation. Stops when user says "done" or "enough". Trigger phrases: "grill me", "challenge this", "stress-test", "poke holes", "pick this apart", "interview me about".'
+description: 'Use when stress-testing a plan, design, or architectural decision before committing to it. Asks one hard question at a time with a concrete recommendation. Stops when user says "done" or "enough". Trigger phrases: "grill me", "challenge this", "stress-test", "poke holes", "pick this apart", "interview me about", "find gaps in my plan", "what am I missing", "red team this".'
 ---
 
 Interview relentlessly about every aspect of this plan until reaching shared understanding. Walk down each branch of the decision tree, resolving dependencies one by one. For each question, provide a concrete recommendation.

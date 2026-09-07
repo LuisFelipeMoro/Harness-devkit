@@ -1,6 +1,6 @@
 ---
 name: performance-profiling
-description: Investigate performance issues in Go services with pprof setup, profile capture, an analysis workflow, and common optimizations. Trigger phrases — "performance", "slow", "profiling", "optimize", "latency", "pprof", "benchmark", "bottleneck", "high CPU", "memory leak".
+description: Investigate performance issues in Go services with pprof setup, profile capture, an analysis workflow, and common optimizations. Trigger phrases — "performance", "slow", "profiling", "optimize", "latency", "throughput", "memory leak", "high CPU", "pprof", "benchmark", "bottleneck", "p99".
 ---
 
 Optimization must never change behaviour: a characterization test pins the current output before any change and must stay GREEN through every optimization. The pprof endpoint must stay on an internal port, never a public one.

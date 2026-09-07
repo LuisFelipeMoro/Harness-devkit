@@ -194,8 +194,9 @@ Rules:
    there. No release branch, no story branches on top of one.
 5. **A PR to `main` may only be opened from a `release/*` or `hotfix/*` branch.** Never from a story
    branch, never from a detached worktree HEAD. Story PRs target the release branch and nothing else.
-6. **Opening a PR is the last automated step of its stage.** Report the URL and stop. Do not merge,
-   do not enable auto-merge, and never push to `main`.
+6. **Every PR opens as a draft.** Promote with `gh pr ready` only after the reviewer pass on it
+   returns no findings; opening or promoting is the last automated step of its stage either way.
+   Report the URL and stop. Do not merge, do not enable auto-merge, and never push to `main`.
 
 ### Commands
 
@@ -206,17 +207,18 @@ git checkout -b "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
 
 # story done (Verdict passed) — its own PR, reviewed against its own spec
 git push -u origin "feat/${DELIVERY_KEY}-${STORY_SLUG}"
-gh pr create --base "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
+gh pr create --draft --base "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
   --head "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
   --title "${STORY_SLUG}" --body "Delivery-Key: ${DELIVERY_KEY} · Story: ${STORY_SLUG} …"
-# → run /pr-review on it, then merge into the release branch once green
+# → run /pr-review on it; no findings → gh pr ready, then merge into the release branch once green
 git checkout "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
 git merge --no-ff "feat/${DELIVERY_KEY}-${STORY_SLUG}"
 
 # delivery done — the terminal step
 git push -u origin "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
-gh pr create --base main --head "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
+gh pr create --draft --base main --head "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
   --title "{Feature Name}" --body "Delivery-Key: ${DELIVERY_KEY} …"
+# → run /pr-review on it; no findings → gh pr ready
 ```
 
 Ask before the first `git push` of a delivery — it is the first outward-facing action, and the

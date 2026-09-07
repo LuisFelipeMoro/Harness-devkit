@@ -1,6 +1,6 @@
 ---
 name: code-review-gate
-description: Gate and review any code generated outside a full pipeline (inline spec-first sessions, direct edits, ad-hoc fixes) by clearing all quality gates and then routing to the Reviewer agent. Gates must pass before the Reviewer runs. Trigger phrases — "gate and review", "pre-push check", "ready to push", "sign off my code", "check before PR", "review my changes", "done coding".
+description: Gate and review any code generated outside a full pipeline (inline spec-first sessions, direct edits, ad-hoc fixes) by clearing all quality gates and then routing to the Reviewer agent. Gates must pass before the Reviewer runs. Trigger phrases — "gate and review", "pre-push check", "ready to push", "sign off my code", "check before PR", "review my changes", "done coding", "is my code ready".
 ---
 
 Every code change outside a pipeline must clear this gate before it counts as done. Gates must be green before the Reviewer runs, and a CRITICAL security finding always blocks.

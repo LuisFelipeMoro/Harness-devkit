@@ -37,7 +37,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Error inspection | `errors.Is` / `errors.As` — never string-match an error message |
 | Types | Concrete types or generics `[T any]` — never `interface{}` / `any` in a signature |
 | Layout | `cmd/` (main only) · `internal/` · `business/` · `foundation/` |
-| Dependencies | Stdlib first; then `go.uber.org/zap` · `testify` · `golang.org/x/sync` · `ardanlabs/conf/v3` |
+| Dependencies | Stdlib first — an external package earns its place only by being dramatically simpler, an existing project choice, or already in use; allowlist: `go.uber.org/zap` · `testify` · `golang.org/x/sync` · `ardanlabs/conf/v3` |
 | Package names | Lowercase single word — no `utils` / `helpers` / `common` |
 | Zero values | Design types so the zero value is safe and usable without a constructor |
 | `init()` | Avoid unless unavoidable; never in a library package |
@@ -51,9 +51,30 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Cancellation | Honour `ctx.Done()` in any loop that can run long; `select` on it alongside the work channel |
 | Groups | `errgroup.WithContext` for fan-out — first error cancels the rest; a bare `WaitGroup` with a shared `err` variable is a data race |
 | Channels | Direction in the signature (`<-chan T`, `chan<- T`); the sender closes, never the receiver; a nil channel in a `select` is a deliberate disable, not an accident |
-| Mutexes | `sync.Mutex` by value in the struct it guards, never embedded (it publishes `Lock` on the type); the guarded fields sit directly under it with a comment naming what it protects |
+| Mutexes | `sync.Mutex` by value in the struct it guards, never embedded (it publishes `Lock` on the type); guarded fields sit directly under it with a comment naming what it protects — the hat guards only those fields, so two lock domains need two mutexes |
 | Unbounded work | A goroutine per request is a capacity decision — bound it with a worker pool or a semaphore before it is a production incident |
-| Leak detection | `goleak.VerifyTestMain` in packages that spawn goroutines; a leak that only shows under load is a leak nobody debugs |
+| Leak detection | `goleak.VerifyTestMain` in packages that spawn goroutines; a leak that only shows under load is a leak nobody debugs. A type exposing `Stop` must prove it releases goroutines — sample the leak profile before/after (`runtime.Gosched()` first) where available, else `goleak`; `Stop` is close-once (`sync.Once`) plus drain, never fire-and-forget |
+| Transaction races | Check-and-act is one critical section; releasing the lock between the check and the mutation is TOCTOU — every access is synchronised and `-race` still passes |
+| Lock ordering | Two locks acquired in one operation are ordered by a stable id, the same order on every path |
+| Mutex across I/O | Lock, snapshot, unlock, then do I/O — never hold a mutex across a network or disk call |
+| Escaping references | Return `slices.Clone(...)`, never a slice or pointer backed by a guarded field (`buf.Bytes()` included) |
+| `Locked` suffix | A helper that assumes the lock is already held is named `…Locked` and carries `// +checklocks:mu` |
+| Channel capacity | A result channel is buffered to the number of senders, so a loser can deposit and exit instead of leaking |
+| `defer` placement | Written on the line after acquisition, never at the end of the function; `defer wg.Done()` goes inside the goroutine closure |
+| `errgroup` context | Each `g.Go` closure uses `gctx`, never the outer `ctx` — passing the outer one silently disables first-error cancellation |
+| Atomics | `sync/atomic` for a single `Add`/`CompareAndSwap`/`Swap` only; `Load` then `Store` is a TOCTOU that looks synchronised and is not |
+| Non-blocking ops | `select` with `default` when a send or receive must not block, and the dropped value is a stated decision, not an accident |
+| Generators | Range-over-function iterator over a goroutine-plus-channel generator when the goal is "yield all values" — the iterator has no goroutine lifecycle to manage and no channel to close |
+
+## Concurrency Tool Fit *(CD2 for concurrency — right tool per problem, no speculative primitive)*
+| Problem | Right Tool | Overengineering Signal |
+|---|---|---|
+| Fan out N tasks, collect first error | `errgroup` | No goroutine returns an error — use `WaitGroup` |
+| Shared mutable state, simple read/write | Mutex | Actor where a mutex suffices |
+| One computation, many callers, same input | Promise/memo | — |
+| Staged work, genuinely different bottlenecks | Pipeline | Trivial stages — channel cost exceeds the work |
+| Async access or access priorities | Actor | — |
+| Wait for N goroutines, no errors | `WaitGroup` | Goroutines used for inherently sequential work |
 
 ## Security *(Go-specific — the general OWASP list is in `reviewer.md`)*
 | Risk | Requirement |
@@ -86,7 +107,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Defer | Not inside a hot loop — it accumulates until return; scope it with an inner function or call cleanup explicitly |
 | Interfaces | Accept interfaces, return concrete types; an interface return forces an allocation and hides the real type from the caller |
 | Copies | Range by index (or `for i := range`) when the element is large; `for _, v := range` copies every element |
-| Measurement | A performance claim without a `testing.B` benchmark or a pprof profile is an opinion (see `/performance-profiling`) |
+| Measurement | A performance claim without a `testing.B` benchmark or a pprof profile is an opinion (see `/performance-profiling`); a single run is one sample — compare `-count=10` via `benchstat` |
 
 ## Testing Idiom
 | Rule | Requirement |
@@ -96,8 +117,27 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Helpers | `t.Helper()` in every assertion helper so the failure points at the caller's line |
 | HTTP | `httptest.Server` / `httptest.NewRecorder` — never a real network call in a unit test |
 | Golden files | Regenerated behind a `-update` flag, and reviewed as part of the diff — a golden file nobody read is a snapshot of a bug |
-| Fuzzing | `func FuzzX` for any parser, decoder, or input-validation boundary |
+| Fuzzing | `func FuzzX` for any parser, decoder, or input-validation boundary. Seeds cover empty/zero, a valid representative, and boundary/Unicode/NUL inputs; out-of-domain input is `t.Skip`, never `t.Error`; panic-safety and property targets are separate functions; crash files under `testdata/fuzz/` are committed |
 | Race | `-race` on every package, every run — a race that only CI catches is a race that already shipped |
+| No sleeps | `time.Sleep` never drives test correctness — it couples the assertion to wall time. Virtual time or an injected clock only (see Toolchain Capability table) |
+| Test context | Cancel before cleanup runs — `T.Context()` where available, else `context.WithCancel` + `t.Cleanup` in that order |
+| Cleanup registration | `t.Cleanup` registered the line after acquisition — a `t.Fatal` before a late registration skips it entirely |
+| Benchmarks | `b.Loop()` over `b.N` where available (setup work becomes structurally unmeasurable); `b.ReportAllocs()` always; a sub-benchmark per access pattern |
+| Contract tests | `fstest.TestFS` for every `fs.FS`; `iotest.TestReader` for every `io.Reader` — a conditional inside a contract test means the implementation is wrong |
+| Failure injection | Deterministic stub field (`syncErr error`), never a random draw; assert the error and that no partial state survived |
+| Stub scope | State the stub's boundary in a comment — an in-memory stub proves in-memory visibility, not durability or replay safety |
+| Artifacts | Diagnostic files never go to the source tree — `T.ArtifactDir()` where available, else `t.TempDir()` |
+
+## Toolchain Capability Table *(detect a capability before naming its API — a version number rots silently, an exit code doesn't)*
+| Capability | Detect With | If Absent, Use |
+|---|---|---|
+| Virtual-time testing | `go doc testing/synctest` | Injected clock interface (`Now`/`After`) |
+| Test-scoped context | `go doc testing.T.Context` | `context.WithCancel` + `t.Cleanup`, cancel before cleanup |
+| Allocation-safe benchmark loop | `go doc testing.B.Loop` | `b.N` with `b.ResetTimer()` after setup |
+| Leak profile | `go doc runtime/pprof` (look for `goroutineleak`) | `goleak.VerifyTestMain` |
+| Test artifact dir | `go doc testing.T.ArtifactDir` | `t.TempDir()` |
+
+Confirm the spelling of any API in this table against live docs via context7 before use — the context7 rule above applies here too, and `synctest`'s own spelling has already changed once.
 
 ## Module and Build Hygiene
 `go mod tidy` clean before handoff · dependencies pinned in `go.sum` (committed) · `-trimpath` on release builds · build tags for integration tests (`//go:build integration`) so the default `go test ./...` stays fast and hermetic · `//go:embed` over runtime file reads for static assets · `internal/` for anything not deliberately public — an exported symbol outside `internal/` is a compatibility promise.
@@ -149,6 +189,12 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Test without `t.Parallel()` where nothing prevents it, or an assertion helper missing `t.Helper()` | NIT |
 | Parser or decoder boundary with no fuzz target | MINOR |
 | Package spawning goroutines with no `goleak` verification | MINOR |
+| `time.Sleep` in a test | MAJOR |
+| Probabilistic (random-draw) failure injection in a test | MAJOR |
+| `fs.FS` or `io.Reader` implementation with no contract test | MINOR |
+| Benchmark missing `b.ReportAllocs()` | NIT |
+| Performance claim from a single benchmark run, no `benchstat -count=10` | MINOR |
+| Concurrency primitive heavier than the problem (actor for guarded state, pipeline with trivial stages, errgroup with no errors) | MINOR |
 | `go mod tidy` not clean | MINOR |
 | coverage < 85% | BLOCK (score ≤ 5) |
 

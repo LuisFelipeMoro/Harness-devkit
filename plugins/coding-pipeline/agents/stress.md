@@ -49,10 +49,11 @@ Near-exhaustion behavior at 95% heap / FD limit: crash, reject, or degrade?
 
 - **Shared mutable state**: global/singleton mutated from multiple goroutines/threads without lock → CRITICAL
 - **TOCTOU**: read-then-write on shared resource without atomic operation (e.g. cache miss → compute → write race)
+- **Data race vs transaction race**: a data race is unsynchronised concurrent access — `-race` catches it. A **transaction race** is not: every individual access is synchronised, but the *sequence* across two or more synchronised operations is wrong (check-then-act split into separate critical sections). `-race` passing is not evidence against this class — it was never built to see it.
 - **100 concurrent requests on same resource ID**: final state consistent?
 - **Partial fan-out failure**: if 1 of N parallel calls fails, are others cancelled and cleaned up?
 
-Language risks: **Java** — `HashMap`/`ArrayList` from multiple threads without `synchronized`/`ConcurrentHashMap`, double-checked locking without `volatile`, thread starvation via priority inversion · **JS** — shared mutable objects mutated across `await` boundaries, `Promise.allSettled` vs `Promise.all` under partial failure, timers firing after context destruction · **PHP** — concurrent writes to same session file, races on shared filesystem state · **Go** — map read/write race (must pass `go test -race`), closing channel while goroutine may still send, defer order in cleanup paths
+Language risks: **Java** — `HashMap`/`ArrayList` from multiple threads without `synchronized`/`ConcurrentHashMap`, double-checked locking without `volatile`, thread starvation via priority inversion · **JS** — shared mutable objects mutated across `await` boundaries, `Promise.allSettled` vs `Promise.all` under partial failure, timers firing after context destruction · **PHP** — concurrent writes to same session file, races on shared filesystem state · **Go** — map read/write race (must pass `go test -race`), closing channel while goroutine may still send, defer order in cleanup paths, mutex held across I/O, two-lock operation with no stable acquisition order, unbuffered channel plus timeout leaking the sender
 
 ## 4. Adversarial Inputs
 

@@ -775,7 +775,7 @@ or with focus area:
 
 **Use when:** adding a new slash command to the devkit.
 
-**What happens:** Scaffolds the skill file with correct frontmatter, phase structure, input/output/boundary definitions, and mirrors it to `~/.claude/skills/`. Follows the same structure as existing skills. Before declaring the skill done, it runs the new skill through [SkillSpec](https://github.com/modiqo/skillspec) `doctor` and adapts the `SKILL.md` for any actionable finding (frontmatter, implicit dependencies, dense activation body, late obligations).
+**What happens:** Scaffolds the skill file with correct frontmatter, phase structure, input/output/boundary definitions, and mirrors it to `~/.claude/skills/`. Follows the same structure as existing skills. Before declaring the skill done, it runs the new skill through [SkillSpec](https://github.com/modiqo/skillspec) `doctor` and adapts the `SKILL.md` for any actionable finding (frontmatter, implicit dependencies, dense activation body, late obligations). When `skillspec` is not installed **or cannot execute** on the host, it says so and falls back to `.github/scripts/validate-wiring.py` — a shallower check that verifies wiring and trigger-phrase presence, not behavior contracts.
 
 **Example:**
 ```
@@ -816,7 +816,7 @@ or with focus area:
 
 ---
 
-> Claude routes to the correct skill automatically when your message matches a trigger phrase. You can also invoke any skill explicitly by name. See `CLAUDE.md` for the full routing table.
+> Claude routes to the correct skill automatically when your message matches one of its trigger phrases. You can also invoke any skill explicitly by name. Each skill's own `description` is the single source of truth for its trigger phrases; `CLAUDE.md` carries the task-to-skill routing table.
 
 ---
 
@@ -829,6 +829,9 @@ or with focus area:
 - **Zero error discards** — `_ =` or `_ :=` on errors is a hard block
 - Wrap all errors: `fmt.Errorf("doing X: %w", err)` — never bare `return err`
 - `swaggo/swag` annotations required on every HTTP handler
+- **Transaction races**, not just data races — check-and-act split across two critical sections passes `-race` and still corrupts state. Also: lock ordering by stable id, no mutex held across I/O, clone before returning guarded state, result channels buffered to sender count
+- **No `time.Sleep` in tests** — virtual time where the toolchain provides it, an injected clock otherwise. Deterministic failure stubs, never probability
+- Toolchain capabilities are **detected, not versioned**: rules name a `go doc` check and a fallback, because a version number in a rules file rots silently
 
 ### TypeScript
 - `strict: true` in tsconfig; no `any` on public API or HTTP boundaries

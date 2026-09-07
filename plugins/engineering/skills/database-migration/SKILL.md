@@ -1,6 +1,6 @@
 ---
 name: database-migration
-description: Write or review a database migration safely with additive-only forward changes, a mandatory reversible down migration, zero-downtime patterns for large tables, and lock-acquisition analysis. Trigger phrases — "migration", "schema change", "add column", "alter table", "add index", "backfill", "drop column", "rename column".
+description: Write or review a database migration safely with additive-only forward changes, a mandatory reversible down migration, zero-downtime patterns for large tables, and lock-acquisition analysis. Trigger phrases — "migration", "db migration", "schema change", "add column", "alter table", "add index", "backfill", "drop column", "rename column", "DDL".
 ---
 
 A migration must be additive-only in one file, must ship a down migration that fully reverses the up, and must never drop-and-replace or rename a column directly. Any DDL on a table over 1M rows must carry a lock strategy.

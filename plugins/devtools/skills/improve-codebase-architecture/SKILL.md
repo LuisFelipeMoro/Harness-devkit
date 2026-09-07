@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: 'Use when deepening architectural quality of a codebase. Finds coupling, boundary violations, missed abstractions, and SRP failures. Produces HTML report in /tmp. Offers ADRs and grilling loop. Trigger phrases: "improve architecture", "architectural review", "find coupling", "refactor architecture", "codebase health", "zoom out", "architectural debt".'
+description: 'Use when deepening architectural quality of a codebase. Finds coupling, boundary violations, missed abstractions, and SRP failures. Produces HTML report in /tmp. Offers ADRs and grilling loop. Trigger phrases: "improve architecture", "architectural review", "find coupling", "refactor architecture", "codebase health", "zoom out", "architectural debt", "tech debt audit".'
 ---
 
 Report findings only — never fix in this skill. Each finding includes severity, location, and a concrete recommendation.

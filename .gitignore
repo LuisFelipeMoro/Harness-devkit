@@ -38,3 +38,6 @@ SKILLSPEC-REPORT.md
 # Python bytecode from local validator/test runs
 __pycache__/
 *.pyc
+
+# Delivery planning docs (local working artifacts — not shipped)
+/docs/
