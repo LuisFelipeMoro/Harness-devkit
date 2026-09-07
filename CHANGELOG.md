@@ -1,5 +1,101 @@
 # Changelog
 
+## [2.5.0] — 2026-09-07
+
+Two sources: the GopherCon Latam 2026 workshop material (concurrency + modern Go testing) and the
+`skill-optimizer` standard from the skills.danicat.dev catalogue.
+
+### Added
+
+- **Go concurrency rules for the defects `-race` cannot see.** Transaction races (check-and-act
+  split across two critical sections), lock ordering by stable id, never holding a mutex across
+  I/O, cloning before returning references to guarded state, the `Locked` suffix with
+  `+checklocks`, result channels buffered to sender count, `defer` placed at acquisition,
+  `errgroup` closures using `gctx` rather than the outer context, and atomics limited to a single
+  read-modify-write. A data race is caught by the race detector; a transaction race has every
+  access synchronised and the sequence wrong, so a green `-race` run is not evidence against it.
+
+- **A `Concurrency Tool Fit` table** naming the right primitive per problem and the
+  overengineering signals — an actor where a mutex suffices, a pipeline whose stages relay values,
+  `errgroup` where no goroutine returns an error. This is CD2 expressed in Go primitives, wired to
+  one MINOR review flag.
+
+- **Modern Go testing rules**: no `time.Sleep`, test-scoped contexts, cleanup registered at
+  acquisition, `b.Loop` with `b.ReportAllocs()`, `benchstat` over `-count=10` runs rather than
+  eyeballed single runs, fuzz corpus discipline (diverse seeds, `t.Skip` for out-of-domain input,
+  panic-safety separated from property targets, committed crash files), `fstest.TestFS` and
+  `iotest.TestReader` contract tests, deterministic failure stubs, and goroutine-leak assertions
+  around a close-once-plus-drain `Stop`.
+
+- **A toolchain capability table in `go.md`, carrying no version numbers.** Each rule states its
+  invariant; the mechanism is selected by a `go doc` detection command with a named fallback. Three
+  of the five version claims in the source material were wrong — `T.Context` is Go 1.24 rather than
+  1.21, `T.ArtifactDir` is 1.26 rather than 1.24, and `synctest.Run` was the 1.24 experimental
+  spelling, replaced by `synctest.Test` at GA in 1.25 and removed in 1.26. A rule naming
+  `synctest.Run` today produces code that does not compile. An exit code does not rot the way a
+  version number does.
+
+- **`references/prose-standards.md`** — a nine-row catalogue of AI tells for agent-authored prose,
+  run as an editorial pass by `/handoff` and `/release-management` and carried as one NIT row in
+  the Reviewer. It applies to docs, PR bodies and CHANGELOG entries, never to code comments, which
+  the stricter why-not-what rule already governs. It is not a gate: prose quality has no exit code.
+
+- **`allowed-tools` on the two genuinely read-only skills**, `checkcomments` and `quality-gate`,
+  both scoped to `[Bash]` since each shells out without mutating state. `technical-analysis` and
+  `business-analysis` were considered and excluded — both write an HTML file, so annotating them
+  read-only would have broken their contracts.
+
+- **Two wiring checks in `validate-wiring.py`**: every skill named in the routing table resolves to
+  a real skill, and every skill description carries at least one trigger phrase. Both were verified
+  by breaking them, observing the failure, and restoring.
+
+### Changed
+
+- **Trigger phrases now live in one place.** They were stored twice — the routing table in
+  `CLAUDE.md` and each `SKILL.md` description — and all 23 pairs disagreed. Nine skills carried
+  zero phrases in their own description while the routing table listed 5 to 16 each, so
+  `security-review` was reachable by "threat model", "auth bypass" and "CVE" only through a file
+  that skill discovery never reads. Descriptions are now the source of truth and the routing table
+  lists task to skill, which removes roughly 940 tokens from every session in every project.
+
+- **Sleep-based tests now block.** `qa.md` stated "no real sleeps" inside a non-blocking test-quality
+  section. That clause moved into the blocking audit block as **timing-coupled test**, so one rule
+  owns the defect at one severity. **This fails suites that pass today** — a test whose correctness
+  depends on wall-clock duration proves the machine was fast enough, and that is the flakiness this
+  Harness keeps paying for. Probabilistic failure injection joins it as a blocking finding.
+
+- **Every PR opens as a draft** and is promoted with `gh pr ready` once its review returns no
+  findings, on both the delivery path and the hotfix path. On the hotfix path promotion is gated on
+  the existing single review pass; that pass was not converted into a loop.
+
+### Fixed
+
+- **`write-a-skill` required a tool that cannot run.** It made SkillSpec a completion condition and
+  allowed skipping it only when "not installed". The binary here is installed and cannot execute —
+  an arm64 build on an Intel host. The condition now covers "cannot execute" and names the
+  fallback.
+
+- **Nine pointers to files that do not exist.** Seven skills advertised `skill.spec.yml` and
+  `deps.toml` as a machine-checkable contract; two more referenced them from Rules bullets. No such
+  file exists in the repo, they are gitignored, and the generator cannot run. The sentence claiming
+  Claude never loads them was itself loaded on every invocation of those skills.
+
+- **`write-a-skill` enforced rules that most skills broke.** The "Use when" prefix was required and
+  9 of 23 skills did not use it; trigger phrases were capped at 2–5 and 13 of 23 exceeded it, up to
+  10. Both rules were retired in favour of the Tier 1 token budget, which is now checkable.
+  `rote`'s description also lost the imperative it duplicated from its own body.
+
+### Known limitations
+
+- The fallback named in `write-a-skill` is shallower than SkillSpec. `validate-wiring.py` checks
+  link resolution and trigger-phrase presence; it does not check behavior contracts, implicit
+  dependencies, or prose density. A skill authored after this release clears a weaker bar than the
+  skill file promises.
+
+- `business-analysis` still hard-codes Brazilian Portuguese output. Parameterising it was planned
+  and deliberately not shipped: it is a maintainer question about intended behaviour, and closing it
+  by picking a default is the author answering a question that was not theirs.
+
 ## [2.4.3] — 2026-08-31
 
 ### Fixed

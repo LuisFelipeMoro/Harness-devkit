@@ -1,6 +1,7 @@
 ---
 name: quality-gate
-description: Verify code is shippable by detecting the project stack and reporting PASS or FAIL for every gate before handoff. Trigger phrases — "quality gate", "run gates", "CI check", "lint", "coverage", "run tests", "check before PR".
+description: Verify code is shippable by detecting the project stack and reporting PASS or FAIL for every gate before handoff. Trigger phrases — "quality gate", "run gates", "CI check", "lint", "coverage", "run tests", "check before PR", "is it green", "does it pass", "type check", "vet", "format check".
+allowed-tools: [Bash]
 ---
 
 Every gate must pass before handoff; a single failing gate blocks the handoff.

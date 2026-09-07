@@ -1,6 +1,6 @@
 ---
 name: business-analysis
-description: 'Use when mapping business rules, constraints, and presentation logic of a domain. Produces user capability map, validation rules, presentation rules, and external integrations in Brazilian Portuguese.'
+description: 'Use when mapping business rules, constraints, and presentation logic of a domain. Produces user capability map, validation rules, presentation rules, and external integrations in Brazilian Portuguese. Trigger phrases — "business rules", "business logic", "domain rules", "what does the business require", "validation rules", "domain model", "use cases".'
 ---
 
 # Business Analysis

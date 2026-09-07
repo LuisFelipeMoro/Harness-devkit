@@ -1,6 +1,6 @@
 ---
 name: multi-agent
-description: Use when running the full multi-agent coding pipeline for a large feature or epic — runs all 11 agents (Analyst, PM, Architect, ScrumMaster, Coder, QA, Reviewer, StressTester, Verdict, Tuner, DevOps) from planning through delivery. Trigger phrases — "build", "new feature", "epic", "implement from scratch", "greenfield", "MVP".
+description: Use when running the full multi-agent coding pipeline for a large feature or epic — runs all 11 agents (Analyst, PM, Architect, ScrumMaster, Coder, QA, Reviewer, StressTester, Verdict, Tuner, DevOps) from planning through delivery. Trigger phrases — "build", "create", "new feature", "epic", "implement from scratch", "greenfield", "develop", "stand up a service", "ship a new", "MVP", "build me a".
 ---
 
 Run the full multi-agent coding pipeline.  If no task is provided, ask first.
@@ -51,13 +51,14 @@ one tier overlay; implement to spec → write the specified tests → falsify ea
 the Bug-Fix Loop, escalation proceeds to D with FAIL)
 → **D** Review + Stress in parallel, only after QA's signal (Tuner on `TUNER REQUEST`, max 2)
 → **E** Verdict (unmitigated CRITICAL security = automatic NOT READY)
-→ **F** Story PR + checkpoint: push `feat/{key}-{story-slug}`, open its PR into `release/*`, run
-`/pr-review` on it with the story's ACs and Test Case table in context, merge `--no-ff` when green,
-then write the `[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
+→ **F** Story PR + checkpoint: push `feat/{key}-{story-slug}`, open its PR into `release/*` as a
+**draft**, run `/pr-review` on it with the story's ACs and Test Case table in context, promote with
+`gh pr ready` once it returns no findings, merge `--no-ff` when green, then write the
+`[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
 
 Read-only Explore/mapping subagents may still run in parallel. On the final epic's
 PRODUCTION READY, load `agents/devops.md`, then push the release branch (ask first) and open a
-PR to `main` — never commit or merge to `main` directly.
+**draft** PR to `main` — never commit or merge to `main` directly.
 
 ---
 
@@ -68,8 +69,9 @@ with a different job: the story reviews saw one diff each against one spec, and 
 cross-story duplication or drift from the plan as a whole. Immediately after `gh pr create` for the
 release branch, run **`/pr-review`** on that PR with the delivery file, the Reuse Map, and the manifest in context. It posts inline
 severity-tagged comments and prints the **Gaps** block (unimplemented ACs · spec drift · missing
-Test Case rows · duplication %). Report the verdict and leave the PR open for the human — the
-pipeline never merges.
+Test Case rows · duplication %). Report the verdict; no findings → promote with `gh pr ready`,
+otherwise leave it in draft and route the findings back. Leave the PR for the human either way —
+the pipeline never merges.
 
 > **Context Budget — 80% is a hard ceiling, not a warning.** Model reliability degrades before the
 > window is full: recall of mid-context detail drops and confident invention rises, and a pipeline is

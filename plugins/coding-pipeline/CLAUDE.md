@@ -129,34 +129,34 @@ Front-load reasoning into planning and architecture so execution is mechanical: 
 
 Before writing code, designing architecture, reviewing security, or running quality gates — invoke the matching skill. Never free-form tasks that have a defined skill.
 
-| Task | Skill | Trigger phrases |
-|------|-------|-----------------|
-| New feature / epic / large task | `/multi-agent` | "build", "create", "new feature", "epic", "implement X from scratch", "greenfield", "develop", "stand up a service", "ship a new", "MVP", "build me a" |
-| Bug investigation and fix | `/bug-fix` | "bug", "fix", "broken", "not working", "wrong behavior", "unexpected", "crash", "regression", "debug", "fails with", "throws", "stack trace", "flaky", "intermittent", "why does this happen", "stopped working" |
-| Single task, small feature | `/task` | "small change", "quick task", "add X to existing", "implement this task", "single endpoint", "add a method", "add a field", "one focused task" |
-| Architecture design | `/architecture` | "architect", "design the system", "how should we structure", "system design", "component design", "data flow", "high-level design", "X or Y for structure" |
-| Requirements analysis (no code, no plan) | `/analysis` | "analyze requirements", "assess", "evaluate context", "investigate requirements", "what should we build", "what do we need", "scope this", "discovery", "requirements" |
-| Execution plan (no implementation) | `/planning` | "plan", "planning", "make a plan", "create execution plan", "break down into tasks", "roadmap", "how would we approach", "task breakdown", "sequence the work" |
-| Security audit | `/security-review` | "security", "audit", "vulnerability", "OWASP", "pen test", "check for issues", "prompt injection", "LLM security", "LLM01", "AI security", "GenAI risk", "is this safe", "threat model", "CVE", "auth bypass", "injection" |
-| Quality gates / CI check | `/quality-gate` | "quality gate", "run gates", "CI check", "lint", "coverage", "run tests", "is it green", "does it pass", "type check", "vet", "format check" |
-| PR review or post-push comments | `/pr-review` | "review PR", "check PR", "PR comments", "code review", "review this diff", "address review comments", "look at the pull request" |
-| List open PR comments (read-only) | `/checkcomments` | "check comments", "PR comments", "what comments are open", "show review comments", "any feedback on my PR" |
-| Business rules mapping | `/business-analysis` | "business rules", "business logic", "domain rules", "what does the business require", "validation rules", "domain model", "use cases" |
-| Technical contract mapping | `/technical-analysis` | "technical contract", "interface design", "API contract", "map the interfaces", "routes", "endpoints", "infrastructure overview", "what calls what" |
-| Cut a release | `/release-management` | "release", "cut a release", "ship", "version", "tag", "changelog", "bump version", "semver", "publish", "release notes" |
-| Write a DB migration | `/database-migration` | "migration", "db migration", "schema change", "add column", "alter table", "drop column", "rename column", "add index", "backfill", "DDL" |
-| Add logging / metrics / tracing | `/observability` | "logging", "metrics", "tracing", "observability", "add logs", "instrument", "spans", "OpenTelemetry", "structured logs", "monitoring" |
-| Performance investigation | `/performance-profiling` | "performance", "slow", "profiling", "optimize", "latency", "throughput", "memory leak", "high CPU", "pprof", "benchmark", "bottleneck", "p99" |
-| Run existing integration flow | `/rote` | "run my flow", "search flows", "list adapters", "use existing integration", "what flows do I have", "fetch from", "call the API", "list my tickets", "get data from" |
-| Create a NEW integration adapter | `/rote-adapter` | "connect to X for the first time", "build adapter", "create integration", "new connector", "add new integration", "integrate with X" |
-| Direct code change (spec-first) | inline Spec→Implement→Test→Falsify → `/code-review-gate` | direct code ask outside a pipeline — "write this function", "implement this method", "add this helper", "quick implement"; list the test cases (name · input · expected observable result · why it matters) first, implement, write exactly those tests, falsify each one, then run `/code-review-gate` |
-| Gate + review after any code change | `/code-review-gate` | "gate and review", "pre-push check", "ready to push", "sign off my code", "check before PR", "done coding", "is my code ready", "review my changes" |
-| Stress-test a plan/design | `/grill-me` | "grill me", "challenge this", "stress-test", "poke holes", "pick this apart", "interview me about", "find gaps in my plan", "what am I missing", "red team this" |
-| Architectural health review | `/improve-codebase-architecture` | "improve architecture", "zoom out", "architectural review", "find coupling", "codebase health", "architectural debt", "tech debt audit", "refactor architecture" |
-| End-of-session handoff doc | `/handoff` | "handoff", "wrap up", "end session", "save context", "compact this session", "summarize for next session", "update progress", "done for today" |
-| Create a new skill | `/write-a-skill` | "write a skill", "create skill", "add skill", "new skill", "scaffold a skill" |
+| Task | Skill |
+|------|-------|
+| New feature / epic / large task | `/multi-agent` |
+| Bug investigation and fix | `/bug-fix` |
+| Single task, small feature | `/task` |
+| Architecture design | `/architecture` |
+| Requirements analysis (no code, no plan) | `/analysis` |
+| Execution plan (no implementation) | `/planning` |
+| Security audit | `/security-review` |
+| Quality gates / CI check | `/quality-gate` |
+| PR review or post-push comments | `/pr-review` |
+| List open PR comments (read-only) | `/checkcomments` |
+| Business rules mapping | `/business-analysis` |
+| Technical contract mapping | `/technical-analysis` |
+| Cut a release | `/release-management` |
+| Write a DB migration | `/database-migration` |
+| Add logging / metrics / tracing | `/observability` |
+| Performance investigation | `/performance-profiling` |
+| Run existing integration flow | `/rote` |
+| Create a NEW integration adapter | `/rote-adapter` |
+| Direct code change (spec-first) | inline Spec→Implement→Test→Falsify → `/code-review-gate` |
+| Gate + review after any code change | `/code-review-gate` |
+| Stress-test a plan/design | `/grill-me` |
+| Architectural health review | `/improve-codebase-architecture` |
+| End-of-session handoff doc | `/handoff` |
+| Create a new skill | `/write-a-skill` |
 
-**Rule**: If the user's message contains any trigger phrase above — or the intent clearly matches a row — invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
+**Rule**: If the user's message matches a row's task, or contains any trigger phrase from the matching skill's own description (each skill's description is the single source of truth for its trigger phrases), invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
 
 **Mandatory gate rule**: After ANY coding task that is NOT inside a pipeline (inline spec-first session, ad-hoc code change, direct implementation request), ALWAYS run `/code-review-gate` as the mandatory final step before declaring the task done. Gates without a reviewer are insufficient — logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 

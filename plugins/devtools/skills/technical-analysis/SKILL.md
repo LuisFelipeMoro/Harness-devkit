@@ -1,6 +1,6 @@
 ---
 name: technical-analysis
-description: 'Use when mapping technical contracts and infrastructure of a domain. Read-only — produces HTTP routes, interfaces, external integrations, and infrastructure overview without modifying code.'
+description: 'Use when mapping technical contracts and infrastructure of a domain. Read-only — produces HTTP routes, interfaces, external integrations, and infrastructure overview without modifying code. Trigger phrases — "technical contract", "interface design", "API contract", "map the interfaces", "routes", "endpoints", "infrastructure overview", "what calls what".'
 ---
 
 Act as a Staff Software Engineer. Your ONLY job is to map the technical contracts and infrastructure of the requested domain within the current workspace.
