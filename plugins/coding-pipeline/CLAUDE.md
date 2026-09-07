@@ -156,7 +156,7 @@ Before writing code, designing architecture, reviewing security, or running qual
 | End-of-session handoff doc | `/handoff` |
 | Create a new skill | `/write-a-skill` |
 
-**Rule**: If the user's message contains any trigger phrase above — or the intent clearly matches a row — invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
+**Rule**: If the user's message matches a row's task, or contains any trigger phrase from the matching skill's own description (each skill's description is the single source of truth for its trigger phrases), invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
 
 **Mandatory gate rule**: After ANY coding task that is NOT inside a pipeline (inline spec-first session, ad-hoc code change, direct implementation request), ALWAYS run `/code-review-gate` as the mandatory final step before declaring the task done. Gates without a reviewer are insufficient — logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 
