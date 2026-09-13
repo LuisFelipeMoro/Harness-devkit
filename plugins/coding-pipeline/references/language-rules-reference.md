@@ -39,6 +39,7 @@ row matching the story's `Language` field.
 | Language | File |
 |---|---|
 | Go | [`languages/go.md`](languages/go.md) |
+| Python | [`languages/python.md`](languages/python.md) |
 | Java | [`languages/java.md`](languages/java.md) |
 | JavaScript / TypeScript | [`languages/typescript.md`](languages/typescript.md) |
 | PHP | [`languages/php.md`](languages/php.md) |

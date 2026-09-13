@@ -228,18 +228,18 @@ Use `TaskCreate` to track tasks with >1 step. Mark `in_progress` when starting, 
 - **Scope**: No premature abstractions (3 cases before extracting). No speculative features (YAGNI).
 
 ## Quality Gates (hard requirement — never skip)
-| Gate | Go | TypeScript |
-|------|-----|------|
-| Duplication | `jscpd --threshold 3` (≤ 3%, all stacks) | `jscpd --threshold 3` (≤ 3%, all stacks) |
-| Format | `gofmt` | `prettier --check` |
-| Lint | `go vet` + `golangci-lint` (0 errors) | `eslint --max-warnings 0` |
-| Types | — | `tsc --noEmit` (`strict: true`) |
-| Coverage | ≥85% | ≥85% |
-| Race | `go test -race ./...` | — |
-| Vuln | `govulncheck ./...` | `npm audit --audit-level high` |
-| PR Review | Reviewdog in CI pipeline | Reviewdog in CI pipeline |
+| Gate | Go | TypeScript | Python |
+|------|-----|------------|--------|
+| Duplication | `jscpd --threshold 3` (≤ 3%, all stacks) | `jscpd --threshold 3` (≤ 3%, all stacks) | `jscpd --threshold 3` (common gate, once) |
+| Format | `gofmt` | `prettier --check` | `ruff format --check .` |
+| Lint | `go vet` + `golangci-lint` (0 errors) | `eslint --max-warnings 0` | `ruff check .` |
+| Types | — | `tsc --noEmit` (`strict: true`) | `mypy .` |
+| Coverage | ≥85% | ≥85% | `pytest --cov --cov-fail-under=85` (≥85%) |
+| Race | `go test -race ./...` | — | — |
+| Vuln | `govulncheck ./...` | `npm audit --audit-level high` | `pip-audit` |
+| PR Review | Reviewdog in CI pipeline | Reviewdog in CI pipeline | Reviewdog in CI pipeline |
 
-> **Per-language standards** (Go · Java · JS/TS · PHP · Rust · React · Next.js · Flutter · HTMX · Kotlin · HTML/CSS) — full coding rules, linting commands, and review flags live one-per-file in `references/languages/<language>.md` (index: `references/language-rules-reference.md`). Load exactly the one file for the stack in play — never the whole set, never inline it here. Coverage thresholds + gate commands: `references/quality-gate-reference.md`.
+> **Per-language standards** (Go · Java · JS/TS · Python · PHP · Rust · React · Next.js · Flutter · HTMX · Kotlin · HTML/CSS) — full coding rules, linting commands, and review flags live one-per-file in `references/languages/<language>.md` (index: `references/language-rules-reference.md`). Load exactly the one file for the stack in play — never the whole set, never inline it here. Coverage thresholds + gate commands: `references/quality-gate-reference.md`.
 
 ## Security Defaults (all languages)
 1. **Never read `.env` / `.envrc`** — these files may contain production secrets
