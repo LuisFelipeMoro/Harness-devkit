@@ -1,6 +1,6 @@
 # Reference: quality-gate — Gate Commands by Stack
 
-> **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, scrum-master DoD, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
+> **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Python · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, scrum-master DoD, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
 
 > **RTK**: All commands below use `rtk` prefix. The `rtk hook claude` PreToolUse hook also intercepts every Bash call transparently — so even without an explicit prefix, RTK filters output. Use `rtk proxy <cmd>` when you need raw unfiltered output (debugging, structured parsing). Never prefix RTK meta-commands (`rtk gain`, `rtk discover`, `rtk proxy`) with `rtk` again.
 
@@ -45,6 +45,15 @@ the rules were silenced. Any hit = FAIL (rationale + fixes:
 | Format | `rtk cargo fmt --check` | No changes |
 | Vuln | `rtk cargo audit` | No vulnerabilities |
 | Coverage | `rtk cargo tarpaulin --out Xml` | ≥ 85% |
+
+## Python
+| Gate | Command | Pass |
+|------|---------|------|
+| Format | `rtk ruff format --check .` | No changes |
+| Lint | `rtk ruff check .` | Zero errors |
+| Types | `rtk mypy .` | Zero errors |
+| Tests + coverage | `rtk pytest --cov --cov-fail-under=85` | ≥ 85% |
+| Vuln | `rtk pip-audit` | No vulnerabilities |
 
 ## Java
 | Gate | Command | Pass |
