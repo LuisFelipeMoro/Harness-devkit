@@ -81,6 +81,10 @@ jobs:
         # The gate's value is entirely in the split it makes between what this
         # delivery wrote and what was already there; nothing else checks it.
         run: bash .github/scripts/test-dup-attribution.sh
+      - name: verify script behaviour tests
+        # Each script replaced a model pass, so it is now the only thing checking
+        # what it checks — a false PASS here has no reviewer behind it.
+        run: bash .github/scripts/test-verify.sh
 
   install:
     name: install — bootstrap and settings merge

@@ -134,7 +134,11 @@ echo "✓ Claude Code hooks — $hook_count scripts staged to ~/.claude/hooks/"
 
 # ── Git hook templates (canonical set under coding-pipeline) ─────────────────────────
 if ls "$PLUGIN/git-hooks/"* >/dev/null 2>&1; then
-    cp "$PLUGIN/git-hooks/"* "$GLOBAL/git-hooks/"
+    # Files only: a stray gitignored dir (__pycache__) makes cp exit non-zero.
+    for f in "$PLUGIN/git-hooks/"*; do
+        [ -f "$f" ] || continue
+        cp "$f" "$GLOBAL/git-hooks/"
+    done
     chmod +x "$GLOBAL/git-hooks/pre-commit" \
              "$GLOBAL/git-hooks/pre-push" \
              "$GLOBAL/git-hooks/commit-msg" \

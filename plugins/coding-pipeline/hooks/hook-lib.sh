@@ -61,5 +61,9 @@ devkit_state_dir() {
     sid="$(printf '%s' "$sid" | tr -cd 'A-Za-z0-9_-')"
     local dir="${TMPDIR:-/tmp}/claude-devkit/${sid:-nosession}"
     mkdir -p "$dir" 2>/dev/null || return 1
+    # Snapshots hold branch names, file paths and commit subjects; TMPDIR is not
+    # per-user on every system.
+    chmod 700 "$dir" 2>/dev/null
+    chmod 700 "${dir%/*}" 2>/dev/null
     printf '%s' "$dir"
 }

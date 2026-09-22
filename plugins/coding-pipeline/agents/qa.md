@@ -196,7 +196,7 @@ See `references/quality-gate-reference.md` for complete per-language gate comman
 - Verify code annotations compile and match spec: `rtk swag init ./...` (Go) · `rtk mvn compile` (Java) · `rtk tsc --noEmit` (TS)
 
 Key gates per language (all prefixed with `rtk` — hook intercepts automatically if prefix omitted):
-- **All stacks, before the per-language gates**: `rtk jscpd . --threshold 3 --min-lines 8 --reporters console` — Gate PASS = ≤ 3%. Duplication is language-agnostic and invisible to every gate below it: a copy-pasted block lints clean, types clean, and covers clean.
+- **All stacks, before the per-language gates**: `bash ~/.claude/git-hooks/dup-gate.sh --worktree` — Gate PASS = exit 0 (≤ 3% introduced by this delivery; exit 2 = UNENFORCED, not a pass). Duplication is language-agnostic and invisible to every gate below it: a copy-pasted block lints clean, types clean, and covers clean.
 - **Go**: `rtk golangci-lint run` · `rtk go vet ./...` · `rtk go test -race ./...` · `rtk govulncheck ./...`
 - **JS/TS/React**: `rtk lint` · `rtk tsc --noEmit` · `rtk prettier --check .` · `rtk next build` (Next.js) / `rtk vite build` or `rtk npm run build` (React SPA) · `rtk npm audit --audit-level=high`
 - **Java**: `rtk mvn spotbugs:check` · `rtk mvn checkstyle:check` · `rtk mvn dependency-check:check`
@@ -252,4 +252,7 @@ Start file with:
 
 Mock patterns Amelia's tests must follow, and the Security Test Cases table required for stories
 with external I/O, auth, or user input: [`references/test-audit-reference.md`](../references/test-audit-reference.md).
-Load it when the story's tier and surface call for it — not by default.
+Load it when `scripts/verify/security-scan.sh` reports any candidate on the story diff, or the
+story's Blast Radius names external I/O, auth or user input. Either way, state it in QA DONE:
+`Security table: loaded (<trigger>)` or `Security table: n/a (0 scan candidates, no I/O/auth/input surface)`
+— a skip nobody can see is a skip nobody can challenge.

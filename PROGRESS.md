@@ -1,5 +1,63 @@
 # PROGRESS
 
+## Done — 2026-09-22 (session 2) · review fixes, dup-gate, autonomous context
+
+Branch `release/token-dispatch-reduction`: `2880471` = pass 1 as reviewed; second commit = everything
+below. Not pushed. All 6 suites green (hooks 62 · git-hooks 32 · dup-attribution 11 · install 21 ·
+verify 12 · wiring), every new test falsified by reverting its fix.
+
+- **Pass-1 review (5/10 → fixed)**: spec-coverage/falsification substring match (a PASS with a
+  specified test never written) → whole-name; dispatch budget 12/25 drift → 14 everywhere (the
+  formula 3×3+3+2 was mis-added); security-scan UNMEASURED exit 2 on unreadable paths, skips `*.md`
+  and itself; tautology-scan exit 2 on 0 files; verdict.sh enforces the story floor; context-budget
+  counts `output_tokens`, skips sidechain turns, one interpreter per call; QA security table has a
+  mechanical load trigger and an auditable skip line.
+- **`git-hooks/dup-gate.sh`**: single owner of jscpd flags + attribution; pre-push calls it;
+  `--worktree` measures uncommitted work in a throwaway worktree. Seven guides told agents to run raw
+  repo-wide jscpd (markdown + old debt included) — repointed. Per-run report dir; runs from any subdir.
+- **Installer**: stray gitignored dir in `git-hooks/` (`__pycache__`) aborted `install-global.sh`
+  under `set -e`; now copies files only (RED test first).
+- **`test-verify.sh`** (new, in CI): the five verify scripts had no test at all.
+- **Autonomous context** (no human step): 80% message = checkpoint + continue;
+  `precompact-snapshot.sh` (PreCompact, never blocks, 5s timeout) records branch/dirty/commits/
+  PROGRESS staleness; `session-bootstrap.sh` re-injects it on `source=compact` (same session id only)
+  and re-arms the 60/80 latches; window inferred (usage >200k ⇒ 1M) unless `DEVKIT_CONTEXT_WINDOW`.
+- Review rounds: 5/10 → 6/10 → 9/10 (dup-gate) · 6/10 (autonomy) → 9/10 APPROVE.
+
+## Benchmark — 2026-09-22 (measured; tokens = bytes/3.6)
+
+| Check | model would read | script prints | saving |
+|---|---:|---:|---:|
+| duplication (raw jscpd → dup-gate) | 6,784 | 91 | 75× |
+| security (changed files → scan) | 66,568 | 365 | 182× |
+| tautology (38 Go test files) | 52,257 | 65 | 797× |
+| verdict (agent guide → verdict.sh) | 1,633 | 74 | 22× |
+
+Reviewer dispatches this session: 161k (100 KB diff) · 128k (37 KB delta) · 104k (narrow, but re-ran
+suites) · 94k (20 KB, 3 tool calls). **Floor of a reviewer dispatch ≈ 90k regardless of payload** —
+the agent's own guides dominate. Guide tokens/delivery 253,056 → 244,170 (−3.5%); dispatches 40 → 40.
+
+## Lessons (session 2)
+
+- **The guide and the sensor disagreed, and the agent followed the guide.** `/quality-gate` said
+  repo-wide jscpd; pre-push ran attribution. Eight tool calls produced a wrong FAIL. Fix the guide by
+  pointing it at the sensor, never by restating the sensor's flags.
+- **A reviewer re-running gates the orchestrator already ran is the largest avoidable cost.** Say
+  "do not run tests" in the dispatch; it cut a round from 128k to 94k.
+- **Fixed temp paths are races.** Found three (`devkit-jscpd`, `devkit-githook-tests`, and the
+  reviewer's own concurrent run colliding with mine). Per-run `mktemp -d`.
+- **An apostrophe in a comment inside `python3 -c '…'` breaks the hook.** Existing tests caught it.
+- **Falsify on the path the test actually reaches.** One mutation sat behind a `$PWD` fallback and
+  proved nothing; re-falsified on the exit path.
+
+## Next (pass 2 — unchanged, plus)
+
+- Install: `bash install.sh` — none of the new hooks run in `~/.claude` until then.
+- Pass 2 as below; add to it: dispatch prompts forbid re-running gates; measure the reviewer floor
+  (~90k) and whether a `haiku` confirmation round is enough for fix-verification.
+- Follow-up: git lock contention when two `dup-gate --worktree` runs share a repo (false
+  "could not snapshot", never a false pass).
+
 ## Done — 2026-09-22 · devkit token & dispatch reduction (pass 1)
 
 Working tree only, nothing committed, all 5 CI suites green

@@ -46,7 +46,9 @@ implemented=$(grep -rhoE \
 missing=0
 while IFS= read -r row; do
     [ -n "$row" ] || continue
-    if ! printf '%s\n' "$implemented" | grep -qiF "$row"; then
+    # Whole-line match: a substring match let `ParsesToken` be satisfied by
+    # `ParsesTokenWithExpiry`, a PASS with the specified test never written.
+    if ! printf '%s\n' "$implemented" | grep -qixF -- "$row"; then
         echo "MISSING ROW: $row"
         missing=$((missing + 1))
     fi

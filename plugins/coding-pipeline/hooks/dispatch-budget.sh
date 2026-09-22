@@ -8,7 +8,7 @@
 #
 # This counts, warns once at the budget, and never blocks: a pipeline legitimately
 # needs many dispatches, and a guard that stops one mid-delivery strands the work.
-# DEVKIT_DISPATCH_BUDGET tunes it (default 12). That is derived, not guessed: 3 per story
+# DEVKIT_DISPATCH_BUDGET tunes it (default 14). That is derived, not guessed: 3 per story
 # (Coder, QA, Reviewer) + 3 planning + 2 delivery, which is a 3-story delivery. A larger
 # delivery legitimately exceeds it, which is why this warns once and never blocks.
 set -u
@@ -23,7 +23,7 @@ state="$(devkit_state_dir "$input")" || exit 0
 
 printf 'x' >> "$state/dispatches"
 count=$(wc -c < "$state/dispatches" | tr -d ' ')
-budget="${DEVKIT_DISPATCH_BUDGET:-12}"
+budget="${DEVKIT_DISPATCH_BUDGET:-14}"
 
 [ "$count" -le "$budget" ] && exit 0
 [ -f "$state/dispatch-warned" ] && exit 0

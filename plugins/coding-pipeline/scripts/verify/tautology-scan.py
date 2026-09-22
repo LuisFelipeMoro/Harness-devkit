@@ -17,6 +17,7 @@ does not replace her.
 
 Usage: tautology-scan.py <test-path>...
 Exit 0 = clean. Exit 1 = hits, each a MAJOR candidate until Quinn clears it.
+Exit 2 = no test file found under the given paths — unmeasured, never a PASS.
 """
 import os
 import re
@@ -113,6 +114,11 @@ def main(argv):
     for label, path, line, text in hits:
         loc = f"{path}:{line}" if line else path
         print(f"[{label}] {loc} — {text}")
+
+    if not seen:
+        print("TAUTOLOGY-SCAN: UNMEASURED — 0 test files under " + " ".join(argv) +
+              "; nothing was scanned, so nothing is cleared")
+        return 2
 
     if hits:
         print(f"\nTAUTOLOGY-SCAN: FAIL — {len(hits)} mechanical tautology candidate(s); "

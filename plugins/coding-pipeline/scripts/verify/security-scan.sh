@@ -13,16 +13,25 @@
 # with a reason is a normal outcome.
 #
 # Usage: security-scan.sh <path>...
-# Always exits 0 — it reports, it does not gate. The Reviewer gates.
+# Exit 0 — it reports, it does not gate; the Reviewer gates.
+# Exit 2 — a path was empty or unreadable. "0 candidates" must mean "scanned and
+#          found nothing", never "scanned nothing" (an empty $CHANGED_FILES).
 set -u
 [ $# -gt 0 ] || { echo "usage: security-scan.sh <path>..." >&2; exit 2; }
 
+for p in "$@"; do
+    if [ -z "$p" ] || [ ! -r "$p" ]; then
+        echo "SECURITY-SCAN: UNMEASURED — path empty or unreadable: '$p'" >&2
+        exit 2
+    fi
+done
 paths=("$@")
 total=0
 emit() {
     local label="$1" pattern="$2" out
     out=$(grep -rnE --binary-files=without-match "$pattern" "${paths[@]}" 2>/dev/null \
-        | grep -vE "_test\.|\.test\.|\.spec\.|/testdata/|/vendor/|/node_modules/" || true)
+        | grep -vE "_test\.|\.test\.|\.spec\.|/testdata/|/vendor/|/node_modules/|\.md:[0-9]+:|verify/security-scan\.sh:" \
+        || true)
     if [ -n "$out" ]; then
         printf '%s\n' "$out" | sed "s|^|[$label] |"
         total=$((total + $(printf '%s\n' "$out" | grep -c .)))

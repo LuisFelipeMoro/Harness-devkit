@@ -142,8 +142,69 @@ out=$(ctx_msg ctxd)
 # a malformed transcript must fail open, never block
 printf 'not json\n' > "$CTX/t.jsonl"
 expect_ctx "ctx fails open on garbage" ctxe NONE
+# The last turn's own output is in the window too: 50k prompt + 12k written = 62%,
+# which must warn. Counting only the prompt reads 50% and stays silent.
+printf '{"type":"assistant","message":{"usage":{"input_tokens":0,"cache_read_input_tokens":50000,"cache_creation_input_tokens":0,"output_tokens":12000}}}\n' > "$CTX/t.jsonl"
+expect_ctx "ctx counts the last turn's output" ctxg "62% of the window"
+# Past 200k the window cannot be 200k: 300k used must read as 30% of 1M, not a
+# 150% CEILING that would fire from the first tool call of every long session.
+printf '{"type":"assistant","message":{"model":"claude-x","usage":{"input_tokens":0,"cache_read_input_tokens":300000,"cache_creation_input_tokens":0}}}\n' > "$CTX/t.jsonl"
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/ctxh"
+out=$(printf '{"session_id":"ctxh","transcript_path":"%s"}' "$CTX/t.jsonl" | bash "$HOOKS/context-budget.sh" 2>&1)
+[ -z "$out" ] && pass=$((pass + 1)) || { echo "FAIL: ctx infers a 1M window from usage past 200k — got: $out"; fail=1; }
+# A subagent's small window in the tail must not mask the main thread at 85%.
+mk_transcript 85000
+printf '{"type":"assistant","isSidechain":true,"message":{"usage":{"input_tokens":1000,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}\n' >> "$CTX/t.jsonl"
+expect_ctx "ctx ignores subagent turns" ctxj "CEILING"
+# The ceiling must be actionable with nobody watching: checkpoint and continue.
+mk_transcript 85000
+out=$(ctx_msg ctxi)
+case "$out" in *"continue without waiting for the human"*) case "$out" in *"fresh session"*) echo "FAIL: ctx ceiling still asks for a fresh session"; fail=1 ;; *) pass=$((pass + 1)) ;; esac ;;
+    *) echo "FAIL: ctx ceiling is not autonomous — got: $out"; fail=1 ;; esac
 expect "ctx disabled by id" context-budget.sh '{"session_id":"ctxf"}' 0 DEVKIT_DISABLED_HOOKS=post:context-budget
 rm -rf "$CTX" "${TMPDIR:-/tmp}/claude-devkit/ctx"*
+
+# ── precompact-snapshot + session-bootstrap: compaction with nobody watching ──
+# The loop that replaces "human opens a fresh session": snapshot before the
+# summary, re-inject after it, re-arm the latches for the next climb.
+ABS_HOOKS="$(cd "$HOOKS" && pwd)"
+PC="$(mktemp -d "${TMPDIR:-/tmp}/devkit-pc.XXXXXX")"
+( cd "$PC" && git init -q . && git config user.email t@t && git config user.name t \
+  && git config commit.gpgsign false && echo a > a.txt && echo p > PROGRESS.md \
+  && git add -A && git commit -qm "feat: first slice" && echo b > dirty.txt )
+pc_state="${TMPDIR:-/tmp}/claude-devkit/pcs"; rm -rf "$pc_state"; mkdir -p "$pc_state"
+sleep 1; : > "$pc_state/ctx-ceiling"; : > "$pc_state/ctx-warn"
+payload=$(printf '{"session_id":"pcs","cwd":"%s","hook_event_name":"PreCompact","trigger":"auto"}' "$PC")
+printf '%s' "$payload" | bash "$ABS_HOOKS/precompact-snapshot.sh" >/dev/null 2>&1; rc=$?
+snap="$pc_state/precompact.md"
+[ "$rc" = 0 ] && grep -q "dirty.txt" "$snap" && grep -q "feat: first slice" "$snap" && grep -q "^branch: " "$snap"
+[ $? = 0 ] && pass=$((pass + 1)) || { echo "FAIL: precompact snapshot missing branch/dirty file/last commit (rc=$rc)"; fail=1; }
+# Snapshots carry paths and commit subjects; the state dir is owner-only.
+[ "$(stat -f %Lp "$pc_state" 2>/dev/null || stat -c %a "$pc_state")" = "700" ] \
+    && pass=$((pass + 1)) || { echo "FAIL: devkit state dir is not owner-only (700)"; fail=1; }
+grep -q "PROGRESS.md: NOT updated since the 80% ceiling" "$snap" \
+    && pass=$((pass + 1)) || { echo "FAIL: precompact does not flag PROGRESS.md stale after the ceiling"; fail=1; }
+
+# exit 2 would cancel an auto-compaction and fail the request: never.
+printf 'garbage' | bash "$ABS_HOOKS/precompact-snapshot.sh" >/dev/null 2>&1; rc1=$?
+printf '{"session_id":"pcx","cwd":"/nonexistent-dir"}' | ( cd / && bash "$ABS_HOOKS/precompact-snapshot.sh" ) >/dev/null 2>&1; rc2=$?
+[ "$rc1" = 0 ] && [ "$rc2" = 0 ] && pass=$((pass + 1)) || { echo "FAIL: precompact exited $rc1/$rc2 — must always be 0"; fail=1; }
+
+# Another session in the same directory compacting must not receive this one's state.
+out=$(printf '{"session_id":"pc-other","source":"compact","cwd":"%s"}' "$PC" | ( cd "$PC" && bash "$ABS_HOOKS/session-bootstrap.sh" ) 2>&1)
+case "$out" in *"pre-compaction snapshot"*) echo "FAIL: bootstrap handed another session's snapshot across"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/pc-other"
+
+# A startup is not a resume: another session's snapshot must not leak in.
+out=$(printf '{"session_id":"pcs","source":"startup","cwd":"%s"}' "$PC" | ( cd "$PC" && bash "$ABS_HOOKS/session-bootstrap.sh" ) 2>&1)
+case "$out" in *"pre-compaction snapshot"*) echo "FAIL: bootstrap injected a snapshot on startup"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+
+out=$(printf '{"session_id":"pcs","source":"compact","cwd":"%s"}' "$PC" | ( cd "$PC" && bash "$ABS_HOOKS/session-bootstrap.sh" ) 2>&1)
+case "$out" in *"pre-compaction snapshot"*"Do not ask the human"*)
+    [ ! -f "$snap" ] && [ ! -f "$pc_state/ctx-ceiling" ] && [ ! -f "$pc_state/ctx-warn" ] \
+        && pass=$((pass + 1)) || { echo "FAIL: bootstrap on compact left snapshot or latches behind"; fail=1; } ;;
+    *) echo "FAIL: bootstrap on compact did not re-inject the snapshot — got: $out"; fail=1 ;; esac
+rm -rf "$PC" "$pc_state" "${TMPDIR:-/tmp}/claude-devkit/pcx"
 
 # ── dispatch-budget: counts subagents, warns once, never blocks ──────────────
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"

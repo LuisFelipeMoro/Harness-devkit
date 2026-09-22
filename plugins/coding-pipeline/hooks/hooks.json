@@ -52,6 +52,13 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/precompact-snapshot.sh\"", "timeout": 5 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

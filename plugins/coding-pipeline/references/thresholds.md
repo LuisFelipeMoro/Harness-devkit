@@ -17,7 +17,7 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 
 | Gate | Limit | Sensor |
 |---|---|---|
-| Duplication | ≤ 3% | `jscpd --threshold 3` — language-agnostic, runs once for the whole repo |
+| Duplication | ≤ 3% | `git-hooks/dup-gate.sh` (jscpd + line-level attribution) — limit applies to duplication this change *introduced*; pre-existing debt is reported, never blocks |
 | Lint | 0 errors | ERROR mode per stack (`--max-warnings 0`, `-D warnings`, `golangci-lint`) |
 
 ## Scores
@@ -38,7 +38,7 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 | Thing | Limit |
 |---|---|
 | Context ceiling | 80% of window (warn at 60%) — sensor: `hooks/context-budget.sh` |
-| Subagent dispatches | 25 per session, advisory — sensor: `hooks/dispatch-budget.sh` |
+| Subagent dispatches | 14 per session, advisory — 3 per story (Coder · QA · Reviewer) × 3 stories + 3 planning + 2 delivery. Sensor: `hooks/dispatch-budget.sh` |
 | Subagents per turn | 3 (never 4+) |
 | Tuner iterations | 2 per pipeline run |
 | Bug-Fix Loop iterations | 3, then `QA ESCALATION` |

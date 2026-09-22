@@ -37,7 +37,7 @@ done
 
 for v in "$review" "$stress" "$qa"; do
     case "$v" in
-        ''|*[!0-9.]*) echo "usage: verdict.sh --review N --stress N --qa N [...]" >&2; exit 2 ;;
+        ''|*[!0-9.]*|*.*.*|.) echo "usage: verdict.sh --review N --stress N --qa N [...]" >&2; exit 2 ;;
     esac
 done
 
@@ -61,6 +61,11 @@ if crit_sec > 0:
     reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
 if score < 6.5:
     reasons.append(f"overall {score:.2f} < 6.5")
+# references/thresholds.md — Story floor. The average can hide one failing lens.
+if review < 7:
+    reasons.append(f"Reviewer {review} below story floor 7")
+if stress < 7:
+    reasons.append(f"Stress {stress} below story floor 7")
 
 if reasons:
     verdict = "NOT READY"

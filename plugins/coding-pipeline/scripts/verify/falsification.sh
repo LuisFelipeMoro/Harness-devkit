@@ -39,7 +39,8 @@ while IFS= read -r row; do
     [ -n "$row" ] || continue
     total=$((total + 1))
 
-    line=$(grep -iF -- "$row" "$evidence" || true)
+    # Whole-word: evidence for `ParsesTokenWithExpiry` is not evidence for `ParsesToken`.
+    line=$(grep -iwF -- "$row" "$evidence" || true)
     if [ -z "$line" ]; then
         echo "NO EVIDENCE: $row"
         fails=$((fails + 1))
