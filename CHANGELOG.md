@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.6.0] — 2026-09-22
+
+Token and dispatch cost, cut without weakening a guarantee. Three rules the devkit stated and never
+enforced now have sensors, the mechanical half of three agent audits became scripts, and the 80%
+context ceiling stopped needing a human to act on it.
+
+### Added
+
+- **Context and dispatch sensors.** `hooks/context-budget.sh` reads real context fill from the
+  session transcript (prompt + cache + the last turn's output, subagent turns skipped) and warns at
+  60% / calls the ceiling at 80%. The model no longer reports a number it cannot measure.
+  `hooks/dispatch-budget.sh` counts subagent dispatches per session and warns once past 14
+  (3 per story × 3 + 3 planning + 2 delivery). Neither ever blocks.
+- **Autonomous context loop.** At 80% the instruction is now *checkpoint and continue*: update
+  `PROGRESS.md`, commit and push, carry on. The new `PreCompact` hook `precompact-snapshot.sh`
+  records branch, dirty files, last commits and whether `PROGRESS.md` went stale; on
+  `source=compact`, `session-bootstrap.sh` re-injects it for the same session only and re-arms the
+  60/80 latches. The window is inferred (usage past 200k means 1M) unless `DEVKIT_CONTEXT_WINDOW` is
+  set. No step waits for a person to open a new session.
+- **Mechanical verifiers** in `scripts/verify/`: `spec-coverage.sh`, `falsification.sh`,
+  `tautology-scan.py`, `security-scan.sh`, `verdict.sh`. Each replaces the lookup half of a QA,
+  Reviewer or Verdict pass and prints what it does *not* cover, so the judgment half stays with the
+  agent. Unreadable input exits 2 (UNMEASURED) — never a PASS. Measured read-avoidance: 22× to 797×.
+- **`git-hooks/dup-gate.sh`** — the one owner of jscpd's flags and line-level attribution. pre-push
+  calls it; `--worktree` measures uncommitted work in a throwaway worktree, so `/quality-gate` gives
+  pre-push's verdict before anything is committed.
+- **`references/thresholds.md`** — every numeric gate in one place. The coverage floor had been
+  restated in 18 files and had already drifted in one.
+- `scripts/bench-context.py` (guide tokens per delivery) and `.github/scripts/test-verify.sh`,
+  wired into CI: the verify scripts replaced model passes, so nothing else checks them.
+
+### Changed
+
+- Seven guides told agents to run raw repo-wide `jscpd`, which counts markdown and pre-existing
+  debt and disagreed with the hook. They now point at `dup-gate.sh`.
+- `qa.md`, `reviewer.md` and `verdict.md` delegate their mechanical checks to the scripts; the
+  security test-case table loads on a scan hit or an I/O/auth surface, and QA states which.
+- `verdict.sh` enforces the per-story floor (Reviewer and Stress ≥ 7) that the average could hide.
+
+### Fixed
+
+- `install-global.sh` aborted under `set -e` when any directory — a gitignored `__pycache__` —
+  sat in `git-hooks/`, silently skipping every step after it, settings wiring included. Only files
+  are copied now.
+- The git-hook test suite and the duplication report used fixed temp paths; concurrent runs deleted
+  each other's files. Both are per-run now.
+
 ## [2.5.1] — 2026-09-07
 
 ### Fixed
