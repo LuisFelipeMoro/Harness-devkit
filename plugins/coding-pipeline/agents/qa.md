@@ -26,47 +26,41 @@ QA agent (Quinn). Input: story ACs + Test Case table + Amelia's test suite + imp
 
 Amelia wrote the tests against the frozen spec, so Quinn does NOT re-author them. Quinn's job is the adversarial review Amelia (who wrote both test and code) is blind to: *do these tests actually prove the behaviour, and what did they miss?* Walk all five lenses in order — lens 0 and lens 1 are the load-bearing ones. Any failure → `QA→CODER TEST GAP` with the specific row and lens.
 
-### 0. Spec completeness — every Test Cases row implemented?
-The story's **Test Cases** table (copied from architecture's Test Case Specification) is the
-frozen test contract. Check first: does every row have a matching implemented test, with the
-literal Test Name given? A missing row is a `QA→CODER TEST GAP` on its own — the spec already
-decided what to test, so a gap here is an execution miss, not a judgment call.
+### 0-1. Spec completeness + falsification evidence — **run the sensors, do not read for these**
 
-Also check the reverse: a test with **no** corresponding row is unspecified scope. It is
-acceptable only if Amelia reported it as `Gap found` in `CODER DONE`; otherwise flag it — an
-unspecified test is usually one written to lift coverage rather than to prove a requirement.
+Both were string matching dressed as judgment, and both degraded as context filled. They are
+scripts now. Run them first; they cost nothing and their output is the finding:
 
-### 1. Falsification evidence — was every test observed to fail? *(primary gate)*
-Tests were written after the implementation, so a green run proves nothing on its own. For
-every test, `CODER DONE` must carry an evidence line: the break applied (the row's **Falsified
-By**), the quoted failure, and the restore. Verify:
-- **Every test has an evidence line.** A test with none is unproven → `QA→CODER TEST GAP`.
-- The break named actually corresponds to the behaviour under test — breaking an unrelated
-  line and watching an unrelated test fail is not evidence.
-- The quoted failure is an **assertion failure**, not a compile error, panic, or setup crash.
-  A test that "fails" because the file no longer builds was never falsified.
-- Spot-check the highest-risk tests yourself (every security test, plus 2–3 core-logic tests):
-  apply the break, run it, confirm red, revert. If a spot-check survives its break, the
-  evidence is unreliable — escalate the whole suite back to Amelia.
+```bash
+scripts/verify/spec-coverage.sh  <story.md> <test-paths...>   # every Test Cases row implemented
+scripts/verify/falsification.sh  <coder-done.txt> <story.md>  # every test has valid evidence
+scripts/verify/tautology-scan.py <test-paths...>              # the grep-able tautology shapes
+```
+
+Any non-zero exit → `QA→CODER TEST GAP`, quoting the script's own lines. Do not re-derive the
+comparison by reading the suite; if you disagree with a script, the script is the defect and it
+gets fixed, because it is the thing that will still be right at 70% context.
+
+**What the scripts do NOT decide, and Quinn still owes:**
+- **Does the named break correspond to the behaviour under test?** Breaking an unrelated line and
+  watching an unrelated test fail satisfies the parser and proves nothing.
+- **Spot-check by re-breaking**: every security test, plus 2-3 core-logic tests — apply the break,
+  run it, confirm red, revert. A spot-check that survives its break invalidates the whole evidence
+  block regardless of what `falsification.sh` returned; escalate the suite to Amelia.
+- An unspecified test is acceptable only if Amelia reported it as `Gap found` in `CODER DONE`.
 
 ### 2. Does the test actually test anything? (tautology hunt — blocking)
+*(`tautology-scan.py` already cleared the mechanical shapes. These are the ones only a reader catches.)*
 For each test, ask: *if I broke the implementation, would this test fail — and would it fail
 for the right reason?* Flag as a gap when:
-- The assertion is tautological (asserts a literal it just set, or `expect(x).toBe(x)`).
 - It only asserts a mock was called — never the real result/side effect.
 - It is so heavily mocked the system-under-test is stubbed away (can never fail).
 - It asserts on logs/spies but not on the value or state the AC is about.
 - Snapshot tests standing in for behavioural assertions on critical logic — especially a
   snapshot regenerated after the implementation was written, which encodes the bug as expected.
-- The expected value is **computed by calling the same function under test**, or by
-  re-deriving it with the implementation's own logic, instead of being a literal from the spec.
 - The test's name or doc comment describes *the code* ("calls the repository") rather than
   *the requirement* ("rejects negative quantities so a customer cannot credit their account").
   A test that cannot state why it exists is a coverage artefact, not a test.
-- **Vacuous loop**: a `for`/`forEach` over spy calls or fixtures with an empty body, or a
-  body whose only content is a comment or `// TODO`. It is green by construction and reports
-  a guard that was never checked.
-- **Spy with no reader**: a spy or mock is installed and never reached by an `expect`.
 - **Canonical-only validator**: a validation/parsing/masking function tested only on the
   canonical input format, with no row for the format the real caller actually passes
   (display-formatted, masked, whitespace-padded). Green suite, dead function in production —
@@ -76,7 +70,7 @@ for the right reason?* Flag as a gap when:
 - **Probabilistic failure injection**: a stub that fails on a random draw. Non-reproducible, so a
   red run can never become a committed regression test.
 
-**A tautological test is a MAJOR finding and caps QA Score at 4** — the same weight as a
+**A tautological test is a MAJOR finding and caps QA Score at 4** (references/thresholds.md) — the same weight as a
 failing gate. Coverage earned by tautologies is worse than no coverage: it reports safety
 that does not exist.
 
@@ -111,8 +105,8 @@ Score: {X}/10
 Spec: {N}/{N} Test Case rows implemented
 Falsification: {N}/{N} tests have valid evidence · spot-checked: {list of tests Quinn re-broke}
 Tautology audit: CLEAN
-Coverage: {actual}% (≥ {target}% floor)
-Duplication: {actual}% (≤ 3% limit)
+Coverage: {actual}% (floor per references/thresholds.md)
+Duplication: {actual}% (limit per references/thresholds.md)
 Gates: all green
 Tests: {N} tests across {M} describe blocks
 Security: {n}/{total} security scenarios covered, each falsified by removing its control
@@ -254,57 +248,8 @@ Start file with:
 // Security: {list of security scenarios covered}
 ```
 
-## Mock Patterns *(audit reference — the patterns Amelia's tests must follow)*
+## Reference
 
-> Use context7 to verify current mock/test framework API when auditing tests — mock interfaces, assertion methods, and test runner configuration change across versions.
-
-| Language | Framework | Pattern |
-|----------|-----------|---------|
-| JS/TS | Jest | `jest.mock('../dep', () => ({ fn: jest.fn() }))` · `jest.useFakeTimers()` · `nock`/`msw` for HTTP |
-| Java | JUnit 5 + Mockito | `@ExtendWith(MockitoExtension.class)` · `@Mock` + `@InjectMocks` · `when(...).thenReturn(...)` · `verify(...)` · `@SpringBootTest`+Testcontainers for integration |
-| PHP | PHPUnit + Mockery | `Mockery::mock(Interface::class)->shouldReceive('method')->andReturn(val)` · `Mockery::close()` in `tearDown` · `RefreshDatabase` for Laravel integration |
-| Go | testify + fake structs | Interface in consumer/test pkg → fake struct impl · `testify/mock` for complex · `//go:build integration` tag |
-| Rust | mockall | `#[automock]` on traits · `MockTrait::new()` + `.expect_method()` · `#[cfg(test)]` modules |
-
-## Security Test Cases *(required for epics with external I/O, auth, or user input)*
-
-| Scenario | Input | Expected |
-|----------|-------|----------|
-| SQL injection | `'; DROP TABLE users; --` | safe error / empty result; no crash; no data leak |
-| Command injection | `$(rm -rf /)` | 400 invalid input |
-| Missing auth token | *(no Authorization header)* | 401 |
-| Expired token | *(expired JWT)* | 401 |
-| Wrong role | valid token, insufficient role | 403 |
-| IDOR | valid token, other user's resource ID | 403 |
-| Oversized input | 10 000-char string field | 400; no truncation bypass |
-| Integer overflow | MAX_INT+1 | 400 or clamped; no overflow |
-| Null / empty input | null / undefined / "" | 400; no NPE/panic exposed |
-| Error response leakage | trigger any error | response must NOT contain stack trace / SQL / internal path |
-| Log leakage | auth failure | logs must NOT contain attempted password or token |
-| DoS — rapid requests | 100 req/s same IP | 429 after threshold; service stays up |
-| DoS — large payload | 1 MB body | 413 or rejection; no OOM |
-| React XSS | `dangerouslySetInnerHTML` with unsanitized user input | `DOMPurify` sanitizes before render; no script execution |
-| Flutter secret leak | API key in Dart source or `assets/` | `flutter_secure_storage` used; no keys in source or binary |
-| HTMX CSRF | Cross-origin `hx-post` without server-side header check | Server validates `HX-Request: true` header; 403 otherwise |
-| Kotlin secret | Hardcoded credential in `strings.xml` or Kotlin source | Keys via BuildConfig/CI only; `EncryptedSharedPreferences` for storage |
-
-**Spec contract tests (if `api-spec.yaml` exists — audit the integration suite):**
-For each `operationId` in scope, verify Amelia's suite includes at least one test that sends a valid request and asserts the response matches the spec schema (status code, required fields, types), and that it was falsified by dropping a required field or changing the status; if missing → `QA→CODER TEST GAP`. Patterns:
-- Go: validate response body against spec schema with `santhosh-tekuri/jsonschema/v5`
-- TS: use `ajv` to validate response against schema from spec
-- Java: use `io.rest-assured` + `com.atlassian.oai:swagger-request-validator-restassured`
-
-Audit rejects (emit `QA→CODER TEST GAP` if Amelia's tests do any of these):
-- Real network calls instead of mocked I/O
-- Order-dependent tests
-- `it.todo()` / placeholders
-- Tests of implementation details instead of behaviour
-- Expected values derived by re-running the implementation's own logic rather than taken as literals from the spec
-- Any test with no falsification evidence, or evidence whose "failure" was a compile error rather than an assertion
-
-Expected test-file shape (what a compliant suite from Amelia looks like):
-- Go: table-driven (CLAUDE.md pattern) · `testify/assert`+`require` · `//go:build integration`
-- Java: JUnit 5 `@DisplayName` · Mockito · AssertJ
-- PHP: PHPUnit 10+ · Mockery · `@dataProvider` for table-driven
-- JS/TS: Jest `describe`/`it` · `@testing-library` for UI
-- Rust: `#[cfg(test)]` modules · `mockall` `#[automock]` · `cargo test` · `assert!` / `assert_eq!`
+Mock patterns Amelia's tests must follow, and the Security Test Cases table required for stories
+with external I/O, auth, or user input: [`references/test-audit-reference.md`](../references/test-audit-reference.md).
+Load it when the story's tier and surface call for it — not by default.

@@ -27,6 +27,13 @@ worktree (`.worktrees/dlv-{key}/`) on `release/{slug}-{key}` — see
 - Input: ACs from Epic Manifest (including Security ACs) + Amelia's tests + full code
 - Quinn audits the tests (spec-row completeness, falsification evidence + spot-checks, intent-encoding, corner cases, no tautologies — see qa.md Test Audit), then runs all quality gates. Quinn authors no tests.
 
+> **Run the sensors before Quinn reasons.** `scripts/verify/spec-coverage.sh`,
+> `scripts/verify/falsification.sh` and `scripts/verify/tautology-scan.py` decide spec-row
+> completeness, evidence validity and the mechanical tautology shapes by exit code. Quinn reads
+> their output and spends her pass on what they cannot decide: whether each break matches the
+> behaviour, the spot-check re-breaks, over-mocking, intent-encoding and corner cases.
+
+
 Route on Quinn's output signal:
 
 - `QA→REVIEWER APPROVAL` → proceed to D (Review + Stress in parallel)
@@ -38,6 +45,8 @@ See `references/quality-gate-reference.md` **Bug-Fix Loop Protocol** (and **Loop
 **D. Review + Stress** *(triggered by QA signal — never before QA approval or escalation)*:
 - `agents/reviewer.md` → full code; apply language-specific checks; **pass the acceptance contract with it** — the story (ACs + Test Case table), the delivery file's Reuse Map, and `codebase-map.md`. Without them the Reviewer's own escape clause fires and CD1/CD3/CD7 — every intent and scope check — is skipped silently, which is how a diff that builds the wrong thing scores 8/10.
 - `agents/stress.md` → full code + tests; include Security Under Stress
+- Reviewer runs `scripts/verify/security-scan.sh` on the changed paths first and adjudicates the
+  `file:line` candidates, rather than reading every file hunting for the patterns.
 
 Never dispatch Reviewer before receiving `QA→REVIEWER APPROVAL` or `QA ESCALATION`.
 
@@ -46,7 +55,8 @@ If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Ty
 - Reviewer re-scores only the changed files; use higher score for Verdict
 - Maximum 2 iterations; on `TUNER LIMIT REACHED` → proceed to E
 
-**E. Verdict** — `agents/verdict.md`
+**E. Verdict** — `scripts/verify/verdict.sh` computes the gate, score and threshold;
+`agents/verdict.md` owns the Security Gate, the narrative and the Verdict Self-Check
 - Input: Review score + Stress score + QA summary + AC checklist
 - Security Gate section required; unmitigated CRITICAL security = automatic NOT READY
 

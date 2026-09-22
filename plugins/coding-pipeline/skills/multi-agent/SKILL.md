@@ -73,23 +73,9 @@ Test Case rows · duplication %). Report the verdict; no findings → promote wi
 otherwise leave it in draft and route the findings back. Leave the PR for the human either way —
 the pipeline never merges.
 
-> **Context Budget — 80% is a hard ceiling, not a warning.** Model reliability degrades before the
-> window is full: recall of mid-context detail drops and confident invention rises, and a pipeline is
-> exactly where that is most expensive — a hallucinated interface signature or a mis-remembered AC
-> propagates through every stage after it.
-> - **Between epics**: drop implementation code, test files, and completed epic stories. Retain the
->   delivery file, the Manifest, and every score.
-> - **At 4+ epics, or 60%**: compact completed epics to one-line refs —
->   `"Epic {N}: {title} — DONE (Review: X/10, Stress: Y/10, QA: Z/10)"` — never dropping a score.
-> - **At 80%: stop and hand off.** Run `/handoff`, write the `[{key}]` `PROGRESS.md` entries, push
->   the current story branch, and start a fresh session that resumes from the delivery file's Status
->   plus those entries. Do not "push a bit further" — the next thing produced past this line is the
->   thing least likely to be right, and hardest to spot as wrong.
-> - **Handoff state lives in `PROGRESS.md` and the handoff doc — never in the code.** No `TODO`,
->   no `FIXME`, no commented-out stub, no placeholder marking where the session stopped. A source
->   file must not record that an agent ran out of context; that is what the Memory leg is for, and a
->   marker left behind is a finding (CD6) in the next review.
-
+> **Context Budget — 80% is a hard ceiling.** Measured by `hooks/context-budget.sh`; full rule in
+> [`references/context-budget.md`](../../references/context-budget.md). Compact at 60%, `/handoff` at 80%,
+> and never record session state in a source file.
 ---
 
 Use `references/output-format.md` headers. Show Pipeline Summary (with Security Gate + Coverage) after each Verdict.

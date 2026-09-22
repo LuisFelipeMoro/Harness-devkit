@@ -108,5 +108,54 @@ printf '%s' '{"session_id":"citest2","tool_input":{"file_path":"/r/README.md","c
 expect_out "docs only"        delivery-gate.sh '{"session_id":"citest2"}' 0 no
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/citest2"
 
+# ── context-budget: the sensor behind the 80% ceiling ───────────────────────
+# Both thresholds are asserted against a synthetic transcript, so the case fails
+# if the parser, the arithmetic, or the fire-once latch breaks.
+CTX="${TMPDIR:-/tmp}/claude-devkit-ctxtest"
+rm -rf "$CTX"; mkdir -p "$CTX"
+mk_transcript() {   # mk_transcript <used-tokens>
+    printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_read_input_tokens":%s,"cache_creation_input_tokens":0}}}\n' "$1" > "$CTX/t.jsonl"
+}
+ctx_msg() {         # ctx_msg <session> -> stdout of the hook
+    printf '{"session_id":"%s","transcript_path":"%s"}' "$1" "$CTX/t.jsonl" \
+        | env DEVKIT_CONTEXT_WINDOW=100000 bash "$HOOKS/context-budget.sh" 2>&1
+}
+expect_ctx() {      # expect_ctx <name> <session> <substring|NONE>
+    local name="$1" sess="$2" want="$3" out
+    rm -rf "${TMPDIR:-/tmp}/claude-devkit/$sess"
+    out=$(ctx_msg "$sess")
+    if [ "$want" = "NONE" ]; then
+        [ -z "$out" ] && pass=$((pass + 1)) || { echo "FAIL: $name — expected silence, got: $out"; fail=1; }
+    else
+        case "$out" in *"$want"*) pass=$((pass + 1)) ;;
+            *) echo "FAIL: $name — expected '$want', got: $out"; fail=1 ;; esac
+    fi
+}
+mk_transcript 30000;  expect_ctx "ctx quiet under warn"  ctxa NONE
+mk_transcript 65000;  expect_ctx "ctx warns at 60%"      ctxb "65% of the window"
+mk_transcript 85000;  expect_ctx "ctx ceiling at 80%"    ctxc "CEILING"
+# fires once per session, not on every tool call
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/ctxd"; mk_transcript 85000
+ctx_msg ctxd >/dev/null
+out=$(ctx_msg ctxd)
+[ -z "$out" ] && pass=$((pass + 1)) || { echo "FAIL: ctx ceiling repeats — got: $out"; fail=1; }
+# a malformed transcript must fail open, never block
+printf 'not json\n' > "$CTX/t.jsonl"
+expect_ctx "ctx fails open on garbage" ctxe NONE
+expect "ctx disabled by id" context-budget.sh '{"session_id":"ctxf"}' 0 DEVKIT_DISABLED_HOOKS=post:context-budget
+rm -rf "$CTX" "${TMPDIR:-/tmp}/claude-devkit/ctx"*
+
+# ── dispatch-budget: counts subagents, warns once, never blocks ──────────────
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
+dsp() { printf '%s' '{"session_id":"dsp"}' | env DEVKIT_DISPATCH_BUDGET=3 bash "$HOOKS/dispatch-budget.sh" 2>&1; }
+for _ in 1 2 3; do dsp >/dev/null; done
+out=$(dsp)
+case "$out" in *"dispatch-budget:"*) pass=$((pass + 1)) ;;
+    *) echo "FAIL: dispatch-budget silent past budget — got: $out"; fail=1 ;; esac
+out=$(dsp)
+[ -z "$out" ] && pass=$((pass + 1)) || { echo "FAIL: dispatch-budget repeated — got: $out"; fail=1; }
+expect "dispatch never blocks" dispatch-budget.sh '{"session_id":"dsp"}' 0 DEVKIT_DISPATCH_BUDGET=1
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
+
 echo "hook tests: $pass passed, exit=$fail"
 exit $fail

@@ -1,3 +1,6 @@
+> **Numbers live in [`thresholds.md`](thresholds.md)** — coverage floors, duplication limit and
+> score gates. This file carries the *commands*; that one carries the *values*.
+
 # Reference: quality-gate — Gate Commands by Stack
 
 > **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, scrum-master DoD, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
