@@ -25,6 +25,12 @@
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/secret-write-guard.sh\"", "timeout": 3 }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-budget.sh\"", "timeout": 3 }
+        ]
       }
     ],
     "PostToolUse": [
@@ -38,6 +44,18 @@
         "matcher": "Bash|Write|Edit|MultiEdit",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-tracker.sh\"", "timeout": 3 }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.sh\"", "timeout": 5 }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/precompact-snapshot.sh\"", "timeout": 5 }
         ]
       }
     ],

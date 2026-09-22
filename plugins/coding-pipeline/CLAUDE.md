@@ -26,37 +26,28 @@ This devkit is a Harness. Four components, all mandatory:
   | `destructive-guard.sh` | PreToolUse(Bash) | `pre:bash:destructive-guard` | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL run through a database client |
   | `secret-write-guard.sh` | PreToolUse(Write/Edit) | `pre:write:secret-guard` | Blocks writing a recognisable live credential into the tree |
   | `session-tracker.sh` | PostToolUse | `post:session-tracker` | Records which source files changed and whether any gate command ran |
+  | `context-budget.sh` | PostToolUse | `post:context-budget` | Reads context fill from the session transcript; warns at 60%, calls the 80% ceiling |
+  | `dispatch-budget.sh` | PreToolUse(Agent\|Task) | `pre:agent:dispatch-budget` | Counts subagent dispatches, warns once past the session budget |
+  | `precompact-snapshot.sh` | PreCompact | `pre:compact:snapshot` | Records branch, dirty files, last commits and PROGRESS.md freshness before compaction; never blocks |
   | `delivery-gate.sh` | Stop | `stop:delivery-gate` | Refuses to call a session done when source changed and no test/lint/typecheck ever ran |
   | `pr-review-responder.sh` | PostToolUse(Bash) | — | Surfaces open PR comments after a push |
-  | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md` as resume context |
+  | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md`; after compaction also the snapshot, and re-arms the context latches |
 
   Dial them with `DEVKIT_HOOK_PROFILE` — `off`, `standard` (default), or `strict`, which makes `delivery-gate` block once instead of warn — or disable a single hook with `DEVKIT_DISABLED_HOOKS=<hook-id>,<hook-id>`. A guard that cannot parse its input exits 0 — failing open beats blocking every tool call on a payload change.
-- **Context ceiling — 80%, hard.** Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a pipeline propagates through every stage downstream. At 80%, stop and `/handoff`: write the `PROGRESS.md` entries, push the branch, resume in a fresh session from the delivery file's Status. Never carry on past it, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
+- **Context ceiling — 80%, hard, and now measured.** `hooks/context-budget.sh` reads the real
+  figure from the session transcript, so this stopped being a number the model reports about
+  itself. Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a pipeline propagates through every stage downstream. At 80%, checkpoint and continue — no human step: write the `PROGRESS.md` entries, commit and push the branch, carry on; the harness compacts, and `precompact-snapshot.sh` + `session-bootstrap.sh` restore state. Never carry on past it without that checkpoint, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
 - **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code. **The plan is validated the same way**: Priya (Plan Reviewer) reads the delivery file against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say.
 
-## Is the Harness working? (read quarterly, never as a gate)
+## Is the Harness working?
 
-A Harness that is never measured drifts into ceremony. These five signals are countable from
-artifacts the devkit already produces — no new tooling, no new file:
+Five countable signals — scope creep, question timing, rework, sensor escape, test honesty — read
+quarterly by a human from `PROGRESS.md` and the delivery files, never as a gate. They are
+diagnostics and every one is trivially gamed by suppressing its own signal.
+Full table and what to do with a reading: `references/harness-metrics.md`.
 
-| Signal | Where it is counted | Healthy |
-|---|---|---|
-| Scope creep | CD1+CD2+CD3 findings in the Reviewer's `Summary:` line | falling toward zero |
-| Question timing | edits to the delivery file's ACs *after* the first Coder dispatch | rare — questions land before code, not after a mistake |
-| Rework | files touched by 2+ commits on one delivery branch (`git log --format= --name-only <branch> \| sort \| uniq -c`) | flat; a rise means the spec was too loose |
-| Sensor escape | gate failures first caught at pre-push or CI instead of locally | falling — a failure caught late cost a full loop |
-| Test honesty | QA MAJORs for tautological or unfalsified tests | zero, *with* coverage steady — zero findings plus climbing coverage is a red flag, not a win |
-
-**These are diagnostics, never targets.** Every one is trivially gamed by suppressing its
-signal — ask fewer questions, soften the review, squash the rework away — and an agent told to
-optimise them will do exactly that. They are read by a human, from `PROGRESS.md` and the
-delivery files, to decide whether the standards are earning their cost.
-
-**What to do with a reading**: scope creep rising means the Guides are not reaching the Coder —
-tighten the story, do not tighten the reviewer. A stretch of healthy readings is licence to
-*remove* ceremony (demote a lane in Proportionality), which is the only way this file gets
-shorter instead of longer.
+Token cost of the guides themselves is measured, not asserted: `scripts/bench-context.py`.
 
 ## Spec-First Test Discipline (non-negotiable — all code)
 
@@ -106,6 +97,17 @@ Rules:
 - **2 sub-agents** — great. Use for two genuinely independent parallel tasks with no shared state.
 - **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning.
 - **Never spawn 4+** in a single turn.
+- **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
+  per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
+  breaking a rule. Each one is a separate request carrying its own prompt.
+- **Three dispatches per story is the target shape** — Coder, QA, Reviewer. That is the agile
+  equivalent: one implementer, one independent test auditor (earned, because tests are written
+  after the code), one reviewer of the PR diff. Story generation is a template fill, the verdict is
+  arithmetic, and a second reviewer of the same diff finds what the first one did.
+- **Before dispatching, ask whether a sensor answers it.** `scripts/verify/*.sh` cover spec
+  coverage, falsification evidence, mechanical tautologies, security candidates and the verdict
+  arithmetic; grep answers "where is X" and "does this pattern exist" for the price of a tool call.
+  A subagent is for judgment, not for lookup.
 
 ### Model assignment (match the model to the task — token & cost efficiency)
 
@@ -221,7 +223,7 @@ Tasks that lack defined outputs are not tasks — they are conversations. Conver
 Use `TaskCreate` to track tasks with >1 step. Mark `in_progress` when starting, `completed` when done.
 
 ## Universal
-- **SOLID + DRY**: Single responsibility; no duplication — **≤ 3%, measured (`jscpd`), not asserted**. Composition over inheritance. Reuse and extend beat new; three cases before extracting, and a duplication is a reuse finding, never a licence to invent an abstraction the plan did not ask for.
+- **SOLID + DRY**: Single responsibility; no duplication — **measured (`jscpd`), not asserted** (limit: `references/thresholds.md`). Composition over inheritance. Reuse and extend beat new; three cases before extracting, and a duplication is a reuse finding, never a licence to invent an abstraction the plan did not ask for.
 - **Clean Architecture**: Domain logic isolated from I/O layers. No domain leakage into transport/DB/cache.
 - **Security-First**: OWASP Top 10 (web) + OWASP LLM Top 10 2025 (AI/GenAI) as hard baselines. Validate all inputs; encode all outputs. Fail secure. No secrets in source/logs/errors.
 - **Comments**: Write the *why* only — never the *what*. Remove commented-out code immediately.
@@ -230,7 +232,7 @@ Use `TaskCreate` to track tasks with >1 step. Mark `in_progress` when starting, 
 ## Quality Gates (hard requirement — never skip)
 | Gate | Go | TypeScript |
 |------|-----|------|
-| Duplication | `jscpd --threshold 3` (≤ 3%, all stacks) | `jscpd --threshold 3` (≤ 3%, all stacks) |
+| Duplication | `dup-gate.sh --worktree` (≤ 3% introduced, all stacks) | `dup-gate.sh --worktree` (≤ 3% introduced, all stacks) |
 | Format | `gofmt` | `prettier --check` |
 | Lint | `go vet` + `golangci-lint` (0 errors) | `eslint --max-warnings 0` |
 | Types | — | `tsc --noEmit` (`strict: true`) |

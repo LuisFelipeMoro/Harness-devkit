@@ -15,11 +15,15 @@ done
 
 # pre-push shells out to this for duplication attribution; it has to land beside
 # the hook, or the gate degrades to whole-repo mode on every push.
-if [ -f "$SCRIPT_DIR/dup-attribution.py" ]; then
-    cp "$SCRIPT_DIR/dup-attribution.py" "$REPO_ROOT/.git/hooks/dup-attribution.py"
-    chmod +x "$REPO_ROOT/.git/hooks/dup-attribution.py"
-    echo "✓ Installed: .git/hooks/dup-attribution.py"
-fi
+# pre-push delegates the duplication gate to these; without them beside it the
+# gate degrades to UNENFORCED on any machine with no global ~/.claude/git-hooks.
+for helper in dup-gate.sh dup-attribution.py; do
+    if [ -f "$SCRIPT_DIR/$helper" ]; then
+        cp "$SCRIPT_DIR/$helper" "$REPO_ROOT/.git/hooks/$helper"
+        chmod +x "$REPO_ROOT/.git/hooks/$helper"
+        echo "✓ Installed: .git/hooks/$helper"
+    fi
+done
 
 echo ""
 echo "Git hooks installed. Run 'git commit --allow-empty -m \"test: verify hooks\"' to verify."

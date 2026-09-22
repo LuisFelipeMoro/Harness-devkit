@@ -79,7 +79,7 @@ A per-file or per-story review never sees the whole delivery at once, so a helpe
 two different stories is invisible until here. A perfect duplicate lints clean, types clean, and
 covers clean — this is the only place it gets caught before it becomes rework.
 
-Run `jscpd . --threshold 3 --min-lines 8 --reporters console` over the branch and quote the figure.
+Run `bash ~/.claude/git-hooks/dup-gate.sh` on the checked-out branch and quote its `introduced` / `pre-existing` line — the same verdict pre-push gives.
 
 - RD1 New symbol reimplements one that already exists (cite both `file:line`) → HIGH
 - RD2 Near-copy of an existing block, differing only in literals, types, or field names → HIGH

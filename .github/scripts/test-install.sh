@@ -213,5 +213,18 @@ check "detects_up_to_date" "second run did not report an up-to-date install" $?
 
 rm -rf "$H" "$WORK"
 
+# ignores_stray_git_hooks_dirs — a gitignored __pycache__ beside dup-attribution.py
+# appears the first time anyone runs py_compile. cp on a directory exits non-zero,
+# set -e aborted the install there, and every step after it (settings wiring
+# included) silently never ran. Runs against a copy: the test must not touch the tree.
+H="$(newhome)"; WORK="$(newhome)"; SRC="$(newhome)"
+cp -R "$REPO/plugins" "$SRC/"
+mkdir -p "$SRC/plugins/coding-pipeline/git-hooks/__pycache__"
+( cd "$WORK" && HOME="$H" bash "$SRC/plugins/coding-pipeline/scripts/install-global.sh" ) >/dev/null 2>&1
+rc=$?
+[ "$rc" = "0" ] && [ -f "$H/.claude/git-hooks/pre-push" ] && [ ! -e "$H/.claude/git-hooks/__pycache__" ]
+check "ignores_stray_git_hooks_dirs" "install exited $rc or staged the stray directory" $?
+rm -rf "$H" "$WORK" "$SRC"
+
 echo "install tests: $pass passed, exit=$fail"
 exit $fail

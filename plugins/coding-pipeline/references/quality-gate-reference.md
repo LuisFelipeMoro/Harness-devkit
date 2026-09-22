@@ -1,3 +1,6 @@
+> **Numbers live in [`thresholds.md`](thresholds.md)** — coverage floors, duplication limit and
+> score gates. This file carries the *commands*; that one carries the *values*.
+
 # Reference: quality-gate — Gate Commands by Stack
 
 > **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, scrum-master DoD, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
@@ -69,7 +72,7 @@ pre-push hook, CLAUDE.md) restates it for local context but defers here on confl
 
 | Gate | Command | Pass |
 |------|---------|------|
-| Duplication | `rtk jscpd . --threshold 3 --min-lines 8 --min-tokens 50 --reporters console` | ≤ 3% — jscpd exits non-zero itself when the threshold is exceeded |
+| Duplication | `bash ~/.claude/git-hooks/dup-gate.sh --worktree` | ≤ 3% **introduced** — exit 0 pass · 1 block · 2 UNENFORCED. Same flags and attribution as pre-push; `--worktree` includes uncommitted work. Never run raw repo-wide `jscpd`: it counts markdown and pre-existing debt, and disagrees with the hook |
 
 - **Install**: `npm i -g jscpd` (or as a devDependency — the pre-push hook also accepts `node_modules/.bin/jscpd`).
 - **Tuning belongs in a committed `.jscpd.json`**, which jscpd reads on its own: extra `ignore` globs, per-format thresholds, a `min-lines` suited to the language. Tuning by loosening the hook's flags is not tuning, it is turning the gate off for everyone.

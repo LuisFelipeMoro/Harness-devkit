@@ -16,11 +16,12 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOKS="$ROOT/plugins/coding-pipeline/git-hooks"
-WORK="${TMPDIR:-/tmp}/devkit-githook-tests"
+# Per-run: a fixed path let two concurrent runs (CI shards, an agent and a human)
+# rm -rf each other's fixtures mid-case.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/devkit-githook-tests.XXXXXX")"
 fail=0
 pass=0
 
-rm -rf "$WORK"
 
 # fixture <name> — fresh directory with every external stubbed to a silent
 # success. A case overwrites the specific stub whose output it is testing.
@@ -205,8 +206,7 @@ dup_fixture() {
 # dup_stub <dir> <fileA> <startA> <endA> — a jscpd that writes the report the
 # hook will read. The clone's location is what decides the verdict.
 dup_stub() {
-    local dir="$1" out
-    out="${TMPDIR:-/tmp}/devkit-jscpd"
+    local dir="$1"
     python3 - "$dir/canned-report.json" "$2" "$3" "$4" <<'PYEOF'
 import json, sys
 out, f, a, b = sys.argv[1:]
@@ -216,8 +216,9 @@ json.dump({"statistics": {"total": {"lines": 200}},
                            "secondFile": {"name": "legacy.txt", "start": 1, "end": 20}}]},
           open(out, "w"))
 PYEOF
-    printf '#!/bin/sh\nmkdir -p "%s"\ncp "%s/canned-report.json" "%s/jscpd-report.json"\nexit 0\n' \
-        "$out" "$dir" "$out" > "$dir/.stub-bin/jscpd"
+    # Honours --output like jscpd does: the gate picks a per-run directory.
+    printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = --output ] && out="$2"; shift; done\nmkdir -p "$out"\ncp "%s/canned-report.json" "$out/jscpd-report.json"\nexit 0\n' \
+        "$dir" > "$dir/.stub-bin/jscpd"
     chmod +x "$dir/.stub-bin/jscpd"
 }
 
@@ -239,6 +240,53 @@ expect_says "duplication gate is stack-agnostic"      pre-push "$d" yes "Duplica
 d="$(fixture dup-missing)"
 expect_exit "missing jscpd does not block"  pre-push "$d" 0
 expect_says "missing jscpd says UNENFORCED" pre-push "$d" yes "duplication UNENFORCED"
+
+# ── dup-gate.sh --worktree (what /quality-gate runs before anything is committed) ──
+# gate_check <name> <0|1 result> — for cases that need arguments or post-conditions
+# run_hook cannot express.
+gate_check() {
+    if [ "$2" = "0" ]; then pass=$((pass + 1)); else echo "FAIL: $1"; fail=1; fi
+}
+run_gate() {        # run_gate <fixture-dir> [args] — exit code of dup-gate.sh
+    local dir="$1"; shift
+    ( cd "$dir" && PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" "$@" >/dev/null 2>&1 )
+}
+
+# Attribution reads base...HEAD, so a clone that is only on disk is invisible to it
+# unless the snapshot commits it. This is the whole reason the flag exists.
+d="$(dup_fixture dup-wip)"
+seq 1 30 | sed 's/^/wip line /' > "$d/wip.txt"
+dup_stub "$d" wip.txt 1 30
+before_status="$(git -C "$d" status --porcelain)"; before_head="$(git -C "$d" rev-parse HEAD)"
+run_gate "$d" --worktree; [ "$?" = "1" ]
+gate_check "worktree mode blocks a clone that is not committed yet" $?
+
+# A gate is a read: the caller's tree, index, HEAD and worktree list come back as
+# they were. A leaked worktree or commit is a mutation nobody asked for.
+[ "$(git -C "$d" status --porcelain)" = "$before_status" ] \
+    && [ "$(git -C "$d" rev-parse HEAD)" = "$before_head" ] \
+    && [ "$(git -C "$d" worktree list | wc -l | tr -d ' ')" = "1" ]
+gate_check "worktree mode leaves the repo exactly as it found it" $?
+
+# Without the flag the gate measures commits — what pre-push is about to send —
+# so local work in progress is not charged to the push.
+run_gate "$d"; [ "$?" = "0" ]
+gate_check "default mode does not charge uncommitted work" $?
+
+# From a subdirectory the snapshot must still place new files at their repo path;
+# a cwd-relative untracked list dropped sub/wip.txt at the snapshot root, where
+# the clone the report names does not exist.
+d="$(dup_fixture dup-subdir)"
+mkdir -p "$d/sub"; seq 1 30 | sed 's/^/sub line /' > "$d/sub/wip.txt"
+dup_stub "$d" sub/wip.txt 1 30
+( cd "$d/sub" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" --worktree >/dev/null 2>&1 ); [ "$?" = "1" ]
+gate_check "worktree mode from a subdirectory snapshots files at their repo path" $?
+
+# Called explicitly, a missing tool is exit 2, never 0: /quality-gate must be able
+# to tell "clean" from "never measured".
+d="$(fixture dup-gate-missing)"
+run_gate "$d" --worktree; [ "$?" = "2" ]
+gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" $?
 
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"

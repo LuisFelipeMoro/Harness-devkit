@@ -18,58 +18,41 @@ VERDICT: NOT READY
 VERDICT: READY WITH CONDITIONS
 ```
 
-Then (only if all hard gates pass):
+Then the score line `verdict.sh` printed. The weighting lives in `references/thresholds.md`.
+
+---
+
+## Step 1 — compute the verdict *(mechanical, not judgment)*
+
+```bash
+scripts/verify/verdict.sh --review N --stress N --qa N \
+  [--critical-security N] [--critical-other N] \
+  [--hard-gate-fail "name,name"] [--reviewer-block]
 ```
-Overall Score: X/10  (weighted: Review 35% · Stress 35% · QA 30%)
-```
 
----
+It applies the weighting and thresholds from `references/thresholds.md` and prints the verdict
+line, the overall score and the reason for it. Do not re-derive any of that by hand: a verdict is
+the one artifact nobody downstream re-checks, so an arithmetic slip here becomes a fact.
 
-## Hard Gate Check *(evaluate first — any failure = NOT READY, no exceptions)*
+Collect the hard-gate results first — from the Reviewer (OWASP, secrets, auth bypass, injection,
+coverage, spec-first evidence), the Stress Tester (authz under degradation, cross-request leakage,
+crash under load, headers under error rate) and the orchestrator (nothing committed to `main`).
+Pass every FAIL to `--hard-gate-fail`. Any hard-gate FAIL is NOT READY; the script enforces it.
 
-Collect all hard gate results from Reviewer and Stress Tester:
+## Step 2 — Security Gate *(mandatory — fill even when every gate passes)*
 
-| Gate | Source | Status |
-|------|--------|--------|
-| No unmitigated OWASP Top 10 vulnerability | Reviewer | PASS / FAIL |
-| No hardcoded secret / credential in source | Reviewer | PASS / FAIL |
-| Auth/authz not bypassable without valid credentials | Reviewer | PASS / FAIL |
-| No SQL/command injection via unsanitized input | Reviewer | PASS / FAIL |
-| Coverage threshold met (Go ≥85% · Java ≥85% · JS/TS ≥85% · PHP ≥80% · Rust ≥85%) | Reviewer | PASS / FAIL |
-| Spec-first testing followed — every Test Case row implemented, every test falsified with valid evidence, zero tautologies | Reviewer / QA | PASS / FAIL |
-| All work committed on `release/{slug}-{key}` (or `hotfix/{slug}`), nothing on `main` | Orchestrator | PASS / FAIL |
-| Auth/authz holds under degraded conditions (circuit open, cache miss) | Stress | PASS / FAIL |
-| No cross-request data leakage under concurrent load | Stress | PASS / FAIL |
-| No unrecoverable crash (OOM, deadlock, panic) under realistic load | Stress | PASS / FAIL |
-| Security headers / error sanitization stable under high error rate | Stress | PASS / FAIL |
+- Every CRITICAL and MAJOR security finding across all agents, listed.
+- Unmitigated CRITICAL security = NOT READY regardless of score.
+- Unmitigated OWASP Top 10 = minimum READY WITH CONDITIONS with a mandatory fix.
+- Language-specific security patterns applied or missing.
 
-**If any gate = FAIL → verdict is NOT READY. Stop. List failed gates. Do not compute score.**
+## Step 3 — narrative *(the part that is actually judgment)*
 
----
-
-## Security Gate *(mandatory — fill even if all hard gates pass)*
-
-- List every CRITICAL and MAJOR security finding across all agents
-- An unmitigated CRITICAL security issue = NOT READY, regardless of overall score
-- An unmitigated OWASP Top 10 issue = minimum READY WITH CONDITIONS with mandatory security fix
-- Note language-specific security patterns applied or missing
-
----
-
-## Scoring *(only if all hard gates pass)*
-
-**What Passed** — specific strengths, not generic praise
-
-**What Failed / Concerns** — `[CRITICAL/MAJOR/MINOR] description (flagged by: agent)`
-
-**Top 3 Must-Fix Before Shipping**
-1. {Most critical — specific, actionable}
-2.
-3.
-
-**Conditions** *(only if READY WITH CONDITIONS)* — each with a verifiable check
-
-**Next Steps** — immediate actions first, then longer-term
+**What Passed** — specific strengths, not generic praise.
+**What Failed / Concerns** — `[CRITICAL/MAJOR/MINOR] description (flagged by: agent)`.
+**Top 3 Must-Fix Before Shipping** — each specific and actionable.
+**Conditions** *(READY WITH CONDITIONS only)* — each with a verifiable check.
+**Next Steps** — immediate first, then longer-term.
 
 ---
 
@@ -102,11 +85,7 @@ evidence cited is itself a defect — the same tautology rule QA applies to test
 
 ## Thresholds
 
-| Verdict | Criteria |
-|---------|----------|
-| PRODUCTION READY | All hard gates PASS · overall ≥ 8.0 · 0 CRITICAL issues |
-| READY WITH CONDITIONS | All hard gates PASS · 6.5–7.9 overall, or ≥8.0 with ≤1 non-security CRITICAL |
-| NOT READY | Any hard gate FAIL · overall < 6.5 · any unmitigated CRITICAL security issue |
+`references/thresholds.md` — applied by `verdict.sh`, never restated here.
 
 ---
 
@@ -114,7 +93,5 @@ evidence cited is itself a defect — the same tautology rule QA applies to test
 
 - Hard gates are binary — a high score does not override a gate failure
 - Security CRITICAL is never eligible for READY WITH CONDITIONS — it is always NOT READY
-- Score gap > 3 between Review and Stress → add a WARNING note in the verdict output recommending manual inspection before shipping; does not change the verdict by itself
 - Verify all PRD ACs are fulfilled — a passing score with unmet ACs = NOT READY
 - Note if language best practices were followed: Uber style (Go) · Spring Security (Java) · `strict_types` (PHP) · TypeScript strict mode (JS/TS) · no-unwrap/thiserror/utoipa (Rust)
-- If Reviewer BLOCKed, overall score is capped at 5.0 regardless of other agent scores

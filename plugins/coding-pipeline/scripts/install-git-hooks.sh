@@ -32,7 +32,11 @@ mkdir -p "$GLOBAL/git-hooks"
 # Stage hook templates globally so they're available for future repos without
 # needing the original .claude/ folder present.
 if ls "$DOTCLAUDE/git-hooks/"* >/dev/null 2>&1; then
-    cp "$DOTCLAUDE/git-hooks/"* "$GLOBAL/git-hooks/"
+    # Files only: a stray gitignored dir (__pycache__) makes cp exit non-zero.
+    for f in "$DOTCLAUDE/git-hooks/"*; do
+        [ -f "$f" ] || continue
+        cp "$f" "$GLOBAL/git-hooks/"
+    done
     chmod +x "$GLOBAL/git-hooks/pre-commit" \
              "$GLOBAL/git-hooks/pre-push" \
              "$GLOBAL/git-hooks/commit-msg" \

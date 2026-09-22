@@ -32,8 +32,8 @@ Start with: `Score: X/10`
 - Hardcoded secret / credential / API key in source
 - Auth/authz bypass reachable without valid credentials
 - SQL/command/template injection via unsanitized user input
-- Coverage < 85% (Go/JS/TS/Rust/React/Next.js/Java/Kotlin) or < 80% (PHP/Flutter)
-- Duplication > 3% (`jscpd --threshold 3`) — or a new symbol that reimplements one the Reuse Map named
+- Coverage below the floor in `references/thresholds.md`
+- Duplication over the limit in `references/thresholds.md` — or a new symbol that reimplements one the Reuse Map named
 
 ---
 
@@ -171,29 +171,20 @@ Recommendation: APPROVE | APPROVE WITH CHANGES | REQUEST CHANGES | BLOCK
 
 ## Security Deep-Dive Checklist
 
-**Emit ONLY violations (✗) and inapplicable items with a brief reason.**
-When an entire section is clean, write: `[Section name]: clean`
-When the full checklist is clean: `Security checklist: clean — no violations`
+Run the candidate finder, then adjudicate:
 
-This keeps output compact — a 50-line ✓ list is noise; only failures carry signal.
+```bash
+scripts/verify/security-scan.sh <changed-paths...>
+```
 
-Sections to evaluate (report violations only):
+It returns `file:line` hits for injection, XSS, SSRF, path traversal, weak crypto, hardcoded
+secrets, unsafe deserialization, secrets in logs and the route surface. Read the hits, not every
+file. Zero hits is **not** a pass — a missing authz check has no pattern to match, so auth is
+still traced on every route the scan lists.
 
-**Auth & Sessions**: protected routes require valid auth token · validated cryptographically (signature + expiry, not just presence) · tokens short-lived with refresh rotation · session IDs regenerated on privilege change · logout invalidates server-side session/token
-
-**Authorization**: every data access checks ownership (IDOR prevention) · role checks at service layer, not only UI/controller · default deny — access granted explicitly, not by absence of restriction
-
-**Input Handling**: all inputs validated (type, length, format, range, allowed chars) at system boundary · file uploads: magic-byte type check, size limited, stored outside webroot · redirects use allowlist — no open redirect via user-controlled URL
-
-**Output & Encoding**: HTML output escaped for context · JSON responses set `Content-Type: application/json` · SQL uses parameterized queries — zero string concatenation · shell commands avoid user input; if unavoidable, allowlist + shell-escape
-
-**Cryptography**: passwords bcrypt/argon2 work-factor ≥ 12 (not MD5/SHA1/SHA256 alone) · tokens/nonces from CSPRNG (`crypto.randomBytes`/`SecureRandom`/`random_bytes`/`crypto/rand`) · TLS 1.2+ on all external connections; `InsecureSkipVerify` absent · authenticated encryption (AES-GCM, ChaCha20-Poly1305) — not ECB/CBC-no-MAC
-
-**Secrets & Config**: no secrets in source, committed config, or `.env` · secrets from env/vault at runtime · no secrets in logs, error messages, or HTTP responses
-
-**HTTP Security Headers**: `Content-Security-Policy` · `X-Content-Type-Options: nosniff` · `X-Frame-Options: DENY`/`SAMEORIGIN` · HSTS for HTTPS · CORS: origin allowlist, not `*` for authenticated endpoints
-
-**Dependency & Supply Chain**: no libraries with known critical CVEs · versions pinned (lockfile committed) · no `eval()`, dynamic `require()`/`import()`, or RCE patterns
+The eight checklist sections and the reporting rules are in
+[`references/security-checklist.md`](../references/security-checklist.md), shared with `/pr-review`
+so both reviewers of a diff apply the same list.
 
 ---
 
@@ -206,7 +197,7 @@ table; review against it rather than restating it here. Two severities it does n
 
 - A diff violating its language's authority chain is a finding **even when it compiles and passes** — and, inversely, never judge code by another language's habits.
 - An API newer than the version the project pins = MAJOR (builds locally, fails on the pinned toolchain). A library bump arriving as a side effect of an unrelated story = CD3.
-Key coverage hard gates: Go/JS/TS/Java/Rust/React/Kotlin ≥ 85% · PHP/Flutter ≥ 80% — any miss = BLOCK (score ≤ 5).
+Coverage floors and every other numeric gate: `references/thresholds.md`. A miss = BLOCK.
 
 ---
 
