@@ -180,7 +180,9 @@ snap="$pc_state/precompact.md"
 [ "$rc" = 0 ] && grep -q "dirty.txt" "$snap" && grep -q "feat: first slice" "$snap" && grep -q "^branch: " "$snap"
 [ $? = 0 ] && pass=$((pass + 1)) || { echo "FAIL: precompact snapshot missing branch/dirty file/last commit (rc=$rc)"; fail=1; }
 # Snapshots carry paths and commit subjects; the state dir is owner-only.
-[ "$(stat -f %Lp "$pc_state" 2>/dev/null || stat -c %a "$pc_state")" = "700" ] \
+# GNU first: on Linux `stat -f` is filesystem status and exits 0, so a BSD-first
+# fallback never fires there. BSD stat rejects -c and falls through.
+[ "$(stat -c %a "$pc_state" 2>/dev/null || stat -f %Lp "$pc_state")" = "700" ] \
     && pass=$((pass + 1)) || { echo "FAIL: devkit state dir is not owner-only (700)"; fail=1; }
 grep -q "PROGRESS.md: NOT updated since the 80% ceiling" "$snap" \
     && pass=$((pass + 1)) || { echo "FAIL: precompact does not flag PROGRESS.md stale after the ceiling"; fail=1; }
