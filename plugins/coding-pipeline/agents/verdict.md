@@ -25,7 +25,8 @@ Then the score line `verdict.sh` printed. The weighting lives in `references/thr
 ## Step 1 — compute the verdict *(mechanical, not judgment)*
 
 ```bash
-scripts/verify/verdict.sh --review N --stress N --qa N \
+scripts/verify/verdict.sh --roster {cosmetic|light|standard|full} --classify-exit N \
+  --review N --stress N --qa N \
   [--critical-security N] [--critical-other N] \
   [--hard-gate-fail "name,name"] [--reviewer-block]
 ```
@@ -33,6 +34,10 @@ scripts/verify/verdict.sh --review N --stress N --qa N \
 It applies the weighting and thresholds from `references/thresholds.md` and prints the verdict
 line, the overall score and the reason for it. Do not re-derive any of that by hand: a verdict is
 the one artifact nobody downstream re-checks, so an arithmetic slip here becomes a fact.
+
+There is no per-story Verdict agent dispatch: the orchestrator reads this file once per delivery
+and applies the Security Gate (Step 2) and the Verdict Self-Check below inline, per story, itself
+— `verdict.sh` is what actually runs per story.
 
 Collect the hard-gate results first — from the Reviewer (OWASP, secrets, auth bypass, injection,
 coverage, spec-first evidence), the Stress Tester (authz under degradation, cross-request leakage,

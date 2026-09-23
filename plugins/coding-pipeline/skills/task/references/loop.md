@@ -18,66 +18,87 @@ Load and follow `skills/planning/SKILL.md` starting from **Phase 1 (Architecture
 
 ## Phase 2 — Sub-Task Loop (repeat per sub-task)
 
-**A. Story** — `agents/scrum-master.md`
-Input: Task Manifest row + the delivery file → Output: `docs/deliveries/{key}/story-{slug}.md`
+**A. Story** — `agents/scrum-master.md`, dispatched only when the Task Manifest has **≥ 2 manifest rows**; a single-row manifest has the orchestrator fill the story template directly, no dispatch
+Input: Task Manifest row + the delivery file → Output: `docs/deliveries/{key}/story-{slug}.md` (include the row's declared Roster)
 
 **B. Code (Spec→Implement→Test→Falsify)** — sub-agent with `agents/coder.md` (core) + ONE tier overlay + `story-{slug}.md`
 
 > Runs **inside the delivery worktree** (`.worktrees/dlv-{key}/`) and **one sub-task at a time** —
 > sub-tasks share that single worktree, so two concurrent Coders would overwrite each other.
-> **Cut `feat/{key}-{story-slug}` from the release branch before coding** — that branch is the unit
-> of review, and its own PR into `release/*` is where `/pr-review` runs with this sub-task's ACs,
-> Test Case table, Reuse Map and Blast Radius in context. Merge back with `--no-ff` once the Verdict
-> passes and the story PR is green. Only a genuinely trivial sub-task (manifest projected under ~50
-> lines) commits straight to the release branch, and taking that exception is stated, not silent.
-> Never commit or merge to `main`. Branch table: `../../references/delivery-and-worktree.md`.
+> **Cut `feat/{key}-{story-slug}` from the release branch before coding.** In `pr` mode (no
+> remote/`gh` unavailable = `local` mode, decided once per delivery — D1): commit → push →
+> `gh pr create --draft --base release/{slug}-{key}`; the Reviewer posts inline via `gh pr review`
+> and `gh pr ready` gates the merge. In `local` mode: commit to the branch only, and the Reviewer
+> writes its findings to `docs/deliveries/{key}/review-{story-slug}.md` for the human to read
+> later. Merge back with `--no-ff` once the Verdict passes. Only a genuinely trivial sub-task
+> (manifest projected under ~50 lines) commits straight to the release branch, and taking that
+> exception is stated, not silent. Never commit or merge to `main`. Branch table:
+> `../../references/delivery-and-worktree.md`.
 - **Stack-aware dispatch**: pick the overlay by the sub-task's Tier — `agents/coder-backend.md` (server/API/domain) or `agents/coder-frontend.md` (UI/SSR/client). Load only `references/languages/<language>.md` for the sub-task's `Language` — never the index. Full-stack sub-tasks were split BE/FE around the `api-spec.yaml` contract (BE producer first, then FE consumer). No frontend stack → frontend coder never spawned.
   - **Frontend sub-task creating or materially redesigning visual surface** (new page/component/theme/layout — not a pure logic/state change): before dispatching the frontend coder, invoke `/frontend-design` for a compact design plan (palette, type pairing, layout concept, signature element) and include it in the coder's dispatch prompt. Skip for backend-only sub-tasks and frontend sub-tasks that don't touch visual surface.
+- **Model**: haiku, except **sonnet for roster `full`** — haiku misreported coverage twice on a `full` sub-task (PROGRESS.md). A fix round is always a **fresh, narrowly-scoped Coder dispatch**, never a resumed context.
+- Dispatch prompt carries the contract: `Gate outputs below were run by the orchestrator. Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan; read the attached output.`
 - The story ACs + Definition of Done are the frozen acceptance contract — Coder satisfies it, never redefines it
 - Coder runs Phase 0 Analysis, then Phase 1 implement to the frozen Test Case table → Phase 2 write exactly the specified tests → Phase 3 falsify each one (apply the row's break, confirm the assertion fails, restore) — owns both test and impl files
 - Coder emits `CODER DONE` with spec coverage ({n}/{N} rows) and one falsification evidence line per test
 - Orchestrator stores compact ref: `"ST1: {file}.{ext} + tests, {N} lines, implements {Interface}"`
 
-**C. QA audit + gates** — `agents/qa.md`
-Input: ACs from Task Manifest (including Security ACs) + Amelia's tests + full code
-Quinn audits the tests (spec-row completeness, falsification evidence + spot-checks, intent-encoding, corner cases, no tautologies — see qa.md Test Audit), then runs all quality gates. Quinn authors no tests.
+**Checkpoint M** *(after every Coder return, including every fix round — no exceptions)*: Fail fast — the orchestrator's job at M is to run every mechanical check and return all failures at once, not stop at the first red one:
+- spec-coverage.sh and falsification.sh against the story's declared Test Case rows, checked **by exact row name** — a partial match is a FAIL; every FAIL line names its row
+- the orchestrator's own re-break of a sample of the falsification evidence — an agent's claimed break is a claim, not proof
+- format, lint, existing + new suites, coverage, `git-hooks/dup-gate.sh --worktree`, vuln, race where applicable
+- `classify-diff.sh --diff release/{slug}-{key} --declared {roster}` — exit 1 (`ROSTER: ESCALATE`) or exit 2 (UNMEASURED) is a FAIL
+- `git diff --name-only release/{slug}-{key}...HEAD` matches the sub-task's expected changed-file set exactly, and `git log` shows no commit the sub-task didn't intend
+
+Any FAIL or exit 2 → back to the Coder with the output; no QA, Reviewer or Stress dispatch. Every Coder fix — whether it came from M, QA, Reviewer or Stress — goes back to M before any agent sees the code again. 3 round trips at one checkpoint → ask the operator: fix differently / relax scope / stop.
+
+**C. QA audit + gates** — `agents/qa.md`, dispatched for roster `standard` and `full` (`cosmetic` has no spec table to audit; `light` is audited by the Reviewer instead — see the Roster table in `CLAUDE.md`)
+Input: ACs from Task Manifest (including Security ACs) + Amelia's tests + the diff — `git diff --name-only release/{slug}-{key}...HEAD`
+Quinn audits the tests (spec-row completeness, falsification evidence + spot-checks, intent-encoding, corner cases, no tautologies via `tautology-scan.py --diff` — see qa.md Test Audit), then runs the repo-wide gates she owns (coverage, race). Quinn authors no tests.
 
 > **Run the sensors before Quinn reasons.** `scripts/verify/spec-coverage.sh`,
-> `scripts/verify/falsification.sh` and `scripts/verify/tautology-scan.py` decide spec-row
-> completeness, evidence validity and the mechanical tautology shapes by exit code. Quinn reads
-> their output and spends her pass on what they cannot decide: whether each break matches the
-> behaviour, the spot-check re-breaks, over-mocking, intent-encoding and corner cases.
- Route on Quinn's output signal:
+> `scripts/verify/falsification.sh` and `scripts/verify/tautology-scan.py --diff` decide spec-row
+> completeness, evidence validity and the mechanical tautology shapes by exit code — already run at
+> checkpoint M. Quinn reads their output and spends her pass on what they cannot decide: whether
+> each break matches the behaviour, the spot-check re-breaks, over-mocking, intent-encoding and
+> corner cases.
 
-- `QA→REVIEWER APPROVAL` → proceed to D (Review + Stress in parallel)
-- `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → Bug-Fix Loop
+Route on Quinn's output signal:
+
+- `QA→REVIEWER APPROVAL` → proceed to D (Reviewer ∥ Stress)
+- `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → Coder → back to M → QA — never straight to D
 - `QA ESCALATION` (after 3 iterations) → proceed to D with FAIL status
 
 See `references/quality-gate-reference.md` **Bug-Fix Loop Protocol** (and **Loop Integrity** — no goalpost-moving, stop on an identical repeat failure, compact only at story boundaries) for exact procedure, iteration counting, and coverage failure sub-path.
 
-**D. Review + Stress** *(triggered by QA signal — never before QA approval or escalation)*:
-- `agents/reviewer.md` → full code, language-specific checks, **plus the acceptance contract**: the story (ACs + Test Case table), the delivery file's Reuse Map, and `codebase-map.md`. Without them the Reviewer's own escape clause fires and CD1/CD3/CD7 — every intent and scope check — is skipped silently, which is how a diff that builds the wrong thing scores 8/10.
-- `agents/stress.md` → full code + tests, Security Under Stress
-- Reviewer runs `scripts/verify/security-scan.sh` on the changed paths first and adjudicates the
+**D. Reviewer ∥ Stress** *(triggered by QA signal for `standard`/`full`, or directly after checkpoint M for `light` — never before QA approval or escalation when QA ran)*:
+- `agents/reviewer.md` → the diff (`git diff --name-only release/{slug}-{key}...HEAD`) + the attached sensor output, language-specific checks, **plus the acceptance contract**: the story (ACs + Test Case table), the delivery file's Reuse Map, and `codebase-map.md`. Without them the Reviewer's own escape clause fires and CD1/CD3/CD7 — every intent and scope check — is skipped silently, which is how a diff that builds the wrong thing scores 8/10.
+- Reviewer runs `security-scan.sh --diff` on the changed paths first and adjudicates the
   `file:line` candidates, rather than reading every file hunting for the patterns.
+- For roster `light`/`standard` the Reviewer also folds the Stress lens: reads `agents/stress.md`, applies its categories to the diff, and emits its own Stress Score + Hard Gates lines.
+- **StressTester is dispatched separately only for roster `full`, or when `STRESS-TRIGGER: yes` from `security-scan.sh --diff` is not explained by test-fixture strings** → `agents/stress.md` → full code + tests, Security Under Stress.
+- Both dispatch prompts carry the dispatch prompt contract line from B.
+- One fix round covers both Reviewer and Stress findings together, then re-check.
 
 If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Tyler):
 - Tyler applies MINOR/NIT fixes; emits `TUNER COMPLETE`
-- Reviewer re-scores only changed files; use higher score for Verdict
+- Re-checks after a fix round are **narrow, never a full re-review**: QA re-audits only if tests changed, resuming the same QA agent rather than a fresh dispatch; Reviewer and Stress each run a confirmation pass on only their own prior findings, on haiku.
+- Any code fix — Tuner's included — goes back to M first.
 - Maximum 2 iterations; on `TUNER LIMIT REACHED` → proceed to E
 
-**E. Verdict** — `scripts/verify/verdict.sh` computes the gate, score and threshold;
-`agents/verdict.md` owns the Security Gate, the narrative and the Verdict Self-Check
-Input: Review score + Stress score + QA summary + AC checklist + Gate Report
-Unmitigated CRITICAL security = automatic NOT READY.
+**E. Verdict** — `scripts/verify/verdict.sh --roster {roster} --classify-exit {n}` computes the gate, score and threshold; `agents/verdict.md` is read once per delivery and its Security Gate, narrative and Verdict Self-Check are applied **inline by the orchestrator** — no Verdict agent is dispatched per sub-task
+Input: Review score + Stress score (dispatched or folded) + QA summary (when QA ran) + AC checklist + Gate Report
+Unmitigated CRITICAL security = automatic NOT READY. `--classify-exit` non-zero (the declared roster was under-scoped) is itself a NOT READY reason, independent of score.
 
 **F. Checkpoint**
 
 | Score | Security | Gates | Action |
 |-------|----------|-------|--------|
-| ≥ 8.0 | No CRITICAL | All green | Next sub-task or final summary |
+| ≥ 8.0 | No CRITICAL | All green | `pr` mode: `gh pr ready` → `git merge --no-ff` into the release branch, push. `local` mode: `git merge --no-ff` only. Next sub-task or final summary |
 | ≥ 8.0 | CRITICAL | Any | NOT READY — fix security first |
 | < 8.0 | Any | Any | Show issues; ask: *"Fix and re-run / skip / stop?"* |
+
+The Reviewer's pass on the sub-task's own diff is the sub-task-level review — there is no separate review dispatch at that level. The release branch keeps its own pull-request review, unchanged, for cross-story duplication and plan drift.
 
 On re-run: pass only delta (CRITICAL/MAJOR issues + failing ACs + failed gates).
 

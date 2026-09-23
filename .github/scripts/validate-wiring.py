@@ -216,6 +216,116 @@ CONTRACT = [
     ("plugins/coding-pipeline/skills/bug-fix/references/dispatch.md",
      ["subagent_type: \"bug-investigator\"", "subagent_type: \"coder\""],
      ["subagent_type: \"claude\""]),
+
+    # ST6 — loop.md diff scope and checkpoint structure (multi-agent)
+    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+     ["git diff --name-only release/{slug}-{key}...HEAD",
+      "Fail fast", "no QA, Reviewer or Stress dispatch",
+      "TEST GAP", "Coder", "never straight to D",
+      "back to M",
+      "QA re-audits only if tests changed", "confirmation",
+      "run every mechanical check", "all failures",
+      "3 round trips", "ask the operator",
+      "security-scan.sh --diff", "tautology-scan.py --diff",
+      "classify-diff.sh --diff",
+      "roster `full`",
+      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
+      "≥ 2 manifest rows",
+      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
+      "dup-gate.sh --worktree"],
+     ["/pr-review", "Review + Stress in parallel"]),
+
+    # ST6 — loop.md diff scope and checkpoint structure (task)
+    ("plugins/coding-pipeline/skills/task/references/loop.md",
+     ["git diff --name-only release/{slug}-{key}...HEAD",
+      "Fail fast", "no QA, Reviewer or Stress dispatch",
+      "TEST GAP", "Coder", "never straight to D",
+      "back to M",
+      "QA re-audits only if tests changed", "confirmation",
+      "run every mechanical check", "all failures",
+      "3 round trips", "ask the operator",
+      "security-scan.sh --diff", "tautology-scan.py --diff",
+      "classify-diff.sh --diff",
+      "roster `full`",
+      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
+      "≥ 2 manifest rows",
+      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
+      "dup-gate.sh --worktree"],
+     ["/pr-review", "Review + Stress in parallel"]),
+
+    # ST7 — agents (reviewer stress lens and routing)
+    ("plugins/coding-pipeline/agents/reviewer.md",
+     ["Stress Score:", "agents/stress.md",
+      "Do not re-run",
+      "security-scan.sh --diff",
+      "gh pr review", "review-{story-slug}.md"],
+     []),
+
+    # ST7 — stress conditional
+    ("plugins/coding-pipeline/agents/stress.md",
+     ["roster `full`", "Folded mode"],
+     []),
+
+    # ST7 — qa and gate routing
+    ("plugins/coding-pipeline/agents/qa.md",
+     [],
+     ["StressTester in parallel"]),
+
+    ("plugins/coding-pipeline/references/quality-gate-reference.md",
+     [],
+     ["(and Stress in parallel)"]),
+
+    # ST7 — verdict roster
+    ("plugins/coding-pipeline/agents/verdict.md",
+     ["--roster", "--classify-exit"],
+     []),
+
+    # ST7 — thresholds roster
+    ("plugins/coding-pipeline/references/thresholds.md",
+     ["## Roster"],
+     []),
+
+    # ST8 — skills, standards, references (no story pr-review; task and multi-agent only)
+    ("plugins/coding-pipeline/skills/task/SKILL.md",
+     ["release", "/pr-review"],
+     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
+
+    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+     ["release", "/pr-review"],
+     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
+
+    # ST8 — manifest roster column
+    ("plugins/coding-pipeline/skills/planning/references/phases.md",
+     ["| Tier | Roster |"],
+     []),
+
+    # ST8 — claude roster table
+    ("plugins/coding-pipeline/CLAUDE.md",
+     ["| Roster |", "classify-diff"],
+     []),
+
+    # ST8 — worktree local mode
+    ("plugins/coding-pipeline/references/delivery-and-worktree.md",
+     ["local"],
+     ["run /pr-review on it; no findings → gh pr ready, then merge"]),
+
+    # ST8 — readme no story pr-review and roster
+    ("README.md",
+     ["classify-diff", "roster `full`", "≥ 2 manifest rows"],
+     ["PER-STORY REVIEW", "REVIEW (parallel"]),
+
+    # ST10 — planning offers execution options
+    ("plugins/coding-pipeline/skills/planning/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
+
+    ("plugins/coding-pipeline/skills/task/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
+
+    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
 ]
 
 # Each contract row is checked against its own file

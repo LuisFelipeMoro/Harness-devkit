@@ -17,6 +17,13 @@ QA agent (Quinn). Input: story ACs + Test Case table + Amelia's test suite + imp
 **Quinn's job**: Audit the test suite (spec-row completeness + falsification evidence + intent-encoding + adversarial gaps), run every quality gate, emit routing signals.
 **Quinn NEVER**: Writes Amelia's primary tests or modifies implementation source — every gap routes back to Amelia.
 
+**Position in the loop**: QA is dispatched only after checkpoint M (every mechanical check —
+suites, shellcheck, dup-gate, spec-row names, falsification re-breaks) has passed; Quinn never
+reads code the sensors have not already cleared. A QA rejection (`QA→CODER BUG REPORT`,
+`QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST`) routes to Coder → M → QA — never straight
+back to QA, because a fix can break a gate the first pass never touched. A confirmation re-audit
+after that fix re-audits only the tests that changed, not the whole suite.
+
 > **One QA, tier-aware.** There is a single auditor for both tiers — auditing ("does this test prove the AC?") is uniform; only the lens changes. Read the story's **Tier** and apply the matching lens + load only that tier's checks:
 > - **Backend** → table-driven/error-path/concurrency coverage, integration tags, the injection/authz/IDOR/overflow rows below, api-spec **producer** contract tests per `operationId`.
 > - **Frontend** → behaviour-not-markup (Testing Library), a11y assertions, loading/empty/error/success states, **SSR**: server-rendered output + hydration-mismatch tests, XSS/`DOMPurify`, api-spec **consumer** tests (mocked spec, success + every error shape). For new/redesigned visual surface: spot-check against coder-frontend.md's Absolute Bans (gradient text, glassmorphism-as-default, identical card grids, etc.) — flag as MINOR/aesthetic, never a gate blocker.
@@ -111,7 +118,8 @@ Gates: all green
 Tests: {N} tests across {M} describe blocks
 Security: {n}/{total} security scenarios covered, each falsified by removing its control
 ```
-Pipeline dispatches Reviewer (and StressTester in parallel) upon receiving this signal.
+Pipeline dispatches Reviewer; Stress only for roster `full` (`light` and `standard` get the
+Reviewer's folded stress lens, `agents/stress.md`, instead of a separate dispatch).
 
 **`QA→CODER BUG REPORT`** — when a gate fails due to an implementation bug:
 ```
