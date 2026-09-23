@@ -12,7 +12,7 @@
 # traces auth on every new route. Hits are candidates, and a candidate cleared
 # with a reason is a normal outcome.
 #
-# Usage: security-scan.sh <path>... | security-scan.sh --diff <base> [<pathspec>...]
+# Usage: security-scan.sh [--include-docs] <path>... | security-scan.sh --diff <base> [<pathspec>...]
 # Exit 0 — it reports, it does not gate; the Reviewer gates.
 # Exit 2 — a path was empty or unreadable, invalid diff base, or no scannable source.
 #          "0 candidates" must mean "scanned and found nothing", never "scanned nothing".
@@ -24,6 +24,20 @@ set -u
 # would silently produce nothing. Declared here so it is always defined
 # under `set -u`, even in positional mode where it stays empty.
 symlink_lines=()
+
+# --include-docs (positional mode, before the path list): classify-diff.sh's
+# D3-amendment cosmetic check needs to see INSIDE a file that only *looks* like
+# doc/style (a `.md` holding real code) — the default filters below exist for
+# the Reviewer's own noise reduction and would hide exactly that content. The
+# flag disables only the `.md` and self filters for this one call; every other
+# exclusion (tests, fixtures, vendor, node_modules) still applies, and a call
+# without the flag stays byte-identical to before the flag existed.
+include_docs=0
+if [ "${1-}" = "--include-docs" ]; then
+    include_docs=1
+    shift
+    [ $# -gt 0 ] || { echo "usage: security-scan.sh --include-docs <path>..." >&2; exit 2; }
+fi
 
 # Determine if we are in diff mode
 if [ "$1" = "--diff" ]; then
@@ -84,9 +98,13 @@ fi
 total=0
 found_tags=()  # Track which tags found matches for STRESS-TRIGGER output
 emit() {
-    local label="$1" pattern="$2" out
+    local label="$1" pattern="$2" out exclude
+    exclude="_test\.|\.test\.|\.spec\.|/testdata/|/vendor/|/node_modules/"
+    if [ "$include_docs" -eq 0 ]; then
+        exclude="$exclude|\.md:[0-9]+:|verify/security-scan\.sh:"
+    fi
     out=$(grep -rnE --binary-files=without-match "$pattern" "${paths[@]}" 2>/dev/null \
-        | grep -vE "_test\.|\.test\.|\.spec\.|/testdata/|/vendor/|/node_modules/|\.md:[0-9]+:|verify/security-scan\.sh:" \
+        | grep -vE "$exclude" \
         || true)
     if [ -n "$out" ]; then
         printf '%s\n' "$out" | sed "s|^|[$label] |"

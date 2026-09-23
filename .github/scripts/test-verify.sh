@@ -501,6 +501,311 @@ check "tautology-scan --diff: non-UTF-8 file name is not a traceback" 2 "$rc" "$
 case "$out" in *Traceback*) echo "FAIL: tautology-scan --diff: non-UTF-8 file name is not a traceback — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
 cd - >/dev/null || exit
 
+# ── classify-diff.sh: verifies a declared roster against the real diff (ST4) ─
+
+# Style-only diff passes cosmetic
+repo_c1="$W/repo_c1"
+mkrepo "$repo_c1"
+cd "$repo_c1" || exit
+mkdir -p ui
+printf 'button { color: red; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add ui/button.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: style tweak"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: style-only diff passes cosmetic" 0 "$rc" "$out" "required=cosmetic"
+cd - >/dev/null || exit
+
+# A .ts handler declared cosmetic is never trusted at face value
+repo_c2="$W/repo_c2"
+mkrepo "$repo_c2"
+cd "$repo_c2" || exit
+mkdir -p src
+printf 'function add(a, b) { return a + b; }\n' > src/handler.ts
+git -c user.email=t@t -c user.name=t add src/handler.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add handler"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: .ts handler declared cosmetic escalates" 1 "$rc" "$out" "ROSTER: ESCALATE cosmetic → light"
+cd - >/dev/null || exit
+
+# An auth route forces full regardless of the declared roster
+repo_c3="$W/repo_c3"
+mkrepo "$repo_c3"
+cd "$repo_c3" || exit
+mkdir -p src
+printf 'app.post("/login", handler);\n' > src/r.ts
+git -c user.email=t@t -c user.name=t add src/r.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add login route"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared standard 2>&1); rc=$?
+check "classify: auth route escalates to full" 1 "$rc" "$out" "ESCALATE standard → full"
+cd - >/dev/null || exit
+
+# Empty diff is unmeasured, never a silent "cosmetic passes"
+repo_c4="$W/repo_c4"
+mkrepo "$repo_c4"
+cd "$repo_c4" || exit
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared light 2>&1); rc=$?
+check "classify: empty diff is unmeasured" 2 "$rc" "$out" "UNMEASURED"
+cd - >/dev/null || exit
+
+# Never de-escalates: a declared roster above what the diff needs is kept, not lowered
+repo_c5="$W/repo_c5"
+mkrepo "$repo_c5"
+cd "$repo_c5" || exit
+mkdir -p ui
+printf 'button { color: blue; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add ui/button.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: style tweak 2"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared full 2>&1); rc=$?
+check "classify: never de-escalates" 0 "$rc" "$out" "required=cosmetic declared=full"
+case "$out" in *"declared roster kept"*) pass=$((pass + 1)) ;; *) echo "FAIL: classify: never de-escalates — missing 'declared roster kept'"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# light is bounded at <= 2 non-test source files
+repo_c6="$W/repo_c6"
+mkrepo "$repo_c6"
+cd "$repo_c6" || exit
+mkdir -p src
+printf 'const a = 1;\n' > src/a.ts
+printf 'const b = 2;\n' > src/b.ts
+printf 'const c = 3;\n' > src/c.ts
+git -c user.email=t@t -c user.name=t add src/a.ts src/b.ts src/c.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add three files"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared light 2>&1); rc=$?
+check "classify: 3 source files needs standard" 1 "$rc" "$out" "ESCALATE light → standard"
+cd - >/dev/null || exit
+
+# A new dependency is never light, even with a single source file
+repo_c7="$W/repo_c7"
+mkrepo "$repo_c7"
+cd "$repo_c7" || exit
+mkdir -p src
+printf '{"name":"x","version":"1.0.0"}\n' > package.json
+printf 'const a = 1;\n' > src/a.ts
+git -c user.email=t@t -c user.name=t add package.json src/a.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add dependency and file"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared light 2>&1); rc=$?
+check "classify: dependency manifest needs standard" 1 "$rc" "$out" "→ standard"
+cd - >/dev/null || exit
+
+# Tests-only diff still needs a reviewer, so it is never cosmetic
+repo_c8="$W/repo_c8"
+mkrepo "$repo_c8"
+cd "$repo_c8" || exit
+printf 'func TestX(t *testing.T) {}\n' > a_test.go
+git -c user.email=t@t -c user.name=t add a_test.go
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add test"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: tests-only diff is light" 1 "$rc" "$out" "→ light"
+cd - >/dev/null || exit
+
+# Locale copy stays cosmetic
+repo_c9="$W/repo_c9"
+mkrepo "$repo_c9"
+cd "$repo_c9" || exit
+mkdir -p locales
+printf '{"hello":"world"}\n' > locales/en.json
+git -c user.email=t@t -c user.name=t add locales/en.json
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add locale"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: locale json is cosmetic" 0 "$rc" "$out" "declared=cosmetic"
+cd - >/dev/null || exit
+
+# Unknown declared roster is a usage error, not a silent default. Run inside a
+# repo with a genuinely cosmetic diff so an unvalidated roster would otherwise
+# reach real classification and exit 0 — never let a coincidental "unknown base
+# ref" elsewhere in the arg set mask an unchecked roster value.
+repo_c10="$W/repo_c10"
+mkrepo "$repo_c10"
+cd "$repo_c10" || exit
+mkdir -p ui
+printf 'button { color: green; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add ui/button.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: style tweak 3"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared huge 2>&1); rc=$?
+check "classify: unknown declared roster" 2 "$rc"
+cd - >/dev/null || exit
+
+# ── D3 amendment: cosmetic must not trust extension/location alone (ST4) ────
+
+# security-scan --include-docs: the flag classify-diff's cosmetic content check
+# depends on — default mode filters `.md:` lines for the Reviewer's own noise
+# reduction, and that filter would hide exactly the code this flag needs to see.
+mkdir -p "$W/docsec"
+printf 'eval(x)\n' > "$W/docsec/x.md"
+out=$(bash "$V/security-scan.sh" --include-docs "$W/docsec/x.md" 2>&1); rc=$?
+check "security-scan --include-docs scans markdown" 0 "$rc" "$out" "x.md:1"
+
+# A style-extension file holding real code must not pass cosmetic just because
+# of its name (ST4 Stress CRITICAL).
+repo_c16="$W/repo_c16"
+mkrepo "$repo_c16"
+cd "$repo_c16" || exit
+printf "require('child_process').exec(x);\n" > evil.css
+git -c user.email=t@t -c user.name=t add evil.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add evil.css"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: code in a style extension is not cosmetic" 1 "$rc" "$out" "ESCALATE cosmetic → full"
+cd - >/dev/null || exit
+
+# A rename to a style extension disguises whatever the origin file actually was
+# (ST4 Stress CRITICAL) — diff-lib's own listing only ever shows the new path.
+repo_c17="$W/repo_c17"
+mkrepo "$repo_c17"
+cd "$repo_c17" || exit
+mkdir -p src
+printf 'function handler() { return 1; }\n' > src/handler.ts
+git -c user.email=t@t -c user.name=t add src/handler.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add handler.ts (shared by release and feat)"
+git branch -f release/x-abc HEAD
+git mv src/handler.ts src/handler.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: rename handler.ts to handler.css"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: rename to a style extension is not cosmetic" 1 "$rc" "$out" "ESCALATE cosmetic → light"
+cd - >/dev/null || exit
+
+# A disguised rename whose original file is dangerous must not settle for the
+# rename's own light classification — the (c) content check has to run on the
+# doc/style file that still exists post-rename, and any security-scan
+# candidate wins over the rename escalation (D3 amendment, ST4).
+repo_c21="$W/repo_c21"
+mkrepo "$repo_c21"
+cd "$repo_c21" || exit
+mkdir -p src
+printf "require('child_process').exec(x);\n" > src/run.ts
+git -c user.email=t@t -c user.name=t add src/run.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add run.ts (shared by release and feat)"
+git branch -f release/x-abc HEAD
+git mv src/run.ts src/run.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: rename run.ts to run.css"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: disguised rename with dangerous content is full" 1 "$rc" "$out" "ESCALATE cosmetic → full"
+cd - >/dev/null || exit
+
+# Markdown is filtered by security-scan's default mode; classify-diff's
+# cosmetic check must reach past that with --include-docs or code in a .md
+# file passes as documentation.
+repo_c18="$W/repo_c18"
+mkrepo "$repo_c18"
+cd "$repo_c18" || exit
+printf 'app.post("/admin", handler);\n' > notes.md
+git -c user.email=t@t -c user.name=t add notes.md
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add notes.md"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: code in markdown is not cosmetic" 1 "$rc" "$out" "→ full"
+cd - >/dev/null || exit
+
+# pubspec.yaml is Flutter's dependency manifest — D3 amendment's explicit list.
+repo_c19="$W/repo_c19"
+mkrepo "$repo_c19"
+cd "$repo_c19" || exit
+printf 'name: x\n' > pubspec.yaml
+printf 'void main() {}\n' > main.dart
+git -c user.email=t@t -c user.name=t add pubspec.yaml main.dart
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add pubspec and dart file"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared light 2>&1); rc=$?
+check "classify: pubspec.yaml is a dependency manifest" 1 "$rc" "$out" "→ standard"
+cd - >/dev/null || exit
+
+# A missing tautology-scan.py must fail closed with UNMEASURED, never a raw
+# Python traceback (ST3's "never a traceback" contract, extended to ST4).
+stubV2="$W/stubverify16"
+mkdir -p "$stubV2"
+cp "$V/classify-diff.sh" "$stubV2/classify-diff.sh"
+cp "$V/diff-lib.sh" "$stubV2/diff-lib.sh"
+cp "$V/security-scan.sh" "$stubV2/security-scan.sh"
+chmod +x "$stubV2/classify-diff.sh"
+repo_c20="$W/repo_c20"
+mkrepo "$repo_c20"
+cd "$repo_c20" || exit
+mkdir -p ui
+printf 'button { color: red; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add ui/button.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: style tweak"
+out=$(bash "$stubV2/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: missing tautology-scan is unmeasured, not a traceback" 2 "$rc" "$out" "UNMEASURED"
+case "$out" in *Traceback*) echo "FAIL: classify: missing tautology-scan is unmeasured, not a traceback — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
+# TV-C7: invalid base rejected the same way as every other diff-scoped sensor
+out=$(bash "$V/classify-diff.sh" --diff 'a;b' --declared light 2>&1); rc=$?
+check "classify: invalid base" 2 "$rc" "$out" "invalid base ref"
+
+# A symlink named like a style file is not classified by its name
+repo_c12="$W/repo_c12"
+mkrepo "$repo_c12"
+cd "$repo_c12" || exit
+mkdir -p src
+printf 'function handler() { return 1; }\n' > src/handler.ts
+git -c user.email=t@t -c user.name=t add src/handler.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add handler (shared by release and feat)"
+git branch -f release/x-abc HEAD
+ln -s src/handler.ts theme.css
+git -c user.email=t@t -c user.name=t add theme.css
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add disguised symlink"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: symlink named like a style file is not cosmetic" 1 "$rc" "$out" "ROSTER: ESCALATE cosmetic → light"
+cd - >/dev/null || exit
+
+# Deleting a source file is a behaviour change, not a cosmetic no-op, and must
+# not be read as an empty diff (diff-lib's --diff-filter=d hides deletions).
+repo_c13="$W/repo_c13"
+mkrepo "$repo_c13"
+cd "$repo_c13" || exit
+mkdir -p src
+printf 'function old() { return 1; }\n' > src/old.ts
+git -c user.email=t@t -c user.name=t add src/old.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add old.ts (shared by release and feat)"
+git branch -f release/x-abc HEAD
+git rm -q src/old.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: remove old.ts"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: deleting a source file is not cosmetic" 1 "$rc" "$out" "ROSTER: ESCALATE cosmetic → light"
+case "$out" in *"empty diff"*) echo "FAIL: classify: deleting a source file is not cosmetic — read as empty diff instead of a deletion"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
+# Newline in a source file name must not be split into two missing paths
+# (same class as the ST2 Stress CRITICAL finding). A second plain file sits
+# alongside it so a name split (1 real file -> 2 bogus paths) is observable:
+# correctly read, this diff has 2 non-test source files (<= 2, light); split,
+# it has 3 (> 2, standard) -- a real threshold difference, not just a re-run
+# of ST2's own already-falsified check on the shared library.
+repo_c14="$W/repo_c14"
+mkrepo "$repo_c14"
+cd "$repo_c14" || exit
+nlfile=$'a\nb.ts'
+printf 'return 1;\n' > "$nlfile"
+printf 'const c = 1;\n' > other.ts
+git -c user.email=t@t -c user.name=t add other.ts -- "$nlfile"
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add file with newline in name"
+out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared cosmetic 2>&1); rc=$?
+check "classify: newline in a source file name escalates" 1 "$rc" "$out" "→ light"
+cd - >/dev/null || exit
+
+# security-scan coming back UNMEASURED must propagate, never read as "no trigger".
+# classify-diff.sh, diff-lib.sh and tautology-scan.py are copied into an isolated
+# scripts dir so only security-scan.sh (the one it calls by its own path) is stubbed.
+stubV="$W/stubverify15"
+mkdir -p "$stubV"
+cp "$V/classify-diff.sh" "$stubV/classify-diff.sh"
+cp "$V/diff-lib.sh" "$stubV/diff-lib.sh"
+cp "$V/tautology-scan.py" "$stubV/tautology-scan.py"
+cat > "$stubV/security-scan.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "SECURITY-SCAN: UNMEASURED — stubbed failure for classify-diff test" >&2
+exit 2
+STUB
+chmod +x "$stubV/security-scan.sh" "$stubV/classify-diff.sh"
+repo_c15="$W/repo_c15"
+mkrepo "$repo_c15"
+cd "$repo_c15" || exit
+mkdir -p src
+printf 'function f() { return 1; }\n' > src/f.ts
+git -c user.email=t@t -c user.name=t add src/f.ts
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add source file"
+out=$(bash "$stubV/classify-diff.sh" --diff release/x-abc --declared light 2>&1); rc=$?
+check "classify: security-scan unmeasured propagates" 2 "$rc" "$out" "stubbed failure for classify-diff test"
+cd - >/dev/null || exit
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
