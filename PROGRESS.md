@@ -8,7 +8,7 @@ Run with the plan's own rosters (operator choice): est. ~30 dispatches vs 63 for
 
 | ST | Roster | Result | Dispatches · tokens |
 |---|---|---|---|
-| ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Reviewer 66k (sonnet) · confirm (haiku) |
+| ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Reviewer 66k (sonnet) · confirm 40k (haiku, vs 69k sonnet) |
 
 Planning cost: map 77k (haiku) · architect 184k (opus) · plan-review 179k (sonnet, 2 rounds).
 Lesson: the host bug (loop ignored each row's path) passed both frozen rows — the spec lacked a
