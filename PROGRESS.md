@@ -15,10 +15,14 @@ Start the next session from the worktree (`cd .worktrees/dlv-2c9fee`) so this fi
 | ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Review 66k · confirm 40k (haiku) ≈245k |
 | ST2 diff-lib + security-scan --diff | full | merged `faa69bc`, 8.35 (R9 S8 Q8) after Stress 3 CRITICAL | ≈968k (haiku Coder rounds 207k wasted, sonnet 336k) |
 | ST3 tautology-scan --diff | full | merged `80fbe00`, 8.65 (R9 S8 Q9) after R6/S7 | ≈738k |
+| ST4 classify-diff.sh | full | merged `9b9d972`, 8.65 (R9 S8 Q9) after Stress 2 CRITICAL (code in .css/.md or a disguised rename classified cosmetic, no scan) → D3 amendment; QA then caught rename+content shadowing | Coder 215k + 2 stalls + 228k + 92k (sonnet) · QA 168k (4 rounds) · Review 122k + 57k haiku · Stress 85k + 66k haiku · ≈1.03M |
 | — | — | `29a5225` removed a probe file a Stress agent committed into ST2 | — |
 
 Planning 440k (map 77k haiku · architect 184k opus · plan-review 179k sonnet). Spent ≈2.39M;
 remaining estimate ≈1.9M (ST4 ~550k · ST5/9/10 ~280k · ST6–8 ~170k); delivery ≈4.3M vs ~6M+ legacy.
+
+Parallel since ST4 (operator: "can't we do batch changes"): batch A (ST5+ST9+ST10 code) in `.worktrees/dlv-2c9fee-scripts`; batch B (all docs) runs LAST (operator: docs must see the final state).
+Checkpoint M checks the exact changed-file set (a fix Coder silently reverted thresholds.md; extras-only check missed it).
 
 ### Loop rules in force (operator-approved 2026-09-23; ST6 writes them into loop.md)
 - Roster per manifest row (cosmetic · light · standard · full); mechanical gates run on every roster.
