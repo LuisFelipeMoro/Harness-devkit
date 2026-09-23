@@ -80,6 +80,26 @@ check "verdict: all lenses over floor is PRODUCTION READY" 0 "$rc"
 bash "$V/verdict.sh" --review 1.2.3 --stress 9 --qa 9 >/dev/null 2>&1; rc=$?
 check "verdict: malformed score is a usage error, not a traceback" 2 "$rc"
 
+# ── ST10: execution-options checkpoint and roster validation ──────────────────
+# Test 1: bench-context.py rejects unrecognized roster values (capital Standard, unknown huge)
+cat > "$W/manifest-bad-roster.md" <<'MANIFEST'
+| Test | Input | Expected | Roster |
+|---|---|---|---|
+| test1 | a | b | Standard |
+| test2 | c | d | huge |
+MANIFEST
+out=$(python3 "$ROOT/plugins/coding-pipeline/scripts/bench-context.py" --manifest "$W/manifest-bad-roster.md" 2>&1); rc=$?
+check "bench: unrecognized roster value is an error" 2 "$rc" "$out" "unrecognized roster"
+
+# Test 2: verdict roster path hides score on hard-gate fail like legacy
+out=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 9 --stress 9 --qa 9 --hard-gate-fail lint 2>&1); rc=$?
+check "verdict: roster path hides score on hard-gate fail like legacy" 1 "$rc" "$out" "NOT READY"
+case "$out" in *"Overall Score"*) echo "FAIL: verdict: roster path hides score on hard-gate fail like legacy — score was printed"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+
+# Test 3: verdict unknown roster value is usage
+bash "$V/verdict.sh" --roster huge --classify-exit 0 >/dev/null 2>&1; rc=$?
+check "verdict: unknown roster value is usage" 2 "$rc"
+
 # ── security-scan --diff: diff-scoped candidates (ST2 tests) ────────────────
 # TV-S0a: positional mode unchanged on code hit — reuses the "$W/sec" fixture
 # built above (guide.md + app.js), no need to recreate it.
@@ -500,6 +520,174 @@ out=$(PATH="$stubdir15:$PATH" python3 "$V/tautology-scan.py" --diff release/x-ab
 check "tautology-scan --diff: non-UTF-8 file name is not a traceback" 2 "$rc" "$out" "UNMEASURED"
 case "$out" in *Traceback*) echo "FAIL: tautology-scan --diff: non-UTF-8 file name is not a traceback — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
 cd - >/dev/null || exit
+
+# ══════════════════════════════════════════════════════════════════════════
+# Batch A (2c9fee) — ST5 verdict.sh roster · ST9/ST10 bench-context.py
+# Keep this section contiguous — a second batch appends classify-diff (ST4)
+# rows separately and a merge should not have to interleave the two.
+# ══════════════════════════════════════════════════════════════════════════
+
+BENCH="$ROOT/plugins/coding-pipeline/scripts/bench-context.py"
+
+# ── ST5: verdict.sh --roster / --classify-exit (D2) ─────────────────────────
+# TV-V0a/b/c and the "no roster label" row are Preserve rows already covered
+# above (lines ~76-81); this section adds the roster-specific behaviour only.
+
+out=$(bash "$V/verdict.sh" --review 9 --stress 9 --qa 9 2>&1); rc=$?
+check "verdict: legacy output has no roster label" 0 "$rc"
+case "$out" in *"[folded]"*|*roster*) echo "FAIL: verdict: legacy output has no roster label — leaked roster text"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+
+out=$(bash "$V/verdict.sh" --roster cosmetic --classify-exit 0 2>&1); rc=$?
+check "verdict: cosmetic gates-only passes" 0 "$rc" "$out" "n/a (cosmetic — gates only)"
+
+out=$(bash "$V/verdict.sh" --roster cosmetic --classify-exit 0 --hard-gate-fail lint 2>&1); rc=$?
+check "verdict: cosmetic with gate fail is NOT READY" 1 "$rc" "$out" "hard gate FAIL: lint"
+
+out=$(bash "$V/verdict.sh" --roster cosmetic --classify-exit 0 --review 9 2>&1); rc=$?
+check "verdict: cosmetic rejects a score" 2 "$rc"
+
+out=$(bash "$V/verdict.sh" --roster standard --classify-exit 1 --review 9 --stress 9 --qa 9 2>&1); rc=$?
+check "verdict: unverified roster is NOT READY" 1 "$rc" "$out" "roster not verified (classify-diff exit 1)"
+
+out=$(bash "$V/verdict.sh" --roster standard --review 9 --stress 9 --qa 9 2>&1); rc=$?
+check "verdict: roster requires classify-exit" 2 "$rc"
+
+out=$(bash "$V/verdict.sh" --roster light --classify-exit 0 --review 8 --stress 8 2>&1); rc=$?
+check "verdict: light renormalises without QA" 0 "$rc" "$out" "Overall Score: 8.00"
+case "$out" in *"weight renormalised"*) pass=$((pass + 1)) ;; *) echo "FAIL: verdict: light renormalises without QA — missing 'weight renormalised'"; fail=1 ;; esac
+
+out=$(bash "$V/verdict.sh" --roster light --classify-exit 0 --review 8 --stress 8 --qa 9 2>&1); rc=$?
+check "verdict: light rejects qa score" 2 "$rc"
+
+out=$(bash "$V/verdict.sh" --roster light --classify-exit 0 --review 10 --stress 6.5 2>&1); rc=$?
+check "verdict: light keeps stress floor" 1 "$rc" "$out" "below story floor"
+
+out=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 9 --stress 9 --qa 9 2>&1); rc=$?
+check "verdict: standard labels folded stress" 0 "$rc" "$out" "[folded]"
+case "$out" in *"NOTE: Review and Stress from one agent"*) pass=$((pass + 1)) ;; *) echo "FAIL: verdict: standard labels folded stress — missing NOTE"; fail=1 ;; esac
+
+out=$(bash "$V/verdict.sh" --roster full --classify-exit 0 --review 9 --stress 5.5 --qa 9 2>&1); rc=$?
+check "verdict: full labels dispatched stress and keeps gap warning" 1 "$rc" "$out" "[dispatched]"
+case "$out" in *"WARNING: Review/Stress gap"*) pass=$((pass + 1)) ;; *) echo "FAIL: verdict: full labels dispatched stress and keeps gap warning — missing WARNING"; fail=1 ;; esac
+
+legacy_score=$(bash "$V/verdict.sh" --review 8 --stress 7.5 --qa 8.5 2>&1 | grep -o "Overall Score: [0-9.]*")
+standard_score=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 8 --stress 7.5 --qa 8.5 2>&1 | grep -o "Overall Score: [0-9.]*")
+[ -n "$legacy_score" ] && [ "$legacy_score" = "$standard_score" ] && rc=0 || rc=1
+check "verdict: standard formula equals legacy" 0 "$rc"
+
+# ── ST9: bench-context.py roster model (PROFILES uniform/mixed, --mix) ──────
+
+out=$(python3 "$BENCH" --json 2>&1); rc=$?
+check "bench: uniform 5-story delivery is 20 dispatches" 0 "$rc" "$out" '"delivery_dispatches": 20'
+
+check "bench: mixed profile is 18 dispatches" 0 "$rc" "$out" '"dispatches": 18'
+
+out2=$(python3 "$BENCH" --mix full=1 --json 2>&1)
+rc2json=$(printf '%s' "$out2" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(0 if d['profiles']['mixed']['dispatches'] == 9 else 1)
+")
+check "bench: full story adds a stress dispatch" 0 "$rc2json"
+
+rc3=$(printf '%s' "$out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+root = '$ROOT/plugins/coding-pipeline'
+files = ['agents/reviewer.md', 'references/change-discipline.md', 'references/languages/go.md']
+base = sum(int(len(open(root + '/' + f, encoding='utf-8').read()) / 3.6) for f in files)
+p = d['paths']['story: reviewer']
+ok = p['per_load'] > base and 'story: reviewer' not in d.get('missing', [])
+print(0 if ok else 1)
+")
+check "bench: reviewer path loads stress.md" 0 "$rc3"
+
+baseline_dir="$W/baseline-c342347"
+mkdir -p "$baseline_dir"
+git -C "$ROOT" archive c342347 plugins | tar -x -C "$baseline_dir"
+python3 "$baseline_dir/plugins/coding-pipeline/scripts/bench-context.py" \
+    --root "$baseline_dir/plugins/coding-pipeline" --json > "$W/bench-before.json"
+out=$(python3 "$BENCH" --baseline "$W/bench-before.json" 2>&1); rc=$?
+check "bench: baseline JSON from c342347 still loads" 0 "$rc" "$out" "| 40 | 20 | -20 |"
+
+out=$(python3 "$BENCH" --mix 'light=x' --json 2>&1); rc=$?
+check "bench: malformed mix" 2 "$rc"
+
+# ── ST10: execution-options checkpoint (bench-context.py --manifest) ────────
+# The `contract: planning offers execution options` row (validate-wiring §7)
+# is a separate batch's responsibility — not added here.
+
+manifest_fixture="$W/manifest.md"
+cat > "$manifest_fixture" <<'MD'
+| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
+|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
+| ST-A: does X | R1 | — | none | ~10 lines | Bash | Backend | light |
+| ST-B: does Y | R2 | SEC-1 | none | ~10 lines | Bash | Backend | full |
+| ST-C: does Z | R3 | — | none | ~10 lines | Bash | Backend | standard |
+MD
+
+out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
+check "bench: manifest options listed" 0 "$rc" "$out" "as planned"
+case "$out" in *"all standard"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'all standard'"; fail=1 ;; esac
+case "$out" in *"legacy full loop"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'legacy full loop'"; fail=1 ;; esac
+
+# ST10: test with custom fixture COST where qa has n=0 (unsampled)
+out=$(python3 -c "
+import sys
+sys.dont_write_bytecode = True
+import importlib.util
+spec = importlib.util.spec_from_file_location('bench', '$BENCH')
+bench = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bench)
+
+# Create fixture COST with qa at n=0 (unsampled) and others sampled
+fixture_cost = {
+    'map': (77000, 1),
+    'architect': (184000, 1),
+    'plan-reviewer': (165000, 1),
+    'reviewer': (106000, 9),
+    'coder': (137000, 9),
+    'qa': (99000, 0),  # unsampled
+    'stress': (85000, 3),
+    'scrum-master': (40000, 0),
+    'verdict': (20000, 0),
+    'pr-review': (90000, 0),
+    'devops': (60000, 0),
+}
+
+# Parse manifest and render with fixture COST
+rosters = bench.parse_manifest_rosters('$manifest_fixture')
+options = bench.compute_options(rosters, cost=fixture_cost)
+output = bench.render_manifest(rosters, options, cost=fixture_cost)
+print(output)
+" 2>&1); rc=$?
+check "bench: unsampled cost says assumed — fixture COST provided" 0 "$rc" "$out" "assumed"
+qa_line=$(printf '%s' "$out" | grep '| qa ' || true)
+case "$qa_line" in *measured*) echo "FAIL: bench: unsampled cost says assumed — qa row says measured instead of assumed"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+
+json_out=$(python3 "$BENCH" --manifest "$manifest_fixture" --json 2>&1); rc=$?
+rc_planned=$(printf '%s' "$json_out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(0 if d['options']['as planned']['dispatches'] == 14 else 1)
+")
+check "bench: as-planned dispatches follow rosters" 0 "$rc_planned"
+
+rc_legacy=$(printf '%s' "$json_out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(0 if d['options']['legacy full loop']['dispatches'] == 26 else 1)
+")
+check "bench: legacy option counts 7 per row" 0 "$rc_legacy"
+
+manifest_noroster="$W/manifest-noroster.md"
+cat > "$manifest_noroster" <<'MD'
+| Sub-Task | Tier |
+|----------|------|
+| ST-A: does X | Backend |
+MD
+out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
+check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
