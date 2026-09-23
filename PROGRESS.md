@@ -1,5 +1,19 @@
 # PROGRESS
 
+## [2c9fee] Diff-Scoped Story Loop — in progress
+
+Worktree `.worktrees/dlv-2c9fee`, branch `release/diff-scoped-story-loop-2c9fee`. Plan APPROVED
+(2 rounds); delivery file + manifest (10 rows) in `docs/deliveries/` (gitignored, local).
+Run with the plan's own rosters (operator choice): est. ~30 dispatches vs 63 for the legacy loop.
+
+| ST | Roster | Result | Dispatches · tokens |
+|---|---|---|---|
+| ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Reviewer 66k (sonnet) · confirm (haiku) |
+
+Planning cost: map 77k (haiku) · architect 184k (opus) · plan-review 179k (sonnet, 2 rounds).
+Lesson: the host bug (loop ignored each row's path) passed both frozen rows — the spec lacked a
+multi-row case. Added two rows; spec gaps show up as "tests green on a broken host".
+
 ## Done — 2026-09-22 (session 2) · review fixes, dup-gate, autonomous context
 
 Branch `release/token-dispatch-reduction`: `2880471` = pass 1 as reviewed; second commit = everything
