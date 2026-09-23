@@ -1,21 +1,60 @@
 # PROGRESS
 
-## [2c9fee] Diff-Scoped Story Loop — in progress
+## [2c9fee] Diff-Scoped Story Loop — in progress (3/10 merged)
 
-Worktree `.worktrees/dlv-2c9fee`, branch `release/diff-scoped-story-loop-2c9fee`. Plan APPROVED
-(2 rounds); delivery file + manifest (10 rows) in `docs/deliveries/` (gitignored, local).
-Run with the plan's own rosters (operator choice): est. ~30 dispatches vs 63 for the legacy loop.
+**Resume here.** Delivery-Key `2c9fee` · worktree `.worktrees/dlv-2c9fee` · branch
+`release/diff-scoped-story-loop-2c9fee` · delivery file
+`docs/deliveries/delivery-diff-scoped-story-loop-2c9fee.md` · manifest
+`docs/deliveries/2c9fee/task-manifest.md` (both gitignored, local only). Plan APPROVED (2 rounds).
+**Next: ST4 `classify-diff.sh` (roster full)** — spec already carries 4 pre-empted rows (symlink
+named like a style file, source deletion, newline name, security-scan exit 2 propagation).
+Start the next session from the worktree (`cd .worktrees/dlv-2c9fee`) so this file is the one bootstrapped.
 
-| ST | Roster | Result | Dispatches · tokens |
+| ST | Roster | Result | Tokens |
 |---|---|---|---|
-| ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Reviewer 66k (sonnet) · confirm 40k (haiku, vs 69k sonnet) |
-| ST2 diff-lib + security-scan --diff | full | merged, verdict 8.35 (R9 S8 Q8) after Stress 3 (CRITICAL newline false-clean) | Coder 131k+76k (haiku, 1 stall, 1 false report) + 152k+184k (sonnet) · QA 117k (3 rounds) · Review 100k + 52k haiku confirm · Stress 99k + 57k haiku confirm · ≈968k |
-| ST3 tautology-scan --diff | full | merged, verdict 8.65 (R9 S8 Q9) after R6/S7 (SKIP_DIRS ignored; symlink followed; dir-symlink fail-open PASS) | Coder 183k + fix 151k (sonnet, clean passes) · QA 118k (3 rounds) · Review 106k + 52k haiku · Stress 72k + 56k haiku · ≈738k |
+| ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Review 66k · confirm 40k (haiku) ≈245k |
+| ST2 diff-lib + security-scan --diff | full | merged `faa69bc`, 8.35 (R9 S8 Q8) after Stress 3 CRITICAL | ≈968k (haiku Coder rounds 207k wasted, sonnet 336k) |
+| ST3 tautology-scan --diff | full | merged `80fbe00`, 8.65 (R9 S8 Q9) after R6/S7 | ≈738k |
+| — | — | `29a5225` removed a probe file a Stress agent committed into ST2 | — |
 
-Planning cost: map 77k (haiku) · architect 184k (opus) · plan-review 179k (sonnet, 2 rounds).
-Lessons: pre-empting ST2's edge cases into ST3's spec cut the first-pass defects to the ones nobody had seen yet (symlinks again, SKIP_DIRS); sonnet Coder rounds were clean both times. haiku Coder on a 15-row security spec misreported coverage twice — sonnet for `full` Coder. Checkpoint M (orchestrator name-check + re-breaks) caught every false claim before an agent paid for it. Stress earned its place: the only lens that found the false-clean scan. Resuming a big sonnet context for a 3-line fix cost 184k — narrow follow-ups should be a fresh haiku.
-Lesson: the host bug (loop ignored each row's path) passed both frozen rows — the spec lacked a
-multi-row case. Added two rows; spec gaps show up as "tests green on a broken host".
+Planning 440k (map 77k haiku · architect 184k opus · plan-review 179k sonnet). Spent ≈2.39M;
+remaining estimate ≈1.9M (ST4 ~550k · ST5/9/10 ~280k · ST6–8 ~170k); delivery ≈4.3M vs ~6M+ legacy.
+
+### Loop rules in force (operator-approved 2026-09-23; ST6 writes them into loop.md)
+- Roster per manifest row (cosmetic · light · standard · full); mechanical gates run on every roster.
+- **Checkpoint M after every Coder return**: run ALL mechanical checks and return every failure at
+  once — spec rows by exact name, falsification re-breaks by the orchestrator (each FAIL line must
+  name its row), all suites, shellcheck, dup-gate, `git diff --name-only main...HEAD` holds only
+  expected files. Any FAIL/UNMEASURED → back to Coder, no agent dispatched. 3 round trips → ask.
+- QA rejection → Coder → M → QA; Reviewer ∥ Stress only after QA approval; one fix round for both.
+- Re-checks after D are narrow: QA only if tests changed (resume the same QA agent, ~25k);
+  Reviewer/Stress confirm only their own findings on haiku (~50k each).
+- Coder model: sonnet for `full` (haiku misreported coverage twice on ST2); fix rounds = a fresh
+  Coder with a narrow prompt, not a resumed large context (184k for a 3-line fix).
+- Every dispatch prompt: "Gate outputs were run by the orchestrator. Do not re-run …".
+- Execution-options checkpoint (ST10) after plan approval, before code.
+
+## Lessons (session 3 — 2026-09-23)
+- **An agent's report is a claim, not evidence.** A haiku Coder reported 20/20 rows with 7 present
+  and quoted falsification for tests that did not exist; a sonnet Coder reported a break that
+  "failed" but printed nothing. Only the orchestrator's by-name row check and its own re-breaks
+  caught them.
+- **A failing assertion must name its row.** `case … fail=1` failed the suite silently; the
+  orchestrator's grep for `FAIL: <row>` read it as unfalsified. Every assertion prints its name.
+- **Fixtures can pass for the wrong reason.** A deletion test removed a file absent from the
+  branch (`git rm … || true`) and passed on an empty diff; an "unchanged debt ignored" test never
+  had the file on disk. Falsify by breaking the code path, not by trusting the green run.
+- **Agents that died mid-falsification leave the code broken.** Twice (rate limit, stall) a file
+  was left mutated (`"HEAD~1"`). Keep a pre-break copy and verify it after every agent exit.
+- **Agents commit where they probe.** A Stress agent told to use `$TMPDIR` committed its
+  `evil\nline.js` fixture onto the story branch; it merged. Check M must diff the commit history,
+  not only the working tree.
+- **Stress is the lens that finds the escapes.** Both `full` stories' worst defects (newline false
+  clean scan; symlink followed / directory-symlink fail-open PASS) came only from Stress. Carry
+  each story's Stress findings into the next story's spec before code.
+- **Resuming beats re-dispatching for small re-checks** (QA resume ~25k vs ~80k fresh), but
+  resuming a large Coder context for a small fix is the most expensive option measured.
+- **Plan-review agents cost like implementers** (165–184k). The reviewer floor applies to them too.
 
 ## Done — 2026-09-22 (session 2) · review fixes, dup-gate, autonomous context
 
