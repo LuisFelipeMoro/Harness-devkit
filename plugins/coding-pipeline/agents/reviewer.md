@@ -15,6 +15,12 @@ Code Reviewer agent. Output: review score and findings.
 | The delivery file's **Reuse Map** | tells you which components were meant to be reused, extended, or built new |
 | `docs/deliveries/{key}/codebase-map.md` | names the existing symbols and conventions this diff was supposed to follow |
 
+**Diff scope**: Reviewer works the story diff — `git diff --name-only release/{slug}-{key}...HEAD`
+— never the whole tree. The dispatch prompt attaches `scripts/verify/security-scan.sh --diff
+release/{slug}-{key}` output already run by the orchestrator. **Do not re-run** it, or any other
+gate (format, lint, build, existing tests, dup-gate, vuln, tautology-scan) — read the attached
+output instead.
+
 If any is missing, **say so on the first line and ask for it** before scoring. Reviewing a diff
 with no spec produces a security-and-style review that scores 8/10 on code that builds the wrong
 thing — the failure this table exists to prevent. Only if the orchestrator cannot supply them do
@@ -169,18 +175,30 @@ Recommendation: APPROVE | APPROVE WITH CHANGES | REQUEST CHANGES | BLOCK
 
 ---
 
+## Stress Lens (roster `light` / `standard` — skip for `full`)
+
+For roster `light` or `standard`, Reviewer also scores Stress: read `agents/stress.md` and apply
+its six categories (High-Load Behavior · Memory & Resource Lifecycle · Concurrency & Race
+Conditions · Adversarial Inputs · Security Under Stress · Failure Modes & Recovery) to this diff —
+no separate dispatch, no live load test. Emit `Stress Score: X/10` and a Stress `Hard Gates: PASS |
+FAIL` line alongside the Review score, using that file's own scoring table and hard gates verbatim.
+For roster `light` (no QA agent), Reviewer also audits the Test Case table: check spec rows by exact name and falsification evidence per row using qa.md lens 0–1, drawing from the orchestrator's checkpoint-M output.
+For roster `full`, Stress is a dispatched agent in its own right — skip this section; folding it in
+as well would pay for the same judgment twice.
+
 ## Security Deep-Dive Checklist
 
 Run the candidate finder, then adjudicate:
 
 ```bash
-scripts/verify/security-scan.sh <changed-paths...>
+scripts/verify/security-scan.sh --diff release/{slug}-{key}
 ```
 
-It returns `file:line` hits for injection, XSS, SSRF, path traversal, weak crypto, hardcoded
-secrets, unsafe deserialization, secrets in logs and the route surface. Read the hits, not every
-file. Zero hits is **not** a pass — a missing authz check has no pattern to match, so auth is
-still traced on every route the scan lists.
+Its output is attached to the dispatch prompt, already run by the orchestrator — read it, don't
+re-run it. It returns `file:line` hits for injection, XSS, SSRF, path traversal, weak crypto,
+hardcoded secrets, unsafe deserialization, secrets in logs and the route surface. Read the hits,
+not every file. Zero hits is **not** a pass — a missing authz check has no pattern to match, so
+auth is still traced on every route the scan lists.
 
 The eight checklist sections and the reporting rules are in
 [`references/security-checklist.md`](../references/security-checklist.md), shared with `/pr-review`
@@ -200,6 +218,17 @@ table; review against it rather than restating it here. Two severities it does n
 Coverage floors and every other numeric gate: `references/thresholds.md`. A miss = BLOCK.
 
 ---
+
+## Posting the Review
+
+`pr` mode: post inline via `gh pr review`, using the templates in
+`pr-review/references/output-format.md:25-49`, then print the same block here. `local` mode: write
+the same finding lines to `docs/deliveries/{key}/review-{story-slug}.md` instead of a PR call —
+review mode is decided once per delivery, never inferred from a flag on this dispatch.
+
+Confirmation rounds (a re-check dispatched after Amelia's fix) verify only Reviewer's own
+previously reported findings, not a fresh full review — the diff already changed, the findings
+did not, and a full re-read pays the ~70k floor again for nothing new.
 
 ## Tuner Routing *(after scoring — before routing to Verdict)*
 

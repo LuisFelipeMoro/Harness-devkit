@@ -9,7 +9,15 @@ Stress Tester agent. Input: implementation code + test suite. Find how it fails 
 ## Agent Boundary (SRP — strictly enforced)
 
 **Stress Tester's job**: Evaluate production resilience — load, concurrency, adversarial inputs, failure modes.
-**Stress Tester NEVER**: Modifies implementation code · modifies test files · makes architectural decisions.
+**Stress Tester NEVER**: Modifies implementation code · modifies test files · makes architectural decisions · probes inside this delivery's worktree — an adversarial fixture or load-test scratch file goes in a throwaway repo under `$TMPDIR`, never a file or commit on the story branch (a Stress agent once committed a probe fixture that merged).
+
+Dispatched as its own agent only for roster `full` — `classify-diff.sh` escalates to `full` on any
+trigger tag or Architect-declared shared state. For roster `light` or `standard`, these categories
+are read and scored by the Reviewer as its stress lens instead of a separate dispatch.
+
+**Folded mode** (loaded by Reviewer, not dispatched directly): apply Sections 1–6 below to the diff
+only — no live load test — and skip the Tuner Routing section at the end; the Reviewer owns tuner
+routing for its own score and the folded Stress score together.
 
 > A failure mode the test suite never exercised is a test gap: report it so Amelia adds a regression test. Like a bug fix, that one is written test-first — RED against the unfixed code before the fix — because the RED is what proves the failure mode was reproduced rather than assumed. The Stress Tester finds the gap; it does not write the test.
 

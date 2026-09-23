@@ -146,17 +146,25 @@ Determine scope from the PRD epic count:
 
 **Multiple epics (≥ 2)** → produce **Epic Manifest**:
 
-| Epic | Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language |
-|------|------|-------------|--------------|-----------------|----------------|----------|
-| Epic 1: {title} | T1.1: {imperative} | AC1, AC2 | SEC-1 | NFR-1 | ~140 lines | Go 1.26.2 |
+| Epic | Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
+|------|------|-------------|--------------|-----------------|----------------|----------|------|--------|
+| Epic 1: {title} | T1.1: {imperative} | AC1, AC2 | SEC-1 | NFR-1 | ~140 lines | Go 1.26.2 | Backend | standard |
 
 **Single task / small scope (1 epic)** → produce **Task Manifest**:
 
-| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language |
-|----------|-------------|--------------|-----------------|----------------|----------|
-| ST1: {imperative verb phrase} | AC1, AC2 | SEC-1 | NFR-1 | ~180 lines | TypeScript 5 |
+| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
+|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
+| ST1: {imperative verb phrase} | AC1, AC2 | SEC-1 | NFR-1 | ~180 lines | TypeScript 5 | Frontend | light |
 
 `Language` must be populated from the Architect's Tech Stack decision — carries runtime, version, and framework (e.g. `Go 1.26.2`, `TypeScript 5 / Next.js 14`, `Java 21 / Spring Boot 3`). Every downstream agent reads Language from the Manifest — never inferred.
+
+`Tier` (Backend/Frontend, from the Coder overlay table) and `Roster` (`cosmetic · light · standard ·
+full`) are both declared here, at plan time, from the row's actual scope — doc/style-only is
+`cosmetic`, a ≤2-non-test-file behaviour change with no dependency or trigger tag is `light`, the
+default is `standard`, any trigger tag or Architect-declared shared state is `full`. `Roster` is a
+declaration, not a guarantee: `classify-diff.sh` verifies it against the real diff at coding time and
+only ever escalates it, never de-escalates it — a row that turns out to touch more than declared
+gets the heavier roster's agents, not a quiet pass at the lighter one.
 
 Each task/sub-task must be **independently testable** — expressible as one or more Test Case rows, each with an observable result and a named break that would falsify it. If a row cannot be stated that way, split it until it can.
 

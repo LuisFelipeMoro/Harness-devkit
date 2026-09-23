@@ -338,40 +338,47 @@ PLANNING  (all artifacts keyed under docs/deliveries/{key}/)
   Priya (PlanReviewer)→ read the plan against the real repo (mandatory, max 2 revision rounds)
                         PLAN CHANGES REQUIRED → back to Winston · PLAN APPROVED → human
                         ← human resolves whatever neither could settle
-  Bob (ScrumMaster)   → {key}/story-{slug}.md per task (ACs + Test Case table = frozen contract,
-                        carrying the story's Reuse rows and convention exemplars)
+  Bob (ScrumMaster)   → {key}/story-{slug}.md per task — dispatched only when the manifest has
+                        ≥ 2 manifest rows (a single-row manifest skips straight to Amelia)
+                        (ACs + Test Case table = frozen contract, carrying the story's Reuse rows
+                        and convention exemplars)
+  Execution options   → human checkpoint: bench-context.py --manifest shows dispatch counts +
+                        token range for as-planned / all-standard / legacy-full-loop; operator
+                        picks or edits rosters before the first Coder is dispatched
 
-IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree)
+IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree; roster-driven: the
+                manifest's declared Roster — cosmetic · light · standard · full — decides which
+                agents below run; classify-diff verifies the roster against the real diff and
+                only ever escalates it, never de-escalates)
   Amelia (Coder)      → impl to spec → write specified tests → falsify each (owns tests + code)  [emits CODER DONE]
      stack-aware: shared core + backend OR frontend overlay (chosen by story Tier);
      frontend overlay covers SSR/RSC; loads only the detected language's rules;
      full-stack stories split BE/FE around the api-spec contract (BE producer, FE consumer)
-        ↕ QA loop (max 3 iterations)
+        ↕ QA loop (max 3 iterations; skipped for roster cosmetic)
   Quinn (QA)          → audits spec rows + falsification evidence (spot-checks breaks), no tautologies, corner cases + runs gates  [one tier-aware auditor]
         │ gate fail   → QA→CODER BUG REPORT  → Amelia fixes → Quinn re-runs
         │ weak/missing test → QA→CODER TEST GAP → Amelia writes it → Quinn re-audits
         │ coverage gap → QA→CODER COVERAGE REQUEST → Amelia refactors
         └ all green → QA→REVIEWER APPROVAL  ← Reviewer never runs before this
 
-REVIEW (parallel — triggered by QA approval only)
+STORY PR + REVIEW (draft PR into release/{slug}-{key}; triggered by QA approval only)
+  orchestrator        → feat/{key}-{story} → draft PR into release/{slug}-{key}
   Reviewer            → score X/10  (MINOR/NIT → Tyler)
                         gets the story + Reuse Map + codebase map, not just the diff —
                         without them CD1/CD3/CD7 are skipped silently
-  StressTester        → score X/10  (optimizations → Tyler)
+                        folds in the Stress lens for roster light/standard; posts findings
+                        inline on the draft PR — no separate story-level /pr-review
+  StressTester        → dispatched separately only for roster `full`; score X/10  (optimizations → Tyler)
 
 TUNING (optional — score ≥ 7, MINOR/NIT/optimization only)
   Tyler (Tuner)       → apply fixes → Reviewer re-scores (max 2 iterations)
 
   Verdict             → PRODUCTION READY / READY WITH CONDITIONS / NOT READY
+                        → gh pr ready once no findings remain → merge --no-ff so each story
+                        stays legible in history
 
 POST-VERDICT (if PRODUCTION READY)
   Ops (DevOps)        → Dockerfile + .dockerignore + docker-compose.yml + optional CI/k8s
-
-PER-STORY REVIEW (each story, before the next one starts)
-  orchestrator        → feat/{key}-{story} → PR into release/{slug}-{key}
-  /pr-review          → reviewed against THIS story's ACs + Test Case table + Reuse Map
-                        + Blast Radius — tightest spec, smallest diff
-                        → merge --no-ff so each story stays legible in history
 
 DELIVERY CLOSE (terminal — the pipeline stops here)
   orchestrator        → push release/{slug}-{key} (asks first) → open PR to main
@@ -382,6 +389,10 @@ DELIVERY CLOSE (terminal — the pipeline stops here)
                         never commits or merges to main; a human merges
                         then /release-management tags the merged main
 ```
+
+Measured by `bench-context.py` (`plugins/coding-pipeline/scripts/bench-context.py`): a uniform
+5-story `standard` delivery is **20 dispatches** (was 40 before the roster split); a realistic
+mixed-roster delivery is **18**; guide tokens per 5-story delivery down **14.2%** (244,170 → 209,394), vs v2.6.0.
 
 ### Fast Pipeline — `/task <task>`
 

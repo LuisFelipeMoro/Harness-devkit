@@ -34,26 +34,32 @@ Load and follow `skills/planning/SKILL.md` (Phase 0 through Phase 4). Phase 0.5 
 - If the delivery file for this key already exists and was approved: skip Phases 0–2.5 and proceed directly to Phase 4 (Manifest).
 - On changes requested during human validation: update the delivery file → re-confirm before continuing.
 
-Complete Phases 0–4 of the planning skill (Phase 5 is informational when invoked from a pipeline). The plan MUST clear the Phase 0.5 codebase map, the Phase 2 grill-me stress, the Phase 2.5 `PLAN APPROVED` gate, and Phase 3 human validation before any code. Once the **Epic Manifest** is confirmed, continue with Phase 2 below.
+Complete Phases 0–4 of the planning skill (Phase 5 is informational when invoked from a pipeline). The plan MUST clear the Phase 0.5 codebase map, the Phase 2 grill-me stress, the Phase 2.5 `PLAN APPROVED` gate, and Phase 3 human validation before any code. Once the **Epic Manifest** is confirmed, planning's own step 8 runs the **Execution options** checkpoint (`bench-context.py --manifest`) — do not dispatch the first Coder until the operator has picked or edited the manifest's rosters. Then continue with Phase 2 below.
 
 ---
 
 ## Phase 2 — Epic Loop (repeat per epic)
 
-Repeat A–F per epic. Full dispatch prompts, routing signals, Bug-Fix Loop, Tuner limits, and
-the checkpoint table are in [references/loop.md](references/loop.md).
+Repeat A–F per epic. The loop is **roster-driven** — each manifest row's `Roster`
+(`cosmetic`/`light`/`standard`/`full`) decides which agents in B–D are dispatched; mechanical
+gates run on every roster regardless. Full dispatch prompts, routing signals, Bug-Fix Loop, Tuner
+limits, and the checkpoint table are in [references/loop.md](references/loop.md) — the roster→agent
+mapping itself lives there too, not restated here.
 
-**A** Stories (ScrumMaster: Epic Manifest rows + delivery file → one `story-{slug}.md` per task)
+**A** Stories (ScrumMaster: Epic Manifest rows + delivery file → one `story-{slug}.md` per task —
+dispatched only when the manifest has ≥ 2 rows)
 → **B** Coding (one Coder subagent per story, **dispatched one at a time** — stories share the
 delivery's single worktree, so two concurrent Coders would overwrite each other; core +
 one tier overlay; implement to spec → write the specified tests → falsify each)
 → **C** QA audit + gates (Quinn; route on her signal — approval proceeds to D, any gap enters
 the Bug-Fix Loop, escalation proceeds to D with FAIL)
-→ **D** Review + Stress in parallel, only after QA's signal (Tuner on `TUNER REQUEST`, max 2)
+→ **D** Review, only after QA's signal — the Reviewer folds in the Stress lens on `light`/`standard`
+and posts inline findings on the story's draft PR; StressTester is dispatched separately only for
+roster `full` (Tuner on `TUNER REQUEST`, max 2)
 → **E** Verdict (unmitigated CRITICAL security = automatic NOT READY)
 → **F** Story PR + checkpoint: push `feat/{key}-{story-slug}`, open its PR into `release/*` as a
-**draft**, run `/pr-review` on it with the story's ACs and Test Case table in context, promote with
-`gh pr ready` once it returns no findings, merge `--no-ff` when green, then write the
+**draft** — reviewed inline by step D's Reviewer, no story-level `/pr-review` — promote with
+`gh pr ready` once no findings remain, merge `--no-ff` when green, then write the
 `[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
 
 Read-only Explore/mapping subagents may still run in parallel. On the final epic's
