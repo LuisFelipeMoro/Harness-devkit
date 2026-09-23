@@ -9,8 +9,10 @@ Run with the plan's own rosters (operator choice): est. ~30 dispatches vs 63 for
 | ST | Roster | Result | Dispatches · tokens |
 |---|---|---|---|
 | ST1 bug-fix named agents + validate-wiring §7 host | light | merged `b713c88`, Review 6→9 | Coder 59k + fix 80k · Reviewer 66k (sonnet) · confirm 40k (haiku, vs 69k sonnet) |
+| ST2 diff-lib + security-scan --diff | full | merged, verdict 8.35 (R9 S8 Q8) after Stress 3 (CRITICAL newline false-clean) | Coder 131k+76k (haiku, 1 stall, 1 false report) + 152k+184k (sonnet) · QA 117k (3 rounds) · Review 100k + 52k haiku confirm · Stress 99k + 57k haiku confirm · ≈968k |
 
 Planning cost: map 77k (haiku) · architect 184k (opus) · plan-review 179k (sonnet, 2 rounds).
+Lessons: haiku Coder on a 15-row security spec misreported coverage twice — sonnet for `full` Coder. Checkpoint M (orchestrator name-check + re-breaks) caught every false claim before an agent paid for it. Stress earned its place: the only lens that found the false-clean scan. Resuming a big sonnet context for a 3-line fix cost 184k — narrow follow-ups should be a fresh haiku.
 Lesson: the host bug (loop ignored each row's path) passed both frozen rows — the spec lacked a
 multi-row case. Added two rows; spec gaps show up as "tests green on a broken host".
 
