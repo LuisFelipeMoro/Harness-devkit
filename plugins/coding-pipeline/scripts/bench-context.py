@@ -16,10 +16,20 @@ with the devkit and adding a dependency to a measuring tool is the wrong trade.
 The estimator is only ever compared against itself (before vs after a change), so
 a constant bias cancels; treat absolute figures as ±10%.
 
+Dispatch counts follow the roster model (references/thresholds.md — Roster):
+each story declares a roster (cosmetic/light/standard/full) that fixes which
+agents are dispatched (delivery-diff-scoped-story-loop-2c9fee.md D7).
+
 Usage:
-  bench-context.py [--root DIR] [--stories N] [--json] [--baseline FILE]
+  bench-context.py [--root DIR] [--stories N] [--json] [--baseline FILE] [--mix MIX]
+  bench-context.py --manifest <task-manifest.md|epic-manifest.md> [--json]
 
   --baseline FILE   compare against a previously saved --json run and print the delta
+  --mix MIX         "roster=count,roster=count,..." for the mixed profile
+                     (default: cosmetic=1,light=1,standard=2,full=1)
+  --manifest PATH   read the manifest's Roster column and print the execution-options
+                     checkpoint (as planned / all standard / legacy full loop) instead
+                     of the guide-token report
 """
 import argparse
 import json
@@ -27,6 +37,25 @@ import os
 import sys
 
 CHARS_PER_TOKEN = 3.6  # markdown with tables/code, cl100k-ish
+
+# --- the roster model (D7) -----------------------------------------------------
+# Which agents a story's declared roster dispatches. Cosmetic/light/standard/full
+# only ever escalate (classify-diff.sh); this table is the dispatch side of that.
+
+ROSTER = {
+    "cosmetic": ["coder"],
+    "light": ["coder", "reviewer"],
+    "standard": ["coder", "qa", "reviewer"],
+    "full": ["coder", "qa", "reviewer", "stress"],
+}
+
+DEFAULT_MIX = {"cosmetic": 1, "light": 1, "standard": 2, "full": 1}
+
+# The pre-2c9fee graph: every row dispatched all seven regardless of roster.
+LEGACY_PER_ROW = ["scrum-master", "coder", "qa", "reviewer", "stress", "verdict", "pr-review"]
+
+PLANNING_AGENTS = ["map", "architect", "plan-reviewer"]
+DELIVERY_AGENTS = ["pr-review", "devops"]
 
 # --- the dispatch graph -------------------------------------------------------
 # Each entry: what one dispatch of that path loads into a fresh context.
@@ -45,8 +74,7 @@ DISPATCH = {
         "skills/architecture/references/sections.md",
     ],
     "planning: plan-reviewer": ["agents/plan-reviewer.md"],
-    # per story, steps A-F
-    "story: scrum-master": ["agents/scrum-master.md"],
+    # per story, roster-driven (see ROSTER)
     "story: coder (core + overlay + language)": [
         "agents/coder.md",
         "agents/coder-backend.md",
@@ -56,16 +84,11 @@ DISPATCH = {
     "story: qa": ["agents/qa.md", "references/quality-gate-reference.md"],
     "story: reviewer": [
         "agents/reviewer.md",
+        "agents/stress.md",
         "references/change-discipline.md",
         "references/languages/go.md",
     ],
     "story: stress": ["agents/stress.md"],
-    "story: verdict": ["agents/verdict.md"],
-    "story: pr-review": [
-        "../pr-workflow/skills/pr-review/SKILL.md",
-        "../pr-workflow/skills/pr-review/references/review-checklist.md",
-        "../pr-workflow/skills/pr-review/references/output-format.md",
-    ],
     # once per delivery
     "delivery: pr-review (release PR)": [
         "../pr-workflow/skills/pr-review/SKILL.md",
@@ -74,21 +97,46 @@ DISPATCH = {
     "delivery: devops": ["agents/devops.md"],
 }
 
-# How many times each path is dispatched in one delivery of N stories.
-# `None` means "once per story".
-PER_DELIVERY = {
-    "planning: codebase map (Explore)": 1,
-    "planning: architect": 1,
-    "planning: plan-reviewer": 1,
-    "story: scrum-master": None,
-    "story: coder (core + overlay + language)": None,
-    "story: qa": None,
-    "story: reviewer": None,
-    "story: stress": None,
-    "story: verdict": None,
-    "story: pr-review": None,
-    "delivery: pr-review (release PR)": 1,
-    "delivery: devops": 1,
+# Maps a ROSTER agent short name to the DISPATCH label it loads. Labels with no
+# entry here (planning/delivery) are dispatched once per delivery, not per story.
+ROSTER_PATH = {
+    "coder": "story: coder (core + overlay + language)",
+    "qa": "story: qa",
+    "reviewer": "story: reviewer",
+    "stress": "story: stress",
+}
+
+PLANNING_LABELS = [
+    "planning: codebase map (Explore)",
+    "planning: architect",
+    "planning: plan-reviewer",
+]
+DELIVERY_LABELS = ["delivery: pr-review (release PR)", "delivery: devops"]
+
+# Read once by the orchestrator, applied inline per story (D8) — no dispatch.
+INLINE = {"orchestrator: verdict.md (read once)": ["agents/verdict.md"]}
+
+# --- per-dispatch token cost (ST10 execution-options checkpoint) -------------
+# {agent: (tokens, n_samples)}. n_samples == 0 means "assumed" — not yet
+# measured for this delivery; otherwise "measured (n=...)". Seeded from this
+# delivery's own dispatches (PROGRESS.md — Loop rules in force / ST1-3 rows):
+# planning map 77k (haiku, n=1), architect 184k (opus, n=1), plan-reviewer
+# 165k (sonnet, n=1); ST1-ST4 first-pass dispatches: reviewer 66-161k (n=9,
+# mean 106k), coder 59-215k (n=9, mean 137k), qa 82-116k (n=3, mean 99k),
+# stress 72-99k (n=3, mean 85k). Fix rounds are NOT in these means: on this
+# delivery they added ~40-60% per full-roster story on top of first pass.
+COST = {
+    "map": (77000, 1),
+    "architect": (184000, 1),
+    "plan-reviewer": (165000, 1),
+    "reviewer": (106000, 9),
+    "coder": (137000, 9),
+    "qa": (99000, 3),
+    "stress": (85000, 3),
+    "scrum-master": (40000, 0),
+    "verdict": (20000, 0),
+    "pr-review": (90000, 0),
+    "devops": (60000, 0),
 }
 
 
@@ -111,24 +159,97 @@ def measure(root, files):
     return total, missing
 
 
-def collect(root, stories):
-    report = {"stories": stories, "always_on": {}, "paths": {}, "missing": []}
+def expand_mix(mix):
+    rosters = []
+    for name, n in mix.items():
+        rosters.extend([name] * n)
+    return rosters
+
+
+def parse_mix(s):
+    """argparse type for --mix: "roster=count,roster=count,...". """
+    result = {}
+    for part in s.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise argparse.ArgumentTypeError(f"invalid --mix entry: {part!r}")
+        name, _, count = part.partition("=")
+        name = name.strip()
+        if name not in ROSTER:
+            raise argparse.ArgumentTypeError(f"unknown roster in --mix: {name!r}")
+        try:
+            n = int(count)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"invalid --mix count for {name!r}: {count!r}") from exc
+        if n < 0:
+            raise argparse.ArgumentTypeError(f"negative --mix count for {name!r}: {n}")
+        result[name] = n
+    if not result:
+        raise argparse.ArgumentTypeError("empty --mix")
+    return result
+
+
+def build_paths(root, roster_list):
+    """Per-path guide-token cost for one profile's roster mix."""
+    story_counts = dict.fromkeys(ROSTER_PATH.values(), 0)
+    for roster in roster_list:
+        for agent in ROSTER[roster]:
+            story_counts[ROSTER_PATH[agent]] += 1
+
+    paths, missing = {}, []
+    for label, files in DISPATCH.items():
+        per_load, miss = measure(root, files)
+        missing += miss
+        count = 1 if label in PLANNING_LABELS or label in DELIVERY_LABELS else story_counts.get(label, 0)
+        paths[label] = {"per_load": per_load, "dispatches": count, "total": per_load * count}
+    return paths, missing
+
+
+def build_inline(root):
+    inline, missing = {}, []
+    for label, files in INLINE.items():
+        per_load, miss = measure(root, files)
+        missing += miss
+        inline[label] = {"per_load": per_load, "dispatches": 0, "total": per_load}
+    return inline, missing
+
+
+def profile_totals(paths, inline):
+    dispatches = sum(p["dispatches"] for p in paths.values())
+    guide_tokens = sum(p["total"] for p in paths.values()) + sum(i["total"] for i in inline.values())
+    return dispatches, guide_tokens
+
+
+def collect(root, stories, mix):
+    report = {"stories": stories, "always_on": {}, "missing": []}
 
     for label, files in ALWAYS_ON.items():
         t, miss = measure(root, files)
         report["always_on"][label] = t
         report["missing"] += miss
-
-    for label, files in DISPATCH.items():
-        t, miss = measure(root, files)
-        count = PER_DELIVERY[label]
-        n = stories if count is None else count
-        report["paths"][label] = {"per_load": t, "dispatches": n, "total": t * n}
-        report["missing"] += miss
-
     report["session_always_on"] = sum(report["always_on"].values())
-    report["delivery_dispatches"] = sum(p["dispatches"] for p in report["paths"].values())
-    report["delivery_guide_tokens"] = sum(p["total"] for p in report["paths"].values())
+
+    uniform_rosters = ["standard"] * stories
+    mixed_rosters = expand_mix(mix if mix is not None else DEFAULT_MIX)
+
+    profiles = {}
+    for name, rosters in (("uniform", uniform_rosters), ("mixed", mixed_rosters)):
+        paths, miss1 = build_paths(root, rosters)
+        inline, miss2 = build_inline(root)
+        dispatches, guide_tokens = profile_totals(paths, inline)
+        report["missing"] += miss1 + miss2
+        profiles[name] = {"dispatches": dispatches, "guide_tokens": guide_tokens}
+        if name == "uniform":
+            # Top-level keys keep their pre-roster meaning: the uniform profile.
+            report["paths"] = paths
+            report["inline"] = inline
+            report["delivery_dispatches"] = dispatches
+            report["delivery_guide_tokens"] = guide_tokens
+
+    report["profiles"] = profiles
+    report["missing"] = sorted(set(report["missing"]))
     return report
 
 
@@ -151,6 +272,14 @@ def render(r, baseline=None):
         f"| **delivery total** |  | **{r['delivery_dispatches']}** "
         f"| **{fmt(r['delivery_guide_tokens'])}** |"
     )
+    out.append("")
+
+    out.append("## Profiles")
+    out.append("")
+    out.append("| Profile | Dispatches | Guide tokens |")
+    out.append("|---|---:|---:|")
+    for name, p in r["profiles"].items():
+        out.append(f"| {name} | {p['dispatches']} | {fmt(p['guide_tokens'])} |")
     out.append("")
 
     if baseline:
@@ -181,6 +310,113 @@ def render(r, baseline=None):
     return "\n".join(out)
 
 
+# --- ST10: execution-options checkpoint (--manifest) --------------------------
+
+
+def parse_manifest_rosters(path):
+    """Read a Phase-4 manifest table and return its Roster column values, in
+    row order, or None when the table carries no Roster column at all.
+    Exits with error if an unrecognized roster value is found."""
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+
+    header_idx, cols = None, []
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if "Roster" in cells:
+            header_idx, cols = i, cells
+            break
+    if header_idx is None:
+        return None
+
+    roster_i = cols.index("Roster")
+    rosters = []
+    row_num = header_idx + 1
+    for line in lines[header_idx + 1:]:
+        s = line.strip()
+        if not s.startswith("|"):
+            break
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if all(c == "" or set(c) <= set("-: ") for c in cells):
+            continue  # markdown separator row
+        if len(cells) <= roster_i:
+            row_num += 1
+            continue
+        val = cells[roster_i]
+        if val in ROSTER:
+            rosters.append(val)
+        elif val:  # non-empty value that's not in ROSTER
+            print(f"bench-context: unrecognized roster '{val}' in manifest row {row_num}", file=sys.stderr)
+            sys.exit(2)
+        row_num += 1
+    return rosters
+
+
+def option_agents(name, rosters):
+    n = len(rosters)
+    if name == "as planned":
+        agents = [a for r in rosters for a in ROSTER[r]]
+    elif name == "all standard":
+        agents = list(ROSTER["standard"]) * n
+    else:  # legacy full loop
+        agents = list(LEGACY_PER_ROW) * n
+    return agents + PLANNING_AGENTS + DELIVERY_AGENTS
+
+
+def compute_options(rosters, cost=None):
+    if cost is None:
+        cost = COST
+    options = {}
+    for name in ("as planned", "all standard", "legacy full loop"):
+        agents = option_agents(name, rosters)
+        total = sum(cost[a][0] for a in agents)
+        options[name] = {
+            "dispatches": len(agents),
+            "tokens_low": int(total * 0.8),
+            "tokens_high": int(total * 1.2),
+        }
+    return options
+
+
+def render_manifest(rosters, options, cost=None):
+    if cost is None:
+        cost = COST
+    out = [f"# Execution options — {len(rosters)} manifest rows", ""]
+    out.append("| Agent | Cost (tokens) | Basis |")
+    out.append("|---|---:|---|")
+    for agent in sorted(cost):
+        tok, n = cost[agent]
+        basis = "assumed" if n == 0 else f"measured (n={n})"
+        out.append(f"| {agent} | {fmt(tok)} | {basis} |")
+    out.append("")
+    out.append("| Option | Dispatches | Token range |")
+    out.append("|---|---:|---:|")
+    for name in ("as planned", "all standard", "legacy full loop"):
+        o = options[name]
+        out.append(f"| {name} | {o['dispatches']} | {fmt(o['tokens_low'])}–{fmt(o['tokens_high'])} |")
+    return "\n".join(out)
+
+
+def run_manifest(path, as_json, cost=None):
+    if cost is None:
+        cost = COST
+    rosters = parse_manifest_rosters(path)
+    if rosters is None:
+        print("bench-context: no Roster column in manifest", file=sys.stderr)
+        return 2
+
+    options = compute_options(rosters, cost=cost)
+    if as_json:
+        cost_json = {a: {"tokens": t, "n_samples": n} for a, (t, n) in cost.items()}
+        print(json.dumps({"rows": len(rosters), "options": options, "cost": cost_json}, indent=2))
+    else:
+        print(render_manifest(rosters, options, cost=cost))
+    return 0
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
@@ -188,9 +424,14 @@ def main():
     ap.add_argument("--stories", type=int, default=5)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--baseline")
+    ap.add_argument("--mix", type=parse_mix, default=None)
+    ap.add_argument("--manifest")
     a = ap.parse_args()
 
-    r = collect(a.root, a.stories)
+    if a.manifest:
+        return run_manifest(a.manifest, a.json)
+
+    r = collect(a.root, a.stories, a.mix)
     if a.json:
         print(json.dumps(r, indent=2))
         return 0
