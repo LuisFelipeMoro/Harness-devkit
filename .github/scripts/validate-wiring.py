@@ -16,7 +16,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 errors = []
-checked = {"manifest": 0, "hook": 0, "link": 0, "agent": 0, "skill": 0, "routing": 0, "desc": 0}
+checked = {"manifest": 0, "hook": 0, "link": 0, "agent": 0, "skill": 0, "routing": 0, "desc": 0, "contract": 0}
 
 
 def err(kind, where, msg):
@@ -207,6 +207,43 @@ for name, pdir in declared.items():
             continue
         if not QUOTED_PHRASE.search(dm.group(1).strip()):
             err("desc", rel(skill_md), "description carries no quoted trigger phrase")
+
+# ── 7. contract: dispatch and coding-pipeline naming conventions ────────────────
+# §7 is the host where later sub-tasks extend with rows for loop.md, agents, skills.
+# dispatch.md guards against the generic-agent regression that dropped model assignment.
+# Data-driven contract: (path, must_contain: list[str], must_not: list[str])
+CONTRACT = [
+    ("plugins/coding-pipeline/skills/bug-fix/references/dispatch.md",
+     ["subagent_type: \"bug-investigator\"", "subagent_type: \"coder\""],
+     ["subagent_type: \"claude\""]),
+]
+
+# Each contract row is checked against its own file
+for path, must_contain, must_not in CONTRACT:
+    checked["contract"] += 1
+    full = os.path.join(ROOT, path)
+    if not os.path.isfile(full):
+        err("contract", path, "file missing")
+        continue
+    text = read(full)
+    for phrase in must_contain:
+        if phrase not in text:
+            err("contract", path, f"must contain '{phrase}'")
+    for phrase in must_not:
+        if phrase in text:
+            err("contract", path, f"must not contain '{phrase}'")
+
+# Glob check: no md files under plugins/coding-pipeline/ contain subagent_type: "claude"
+coding_pipeline_dir = os.path.join(ROOT, "plugins/coding-pipeline")
+checked["contract"] += 1
+for dirpath, dirnames, filenames in os.walk(coding_pipeline_dir):
+    for fn in filenames:
+        if not fn.endswith(".md"):
+            continue
+        path = os.path.join(dirpath, fn)
+        text = read(path)
+        if "subagent_type: \"claude\"" in text:
+            err("contract", rel(path), "must not contain 'subagent_type: \"claude\"'")
 
 print(f"checked: {checked}")
 if errors:

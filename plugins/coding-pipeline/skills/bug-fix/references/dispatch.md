@@ -5,8 +5,7 @@
 ```text
 Agent(
   description: "Sam — bug investigation",
-  subagent_type: "claude",
-  model: "sonnet",
+  subagent_type: "bug-investigator",
   prompt: """
 Read agents/bug-investigator.md — that is your persona and instructions.
 
@@ -29,8 +28,7 @@ Return ONLY:
 ```text
 Agent(
   description: "Amelia — bug fix",
-  subagent_type: "claude",
-  model: "haiku",
+  subagent_type: "coder",
   prompt: """
 Read agents/coder.md (core) PLUS the tier overlay for the bug's stack —
 agents/coder-backend.md if the fix is server/API/domain, agents/coder-frontend.md if it is UI/SSR/client.
