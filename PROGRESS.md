@@ -1,12 +1,12 @@
 # PROGRESS
 
-## [2c9fee] Diff-Scoped Story Loop — in progress (3/10 merged)
+## [2c9fee] Diff-Scoped Story Loop — all 10 merged into the release branch; release PR next
 
 **Resume here.** Delivery-Key `2c9fee` · worktree `.worktrees/dlv-2c9fee` · branch
 `release/diff-scoped-story-loop-2c9fee` · delivery file
 `docs/deliveries/delivery-diff-scoped-story-loop-2c9fee.md` · manifest
 `docs/deliveries/2c9fee/task-manifest.md` (both gitignored, local only). Plan APPROVED (2 rounds).
-**Next: ST4 `classify-diff.sh` (roster full)** — spec already carries 4 pre-empted rows (symlink
+**Next: push the release branch, open the PR to main, `/pr-review` on it (human merges).** — spec already carries 4 pre-empted rows (symlink
 named like a style file, source deletion, newline name, security-scan exit 2 propagation).
 Start the next session from the worktree (`cd .worktrees/dlv-2c9fee`) so this file is the one bootstrapped.
 
@@ -16,9 +16,11 @@ Start the next session from the worktree (`cd .worktrees/dlv-2c9fee`) so this fi
 | ST2 diff-lib + security-scan --diff | full | merged `faa69bc`, 8.35 (R9 S8 Q8) after Stress 3 CRITICAL | ≈968k (haiku Coder rounds 207k wasted, sonnet 336k) |
 | ST3 tautology-scan --diff | full | merged `80fbe00`, 8.65 (R9 S8 Q9) after R6/S7 | ≈738k |
 | ST4 classify-diff.sh | full | merged `9b9d972`, 8.65 (R9 S8 Q9) after Stress 2 CRITICAL (code in .css/.md or a disguised rename classified cosmetic, no scan) → D3 amendment; QA then caught rename+content shadowing | Coder 215k + 2 stalls + 228k + 92k (sonnet) · QA 168k (4 rounds) · Review 122k + 57k haiku · Stress 85k + 66k haiku · ≈1.03M |
+| Batch A: ST5 verdict roster · ST9 bench · ST10 --manifest | standard | merged `9c1f39b`, 8.0 (R8 Q8) after R6 (unrecognized roster silently dropped) | first Coder died mid-falsification (left stress.md out; restored) · COST-test decouple 88k · fix 98k (reverted thresholds.md — restored) · QA 131k · Review 116k + 64k haiku ≈ 0.65M |
+| Batch B: all docs (ST6 ST7 ST8 ST10) — last, per operator | light | merged `5f2846a`, Review 9 | one oversized Coder stalled; split into 3 parallel (163k+155k+163k) + contract rows 106k + review 142k + tuner 58k ≈ 0.8M |
 | — | — | `29a5225` removed a probe file a Stress agent committed into ST2 | — |
 
-Planning 440k (map 77k haiku · architect 184k opus · plan-review 179k sonnet). Spent ≈2.39M;
+Planning 440k (map 77k haiku · architect 184k opus · plan-review 179k sonnet). **Measured result** (bench-context.py vs v2.6.0): dispatches per 5-story delivery 40 → 20 (mixed 18); guide tokens 244,170 → 209,394 (−14.2%). Delivery cost ≈4.9M tokens (legacy loop est. 6–7M+). Earlier estimate lines follow. Spent ≈2.39M after ST3;
 remaining estimate ≈1.9M (ST4 ~550k · ST5/9/10 ~280k · ST6–8 ~170k); delivery ≈4.3M vs ~6M+ legacy.
 
 Parallel since ST4 (operator: "can't we do batch changes"): batch A (ST5+ST9+ST10 code) in `.worktrees/dlv-2c9fee-scripts`; batch B (all docs) runs LAST (operator: docs must see the final state).
@@ -58,6 +60,12 @@ Checkpoint M checks the exact changed-file set (a fix Coder silently reverted th
   each story's Stress findings into the next story's spec before code.
 - **Resuming beats re-dispatching for small re-checks** (QA resume ~25k vs ~80k fresh), but
   resuming a large Coder context for a small fix is the most expensive option measured.
+- **Oversized agent prompts stall.** Four stream-watchdog stalls, all on prompts spanning many files; splitting the docs batch into three disjoint parallel agents finished each in ~17 min.
+- **Fix Coders revert files they were told not to edit.** A fix round "reverted thresholds.md per task spec"; checkpoint M now compares the exact expected file set, not just "no extras".
+- **Tests coupled to production data break when the data gets real.** The COST "assumed" test depended on the live table having qa n=0; recording a measurement broke it — tests supply fixtures.
+- **A classifier that trusts a name is a bypass.** Symlink-by-name (ST2/ST3) then extension-by-name (ST4): `evil.css` and `git mv x.ts x.css` classified cosmetic. Content must be scanned before any roster is lowered.
+- **Estimates must model rework.** The execution-options estimate counts first passes; full-roster stories here added 40–60% in fix rounds.
+- **TEST_FILE misses the devkit's own `test-*.sh`** — classify-diff will over-escalate devkit stories touching tests. Follow-up.
 - **Plan-review agents cost like implementers** (165–184k). The reviewer floor applies to them too.
 
 ## Done — 2026-09-22 (session 2) · review fixes, dup-gate, autonomous context
