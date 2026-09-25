@@ -72,6 +72,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # test-verify.sh benchmarks against a historical commit; a shallow
+          # clone does not have it.
+          fetch-depth: 0
       - name: session hook behaviour tests
         run: bash .github/scripts/test-hooks.sh
       - name: git hook behaviour tests

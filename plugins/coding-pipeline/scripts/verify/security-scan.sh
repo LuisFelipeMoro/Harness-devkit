@@ -116,7 +116,9 @@ emit() {
     if [ "$include_docs" -eq 0 ]; then
         exclude="$exclude|\.md:[0-9]+:|verify/security-scan\.sh:"
     fi
-    out=$(grep -rnE --binary-files=without-match "$pattern" "${paths[@]}" 2>/dev/null \
+    # -H: GNU grep drops the file name when given a single file, which would
+    # strip the path from every hit and blind the exclude filter above to it.
+    out=$(grep -rnHE --binary-files=without-match "$pattern" "${paths[@]}" 2>/dev/null \
         | grep -vE "$exclude" \
         || true)
     if [ -n "$out" ]; then
