@@ -1070,6 +1070,40 @@ case "$out" in *test-x.sh*) echo "FAIL: security-scan: test files use the shared
 case "$out" in *a.bats*) echo "FAIL: security-scan: test files use the shared TEST_FILE definition — a.bats leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
 cd - >/dev/null || exit
 
+# ── RD2: one TEST_FILE loader for all sensors (diff-lib.sh) ─────────────────
+# The importlib extraction used to live twice, copy-pasted into
+# classify-diff.sh and security-scan.sh, and could drift the moment one copy
+# was edited and the other was not. It now lives once, as diff-lib.sh's
+# load_test_file_re, and both callers use it instead of importing directly.
+def_count=$(grep -c '^load_test_file_re()' "$V/diff-lib.sh")
+importlib_count=$(( $(grep -c 'importlib\.util' "$V/classify-diff.sh") + $(grep -c 'importlib\.util' "$V/security-scan.sh") ))
+ok=1
+[ "$def_count" = "1" ] || ok=0
+[ "$importlib_count" = "0" ] || ok=0
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: diff-lib: one TEST_FILE loader for all sensors — def_count=$def_count (want 1) importlib_count=$importlib_count (want 0)"; fail=1
+fi
+
+# security-scan.sh must fail closed the same way classify-diff.sh already
+# does (tested above as "classify: missing tautology-scan is unmeasured, not
+# a traceback") when tautology-scan.py is missing beside it — its own
+# fail-closed path was untested (ST12 QA/Review MINOR).
+stubV3="$W/stubverify17"
+mkdir -p "$stubV3"
+cp "$V/security-scan.sh" "$stubV3/security-scan.sh"
+cp "$V/diff-lib.sh" "$stubV3/diff-lib.sh"
+chmod +x "$stubV3/security-scan.sh"
+repo_c22="$W/repo_c22"
+mkrepo "$repo_c22"
+cd "$repo_c22" || exit
+printf 'eval(x)\n' > app.js
+git -c user.email=t@t -c user.name=t add app.js
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add app.js"
+out=$(bash "$stubV3/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
+check "security-scan: missing TEST_FILE source fails closed" 2 "$rc" "$out" "UNMEASURED"
+case "$out" in *Traceback*) echo "FAIL: security-scan: missing TEST_FILE source fails closed — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

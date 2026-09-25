@@ -448,6 +448,88 @@ if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
     echo "FAIL: release-guard: pre-push uses the remote sha range — exit $got, got: $out"; fail=1
 fi
 
+# A git failure (not an offending path) must read as UNMEASURED, never as
+# clean — a `< <(...)` process substitution swallows git's own exit status,
+# so a failed `git diff-tree` (corrupt object, transient error) silently
+# looked like an empty, harmless path list (ST12 Review MAJOR). Stub `git` so
+# every subcommand passes through to the real binary except `diff-tree`,
+# which exits 128 the way a real failure would.
+d="$(guard_repo guard-gitfail)"
+( cd "$d" && printf 'clean\n' > c.txt && git add c.txt && git commit -qm "clean commit" )
+gitfail_sha="$(cd "$d" && git rev-parse HEAD)"
+realgit="$(command -v git)"
+cat > "$d/.stub-bin/git" <<STUB
+#!/usr/bin/env bash
+if [ "\$1" = "diff-tree" ]; then
+    exit 128
+fi
+exec "$realgit" "\$@"
+STUB
+chmod +x "$d/.stub-bin/git"
+out="$(cd "$d" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/release-content-guard.sh" --commits "$gitfail_sha" 2>&1)"; got=$?
+ok=1
+[ "$got" = "2" ] || ok=0
+case "$out" in *"$gitfail_sha"*) ;; *) ok=0 ;; esac
+case "$out" in *"UNMEASURED"*) ;; *) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: a git failure is unmeasured, not clean — exit $got (want 2), got: $out"; fail=1
+fi
+
+# Octopus merges (3+ parents) must be checked exactly like a 2-parent merge:
+# `git diff-tree -m` diffs each parent separately, so a merge with more than
+# one non-first parent must still surface content only introduced by the
+# merge commit itself (ST12 Stress MINOR — Stress verified this by hand; this
+# pins it in the suite). Three branches each add their own file (no
+# overlapping paths, so the octopus merge is conflict-free), then coverage.out
+# is staged and committed as part of the merge itself.
+d="$(guard_repo guard-octopus)"
+( cd "$d" || exit 1
+  git checkout -q -b branch-a
+  printf 'a\n' > a.txt
+  git add a.txt && git commit -qm "branch-a adds a.txt"
+  git checkout -q main
+  git checkout -q -b branch-b
+  printf 'b\n' > b.txt
+  git add b.txt && git commit -qm "branch-b adds b.txt"
+  git checkout -q main
+  git checkout -q -b branch-c
+  printf 'c\n' > c.txt
+  git add c.txt && git commit -qm "branch-c adds c.txt"
+  git checkout -q branch-a
+  git merge branch-b branch-c --no-commit -q >/dev/null 2>&1
+  printf 'mode: atomic\n' > coverage.out
+  git add -f coverage.out
+  git commit -qm "octopus merge: branch-a + branch-b + branch-c, adds coverage.out" )
+octopus_parents="$(cd "$d" && git rev-list --parents -n1 HEAD | wc -w | tr -d ' ')"
+lsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$lsha" "$zero_sha")"; got=$?
+ok=1
+[ "$got" = "1" ] || ok=0
+[ "$octopus_parents" = "4" ] || ok=0
+case "$out" in *"coverage.out"*) ;; *) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: octopus merge content is checked — exit $got (want 1), parents=$octopus_parents (want 4), got: $out"; fail=1
+fi
+
+# A clean merge (2 parents, source files only) must not be blocked — no false
+# positive from checking merge commits with -m.
+d="$(guard_repo guard-clean-merge)"
+( cd "$d" || exit 1
+  git checkout -q -b branch-a
+  printf 'a\n' > a.txt
+  git add a.txt && git commit -qm "branch-a adds a.txt"
+  git checkout -q main
+  git checkout -q -b branch-b
+  printf 'b\n' > b.txt
+  git add b.txt && git commit -qm "branch-b adds b.txt"
+  git checkout -q branch-a
+  git merge branch-b -q --no-edit )
+lsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$lsha" "$zero_sha")"; got=$?
+if [ "$got" = "0" ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: clean merge is not blocked — exit $got (want 0), got: $out"; fail=1
+fi
+
 # Branch deletion (local sha all zeros): nothing is being published, so the
 # guard is skipped even though the deleted branch's history has offending
 # content — a deletion push must never be blocked.

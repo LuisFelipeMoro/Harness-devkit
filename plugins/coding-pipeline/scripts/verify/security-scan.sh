@@ -57,33 +57,13 @@ if [ "$1" = "--diff" ]; then
     fi
 
     # Reused, not re-typed: the test-file shape lives once, in
-    # tautology-scan.py's TEST_FILE constant, extracted the same way
-    # classify-diff.sh already does. A narrower private regex here
+    # tautology-scan.py's TEST_FILE constant, loaded once via diff-lib.sh's
+    # load_test_file_re so this script and classify-diff.sh can never drift
+    # on what a test file looks like. A narrower private regex here
     # (_test.|.test.|.spec.) missed test-*.sh and .bats, so a fixture string
     # like "eval(x)" inside one was scanned as source and escalated
     # classify-diff to `full` on stories that only touched test fixtures.
-    TEST_FILE_RE="$(python3 -B - "$SCRIPT_DIR/tautology-scan.py" <<'PY'
-import importlib.util
-import sys
-
-# A missing or unreadable tautology-scan.py must fail closed with UNMEASURED,
-# never a raw Python traceback: every failure mode here is swallowed and
-# reported by the empty-output check below instead.
-try:
-    spec = importlib.util.spec_from_file_location("tautology_scan", sys.argv[1])
-    if spec is None or spec.loader is None:
-        raise ImportError("no module spec for " + sys.argv[1])
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    print(module.TEST_FILE.pattern)
-except Exception:
-    pass
-PY
-)"
-    if [ -z "$TEST_FILE_RE" ]; then
-        echo "SECURITY-SCAN: UNMEASURED — could not load test-file pattern from tautology-scan.py" >&2
-        exit 2
-    fi
+    load_test_file_re "SECURITY-SCAN" || exit 2
 
     # Filter out non-source files that don't need security scanning: test
     # files (shared TEST_FILE_RE, matched against the basename like

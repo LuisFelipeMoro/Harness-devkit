@@ -128,31 +128,9 @@ if [ "$decl_rank" -lt 0 ]; then
 fi
 
 # Reused, not re-typed: the test-file shape lives once, in tautology-scan.py's
-# TEST_FILE constant. Extracted at run time via importlib (bash cannot import a
-# Python module) so this script and that one can never drift on what a test
-# file looks like.
-TEST_FILE_RE="$(python3 -B - "$SCRIPT_DIR/tautology-scan.py" <<'PY'
-import importlib.util
-import sys
-
-# A missing or unreadable tautology-scan.py must fail closed with UNMEASURED,
-# never a raw Python traceback: every failure mode here is swallowed and
-# reported by the empty-output check below instead.
-try:
-    spec = importlib.util.spec_from_file_location("tautology_scan", sys.argv[1])
-    if spec is None or spec.loader is None:
-        raise ImportError("no module spec for " + sys.argv[1])
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    print(module.TEST_FILE.pattern)
-except Exception:
-    pass
-PY
-)"
-if [ -z "$TEST_FILE_RE" ]; then
-    echo "CLASSIFY: UNMEASURED — could not load test-file pattern from tautology-scan.py" >&2
-    exit 2
-fi
+# TEST_FILE constant, loaded once via diff-lib.sh's load_test_file_re so this
+# script and security-scan.sh can never drift on what a test file looks like.
+load_test_file_re "CLASSIFY" || exit 2
 
 DOC_STYLE_EXT_RE='\.(css|scss|sass|less|styl|md|txt)$'
 DOC_STYLE_LOCALE_RE='(^|/)(locales|i18n|tokens)/.*\.(json|ya?ml|po|properties)$'

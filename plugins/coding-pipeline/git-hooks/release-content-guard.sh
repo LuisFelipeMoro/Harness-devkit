@@ -18,7 +18,10 @@
 #        release-content-guard.sh --commits <sha> [<sha> ...]
 #                                                         (pre-push: new branch — no remote sha to range against, so each
 #                                                          commit `git rev-list <lsha> --not --remotes` found is checked on its own)
-# Exit 0 = clean · 1 = one or more offending paths, each named · 2 = misuse
+# Exit 0 = clean · 1 = one or more offending paths, each named · 2 = misuse,
+#          or a git command failed and the content could not be verified —
+#          never read as clean; the caller (pre-commit / pre-push) blocks on
+#          any non-zero exit, 1 or 2 alike.
 set -u
 
 usage() {
@@ -104,9 +107,37 @@ check_paths() {   # reads NUL-delimited paths on stdin
     done
 }
 
+# run_git_diff <outfile> <errmsg> -- <git-args...> — writes the NUL-delimited
+# name list to <outfile> and checks git's own exit status. A `< <(...)`
+# process substitution (the previous shape) discards that status entirely —
+# `git diff-tree` failing on a corrupt object, or any other transient git
+# error, read as an empty path list, which is indistinguishable from "nothing
+# offending" (ST12 Review MAJOR: a failed inspection must never look clean).
+# Prints "release-content-guard: UNMEASURED — <errmsg>" and returns 2 on
+# failure; the caller passes it straight through as this script's own exit 2.
+run_git_diff() {
+    local outfile="$1" errmsg="$2"
+    shift 2
+    [ "${1-}" = "--" ] && shift
+    if ! git "$@" > "$outfile" 2>/dev/null; then
+        echo "release-content-guard: UNMEASURED — $errmsg" >&2
+        return 2
+    fi
+    return 0
+}
+
 case "$mode" in
     --staged)
-        check_paths < <(git diff --cached --name-only -z --diff-filter=ACMR)
+        tmp="$(mktemp "${TMPDIR:-/tmp}/release-guard.staged.XXXXXX")" || {
+            echo "release-content-guard: UNMEASURED — could not create temp file" >&2
+            exit 2
+        }
+        if ! run_git_diff "$tmp" "git diff --cached failed" -- diff --cached --name-only -z --diff-filter=ACMR; then
+            rm -f "$tmp"
+            exit 2
+        fi
+        check_paths < "$tmp"
+        rm -f "$tmp"
         ;;
     --range)
         range="${2:-}"
@@ -114,7 +145,16 @@ case "$mode" in
             *..*) ;;
             *) usage ;;
         esac
-        check_paths < <(git diff --name-only -z --diff-filter=ACMR "$range")
+        tmp="$(mktemp "${TMPDIR:-/tmp}/release-guard.range.XXXXXX")" || {
+            echo "release-content-guard: UNMEASURED — could not create temp file" >&2
+            exit 2
+        }
+        if ! run_git_diff "$tmp" "git diff failed for $range" -- diff --name-only -z --diff-filter=ACMR "$range"; then
+            rm -f "$tmp"
+            exit 2
+        fi
+        check_paths < "$tmp"
+        rm -f "$tmp"
         ;;
     --commits)
         shift
@@ -124,13 +164,22 @@ case "$mode" in
         # commit of a repo, which diff-tree shows nothing for otherwise) so
         # every commit being published is guarded, not just the net diff.
         for sha in "$@"; do
+            tmp="$(mktemp "${TMPDIR:-/tmp}/release-guard.commit.XXXXXX")" || {
+                echo "release-content-guard: UNMEASURED — could not create temp file" >&2
+                exit 2
+            }
             # -m: without it, diff-tree prints nothing for a merge commit —
             # the commonest integration flow (resolve a conflict, commit the
             # merge) would otherwise let its content ride a new-branch push
             # straight through. With -m each parent is diffed separately, so
             # a changed path can appear once per parent; already_offending
             # dedupes it above.
-            check_paths < <(git diff-tree -m --no-commit-id --name-only -r -z --root --diff-filter=ACMR "$sha")
+            if ! run_git_diff "$tmp" "git diff-tree failed for $sha" -- diff-tree -m --no-commit-id --name-only -r -z --root --diff-filter=ACMR "$sha"; then
+                rm -f "$tmp"
+                exit 2
+            fi
+            check_paths < "$tmp"
+            rm -f "$tmp"
         done
         ;;
     *)
