@@ -94,3 +94,45 @@ diff_files() {
 
     return 0
 }
+
+# load_test_file_re <prefix> — the sole loader of tautology-scan.py's
+# TEST_FILE regex, shared by every sensor that needs to tell a test file from
+# source (classify-diff.sh, security-scan.sh). The extraction used to be
+# copy-pasted into each caller; two copies of the same importlib dance drift
+# the moment one of them is edited and the other is not (RD2, ST12 Review
+# MAJOR) — one definition, sourced from here, cannot.
+#
+# Extracted at run time via importlib (bash cannot import a Python module
+# directly). A missing or unreadable tautology-scan.py fails closed with
+# UNMEASURED, never a raw Python traceback: every failure mode is swallowed
+# in the heredoc and reported by the empty-output check below instead.
+#
+# Sets TEST_FILE_RE in the caller's shell; returns 0 or 2. `${BASH_SOURCE[0]}`
+# resolves to this file (diff-lib.sh) regardless of which script called the
+# function — bash tracks it per the frame that *defined* the function, not
+# the frame that invoked it.
+load_test_file_re() {
+    local prefix="$1"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    TEST_FILE_RE="$(python3 -B - "$script_dir/tautology-scan.py" <<'PY'
+import importlib.util
+import sys
+
+try:
+    spec = importlib.util.spec_from_file_location("tautology_scan", sys.argv[1])
+    if spec is None or spec.loader is None:
+        raise ImportError("no module spec for " + sys.argv[1])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    print(module.TEST_FILE.pattern)
+except Exception:
+    pass
+PY
+)"
+    if [ -z "$TEST_FILE_RE" ]; then
+        echo "$prefix: UNMEASURED — could not load test-file pattern from tautology-scan.py" >&2
+        return 2
+    fi
+    return 0
+}

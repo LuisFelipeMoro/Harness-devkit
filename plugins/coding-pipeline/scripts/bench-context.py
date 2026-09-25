@@ -139,6 +139,24 @@ COST = {
     "devops": (60000, 0),
 }
 
+# --- rework overhead (ST12/G4) -------------------------------------------------
+# {roster: (factor, n_samples)}, labelled like COST: n_samples == 0 means
+# "assumed", otherwise "measured (n=...)". A first-pass token total undercounts
+# what a story actually costs — fix rounds from QA/Reviewer findings reopen the
+# Coder dispatch. Seeded from this delivery's own PROGRESS.md (Loop rules in
+# force / ST1-3 rows), stated plainly: full-roster ran n=3 stories, 1.3-1.7x
+# first-pass across their fix rounds; standard n=1; light n=2. These are seeds,
+# not a claim about every project — a project should replace them with its own
+# measured samples as fix rounds accumulate. cosmetic carries no rework because
+# its roster (Coder only, gates only) has no QA/Reviewer fix-round loop to
+# reopen.
+REWORK = {
+    "full": (1.5, 3),
+    "standard": (1.3, 1),
+    "light": (1.2, 2),
+    "cosmetic": (1.0, 0),
+}
+
 
 def tokens(path):
     try:
@@ -366,24 +384,42 @@ def option_agents(name, rosters):
     return agents + PLANNING_AGENTS + DELIVERY_AGENTS
 
 
-def compute_options(rosters, cost=None):
+def rework_avg_factor(rosters, rework):
+    """Weighted average rework factor across the manifest's own declared rosters.
+    Rework is a property of how much back-and-forth a real story of that roster
+    needs — it applies to every option's first-pass total the same way, not
+    just the hypothetical agent set a given option prices."""
+    if not rosters:
+        return 1.0
+    return sum(rework[r][0] for r in rosters) / len(rosters)
+
+
+def compute_options(rosters, cost=None, rework=None):
     if cost is None:
         cost = COST
+    if rework is None:
+        rework = REWORK
+    avg_factor = rework_avg_factor(rosters, rework)
     options = {}
     for name in ("as planned", "all standard", "legacy full loop"):
         agents = option_agents(name, rosters)
         total = sum(cost[a][0] for a in agents)
+        low, high = int(total * 0.8), int(total * 1.2)
         options[name] = {
             "dispatches": len(agents),
-            "tokens_low": int(total * 0.8),
-            "tokens_high": int(total * 1.2),
+            "tokens_low": low,
+            "tokens_high": high,
+            "rework_low": int(low * avg_factor),
+            "rework_high": int(high * avg_factor),
         }
     return options
 
 
-def render_manifest(rosters, options, cost=None):
+def render_manifest(rosters, options, cost=None, rework=None):
     if cost is None:
         cost = COST
+    if rework is None:
+        rework = REWORK
     out = [f"# Execution options — {len(rosters)} manifest rows", ""]
     out.append("| Agent | Cost (tokens) | Basis |")
     out.append("|---|---:|---|")
@@ -392,28 +428,44 @@ def render_manifest(rosters, options, cost=None):
         basis = "assumed" if n == 0 else f"measured (n={n})"
         out.append(f"| {agent} | {fmt(tok)} | {basis} |")
     out.append("")
-    out.append("| Option | Dispatches | Token range |")
-    out.append("|---|---:|---:|")
+    out.append("| Roster | Rework factor | Basis |")
+    out.append("|---|---:|---|")
+    for roster in sorted(rework):
+        factor, n = rework[roster]
+        basis = "assumed" if n == 0 else f"measured (n={n})"
+        out.append(f"| {roster} | {factor}x | {basis} |")
+    out.append("")
+    out.append("| Option | Dispatches | First pass | With rework |")
+    out.append("|---|---:|---:|---:|")
     for name in ("as planned", "all standard", "legacy full loop"):
         o = options[name]
-        out.append(f"| {name} | {o['dispatches']} | {fmt(o['tokens_low'])}–{fmt(o['tokens_high'])} |")
+        out.append(
+            f"| {name} | {o['dispatches']} | {fmt(o['tokens_low'])}–{fmt(o['tokens_high'])} tok "
+            f"| {fmt(o['rework_low'])}–{fmt(o['rework_high'])} tok (with rework) |"
+        )
     return "\n".join(out)
 
 
-def run_manifest(path, as_json, cost=None):
+def run_manifest(path, as_json, cost=None, rework=None):
     if cost is None:
         cost = COST
+    if rework is None:
+        rework = REWORK
     rosters = parse_manifest_rosters(path)
     if rosters is None:
         print("bench-context: no Roster column in manifest", file=sys.stderr)
         return 2
 
-    options = compute_options(rosters, cost=cost)
+    options = compute_options(rosters, cost=cost, rework=rework)
     if as_json:
         cost_json = {a: {"tokens": t, "n_samples": n} for a, (t, n) in cost.items()}
-        print(json.dumps({"rows": len(rosters), "options": options, "cost": cost_json}, indent=2))
+        rework_json = {r: {"factor": f, "n_samples": n} for r, (f, n) in rework.items()}
+        print(json.dumps(
+            {"rows": len(rosters), "options": options, "cost": cost_json, "rework": rework_json},
+            indent=2,
+        ))
     else:
-        print(render_manifest(rosters, options, cost=cost))
+        print(render_manifest(rosters, options, cost=cost, rework=rework))
     return 0
 
 

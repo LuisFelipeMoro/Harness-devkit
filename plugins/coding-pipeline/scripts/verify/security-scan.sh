@@ -56,8 +56,18 @@ if [ "$1" = "--diff" ]; then
         exit 2
     fi
 
-    # Filter out non-source files that don't need security scanning
-    # Keep only files that are not .md, .test., .spec., or in testdata/vendor/node_modules
+    # Reused, not re-typed: the test-file shape lives once, in
+    # tautology-scan.py's TEST_FILE constant, loaded once via diff-lib.sh's
+    # load_test_file_re so this script and classify-diff.sh can never drift
+    # on what a test file looks like. A narrower private regex here
+    # (_test.|.test.|.spec.) missed test-*.sh and .bats, so a fixture string
+    # like "eval(x)" inside one was scanned as source and escalated
+    # classify-diff to `full` on stories that only touched test fixtures.
+    load_test_file_re "SECURITY-SCAN" || exit 2
+
+    # Filter out non-source files that don't need security scanning: test
+    # files (shared TEST_FILE_RE, matched against the basename like
+    # classify-diff.sh) and docs/fixtures/vendored code.
     filtered=()
     for f in "${DIFF_FILES[@]}"; do
         # A symlink is reported as [SYMLINK] and never handed to grep — grep
@@ -66,7 +76,10 @@ if [ "$1" = "--diff" ]; then
             symlink_lines+=("[SYMLINK] $f -> $(readlink "$f")")
             continue
         fi
-        if ! [[ "$f" =~ _test\.|\.test\.|\.spec\.|/testdata/|/vendor/|/node_modules/|\.md$ ]]; then
+        if [[ "$(basename "$f")" =~ $TEST_FILE_RE ]]; then
+            continue
+        fi
+        if ! [[ "$f" =~ /testdata/|/vendor/|/node_modules/|\.md$ ]]; then
             filtered+=("$f")
         fi
     done

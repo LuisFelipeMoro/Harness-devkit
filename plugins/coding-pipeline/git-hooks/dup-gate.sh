@@ -19,24 +19,17 @@ dup_attr="$(cd "$(dirname "$0")" && pwd)/dup-attribution.py"
 # The baseline this delivery is measured against. Without it every clone in the
 # repository is charged to the current push, which on any codebase with history
 # fails on day one — and a gate that fails on day one gets disabled, taking the
-# real finding with it.
-dup_base() {
-    local ref base
-    for ref in origin/main origin/master main master; do
-        git rev-parse --verify -q "$ref" >/dev/null 2>&1 || continue
-        base="$(git merge-base HEAD "$ref" 2>/dev/null)" || continue
-        # On the mainline itself there is nothing ahead of the base, so nothing
-        # would ever be attributed. Fall back to the last commit so a direct
-        # push to main is still measured against something.
-        if [ "$base" = "$(git rev-parse HEAD)" ]; then
-            git rev-parse --verify -q HEAD~1 2>/dev/null && return 0
-            return 1
-        fi
-        printf '%s' "$base"
-        return 0
-    done
-    return 1
-}
+# real finding with it. resolve_base() is shared with pre-push's release
+# content guard fallback (base-lib.sh) so the two never drift apart.
+base_lib="$(dirname "$0")/base-lib.sh"
+[ -f "$base_lib" ] || base_lib="$HOME/.claude/git-hooks/base-lib.sh"
+if [ -f "$base_lib" ]; then
+    # shellcheck source=base-lib.sh
+    . "$base_lib"
+else
+    echo "WARN: base-lib.sh not found beside the hook — base resolution UNENFORCED (whole-repo mode). Re-run: bash ~/.claude/git-hooks/install.sh"
+    resolve_base() { return 1; }
+fi
 
 # Every path below — jscpd's report, the diff, the untracked list — is taken as
 # repo-root-relative. Run from a subdirectory, ls-files answers relative to it and
@@ -108,7 +101,7 @@ fi
     --ignore "**/.git/**,**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md" \
     --reporters json --output "$dup_out" >/dev/null 2>&1 || true
 
-if base="$(dup_base)"; then
+if base="$(resolve_base)"; then
     python3 "$dup_attr" --report "$dup_out/jscpd-report.json" --base "$base" --threshold "$DUP_MAX"
 else
     # No baseline: every clone is gated as if this push wrote it. Loud, and

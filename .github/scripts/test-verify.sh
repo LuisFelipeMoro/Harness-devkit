@@ -993,6 +993,117 @@ MD
 out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
+# ══════════════════════════════════════════════════════════════════════════
+# Batch B (2c9fee) — ST12 G4 (bench-context.py REWORK) · G5 (tautology-scan
+# TEST_FILE) — synthetic fixtures only, no reference to this delivery's own
+# numbers or file names.
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── G4: bench-context.py --manifest shows a with-rework range ───────────────
+out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
+check "bench: manifest shows with-rework range" 0 "$rc" "$out" "with rework"
+with_rework_lines=$(printf '%s' "$out" | grep -c "with rework" || true)
+[ "$with_rework_lines" -ge 3 ] && pass=$((pass + 1)) \
+    || { echo "FAIL: bench: manifest shows with-rework range — expected 3 option rows, got $with_rework_lines"; fail=1; }
+
+out=$(python3 -c "
+import sys
+sys.dont_write_bytecode = True
+import importlib.util
+spec = importlib.util.spec_from_file_location('bench', '$BENCH')
+bench = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bench)
+
+# Fixture REWORK with 'light' unsampled (n=0) — everything else sampled.
+fixture_rework = {
+    'full': (1.5, 3),
+    'standard': (1.3, 1),
+    'light': (1.2, 0),   # unsampled
+    'cosmetic': (1.0, 2),
+}
+rosters = bench.parse_manifest_rosters('$manifest_fixture')
+options = bench.compute_options(rosters, rework=fixture_rework)
+print(bench.render_manifest(rosters, options, rework=fixture_rework))
+" 2>&1); rc=$?
+check "bench: rework factor labelled measured or assumed — fixture REWORK provided" 0 "$rc" "$out" "assumed"
+light_line=$(printf '%s' "$out" | grep '| light ' || true)
+case "$light_line" in *measured*) echo "FAIL: bench: rework factor labelled measured or assumed — light row says measured instead of assumed"; fail=1 ;;
+    *) pass=$((pass + 1)) ;; esac
+
+# ── G5: tautology-scan.py TEST_FILE — bats, hyphenated test-*.sh, tests/ dir ─
+mkdir -p "$W/g5-shapes/tests"
+printf 'echo hi\n' > "$W/g5-shapes/test-x.sh"
+printf 'func TestX(t *testing.T) {}\n' > "$W/g5-shapes/x_test.go"
+printf '@test "x" { true; }\n' > "$W/g5-shapes/a.bats"
+printf 'echo hi\n' > "$W/g5-shapes/tests/t.sh"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-shapes" 2>&1); rc=$?
+check "tautology-scan: shell and bats test names are tests" 0 "$rc" "$out" "4 test file(s)"
+
+mkdir -p "$W/g5-data/tests/fixtures"
+printf '{}\n' > "$W/g5-data/tests/fixtures/data.json"
+printf '# notes\n' > "$W/g5-data/tests/README.md"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-data" 2>&1); rc=$?
+check "tautology-scan: data under tests/ is not a test" 2 "$rc" "$out" "UNMEASURED"
+
+mkdir -p "$W/g5-vendor/vendor/tests"
+printf 'echo hi\n' > "$W/g5-vendor/vendor/tests/t.sh"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-vendor" 2>&1); rc=$?
+check "tautology-scan: skip dirs still win over tests/" 2 "$rc" "$out" "UNMEASURED"
+
+# security-scan diff-mode kept its own narrower test-file regex
+# (_test.|.test.|.spec.), so a hyphenated test-*.sh or a .bats fixture file
+# was scanned as source — a fixture string like "eval(x)" inside it read as
+# a real candidate and escalated classify-diff to `full`. It must reuse
+# tautology-scan.py's TEST_FILE the way classify-diff.sh already does, and a
+# genuine source hit in the same diff must still be reported.
+repoTF="$W/repoTF"
+mkrepo "$repoTF"
+cd "$repoTF" || exit
+printf 'run_case "rejects eval(x) input"\n' > test-x.sh
+printf '@test "rejects eval(x)" { false; }\n' > a.bats
+printf 'eval(x)\n' > app.js
+git -c user.email=t@t -c user.name=t add test-x.sh a.bats app.js
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add test fixtures and real source"
+out=$(bash "$V/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
+check "security-scan: test files use the shared TEST_FILE definition" 0 "$rc" "$out" "app.js:1"
+case "$out" in *test-x.sh*) echo "FAIL: security-scan: test files use the shared TEST_FILE definition — test-x.sh leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+case "$out" in *a.bats*) echo "FAIL: security-scan: test files use the shared TEST_FILE definition — a.bats leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
+# ── RD2: one TEST_FILE loader for all sensors (diff-lib.sh) ─────────────────
+# The importlib extraction used to live twice, copy-pasted into
+# classify-diff.sh and security-scan.sh, and could drift the moment one copy
+# was edited and the other was not. It now lives once, as diff-lib.sh's
+# load_test_file_re, and both callers use it instead of importing directly.
+def_count=$(grep -c '^load_test_file_re()' "$V/diff-lib.sh")
+importlib_count=$(( $(grep -c 'importlib\.util' "$V/classify-diff.sh") + $(grep -c 'importlib\.util' "$V/security-scan.sh") ))
+ok=1
+[ "$def_count" = "1" ] || ok=0
+[ "$importlib_count" = "0" ] || ok=0
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: diff-lib: one TEST_FILE loader for all sensors — def_count=$def_count (want 1) importlib_count=$importlib_count (want 0)"; fail=1
+fi
+
+# security-scan.sh must fail closed the same way classify-diff.sh already
+# does (tested above as "classify: missing tautology-scan is unmeasured, not
+# a traceback") when tautology-scan.py is missing beside it — its own
+# fail-closed path was untested (ST12 QA/Review MINOR).
+stubV3="$W/stubverify17"
+mkdir -p "$stubV3"
+cp "$V/security-scan.sh" "$stubV3/security-scan.sh"
+cp "$V/diff-lib.sh" "$stubV3/diff-lib.sh"
+chmod +x "$stubV3/security-scan.sh"
+repo_c22="$W/repo_c22"
+mkrepo "$repo_c22"
+cd "$repo_c22" || exit
+printf 'eval(x)\n' > app.js
+git -c user.email=t@t -c user.name=t add app.js
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add app.js"
+out=$(bash "$stubV3/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
+check "security-scan: missing TEST_FILE source fails closed" 2 "$rc" "$out" "UNMEASURED"
+case "$out" in *Traceback*) echo "FAIL: security-scan: missing TEST_FILE source fails closed — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
