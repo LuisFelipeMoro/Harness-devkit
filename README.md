@@ -394,7 +394,7 @@ DELIVERY CLOSE (terminal — the pipeline stops here)
 
 Measured by `bench-context.py` (`plugins/coding-pipeline/scripts/bench-context.py`): a uniform
 5-story `standard` delivery is **20 dispatches** (was 40 before the roster split); a realistic
-mixed-roster delivery is **18**; guide tokens per 5-story delivery down **14.2%** (244,170 → 209,394), vs v2.6.0.
+mixed-roster delivery is **18**; guide tokens per 5-story delivery down **11.4%** (244,170 → 216,309), vs v2.6.0.
 
 ### Fast Pipeline — `/task <task>`
 

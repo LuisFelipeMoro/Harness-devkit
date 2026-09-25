@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.7.0] — Unreleased
+## [2.7.0] — 2026-09-25
 
 Half the subagent dispatches for the same guarantees, and a set of guards that close the ways a
 pipeline run went wrong while it was being built. The first half is a measured change to the story
@@ -92,6 +92,15 @@ Each failure class below was observed while building this release; each has a gu
 
 **Still open:** an agent told to work in a worktree can edit the main checkout instead. A guard that
 refuses edits outside the active worktree is the next change.
+
+### Versions
+
+| Plugin | Version | Why |
+|---|---|---|
+| `coding-pipeline` | 2.6.0 → **2.7.0** | Rosters, new verify scripts and guards (features). |
+| `devtools` | 1.3.0 → **1.3.1** | `handoff` docs: `PROGRESS.md` is git-ignored, never committed. |
+| `engineering` | 1.5.1 | Unchanged. |
+| `pr-workflow` | 1.5.1 | Unchanged. |
 
 ## [2.6.0] — 2026-09-22
 
