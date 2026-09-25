@@ -1,5 +1,98 @@
 # Changelog
 
+## [2.7.0] — Unreleased
+
+Half the subagent dispatches for the same guarantees, and a set of guards that close the ways a
+pipeline run went wrong while it was being built. The first half is a measured change to the story
+loop; the second is what running that loop on real work taught.
+
+### The study: where does a delivery's cost go?
+
+**Question.** A delivery spends tokens in two places: the guides each dispatch loads, and the number
+of dispatches. v2.6.0 measured the first and cut it 3.5%; the dispatch graph was untouched at 40 per
+five-story delivery. Which of the two is worth changing?
+
+**Method.** `scripts/bench-context.py` models the dispatch graph and the guide tokens each path
+loads, run against the v2.6.0 tree and the new one. Per-agent costs come from real dispatches, not
+estimates: every agent run in this release was logged with its token count.
+
+**Result.**
+
+| Per five-story delivery | v2.6.0 | 2.7.0 | Change |
+|---|---:|---:|---:|
+| Subagent dispatches (uniform roster) | 40 | 20 | −50% |
+| Subagent dispatches (mixed rosters) | — | 18 | |
+| Guide tokens loaded | 244,170 | 216,309 | −11.4% |
+
+The mechanical sensors read far less than an agent would: a security scan prints 365 tokens where
+the changed files are 66k (182×), a tautology scan 65 where a 38-file test suite is 52k (797×), the
+duplication gate 91 where raw jscpd output is 6.8k (75×).
+
+**Why it moved.** Dispatches fell because work that was agent judgment became arithmetic or a
+sensor: the verdict is `verdict.sh`, not an agent; story generation for a one-row manifest is a
+template fill; the story-level PR review read the same diff the Reviewer had already read; Stress
+runs only when the diff warrants it. Validation reads the story's diff, not the tree.
+
+**What the model does not show.** Fix rounds. The estimate counts first passes; on stories that ran
+the full roster, rework added 40–60% on top. The guide-token saving also shrank from −14.2% to
+−11.4% once the rules below were written into every agent's guide — a deliberate trade of tokens
+for guarantees, measured rather than assumed.
+
+### Added
+
+- **Rosters.** Each story declares a roster — `cosmetic`, `light`, `standard`, `full` — and it
+  decides which agents run. Mechanical gates run on every roster without exception.
+  `classify-diff.sh` checks the declaration against the real diff and only ever escalates: a file
+  that looks like style but holds code, a rename that disguises code as style, a symlink, or a
+  deleted source file cannot lower the roster.
+- **One-command mechanical checkpoint.** `checkpoint-m.sh` runs every mechanical check a story must
+  pass and reports every failure at once: spec rows by exact name, the exact changed-file set
+  (renames count both paths, deletions count), no commits beyond the base, no leftover
+  falsification markers, the roster, the repository's gate command and duplication. A sub-check
+  that cannot measure fails closed. No agent validates code this checkpoint has failed.
+- **Self-restoring falsification.** `break-run.sh` applies one literal mutation — refused unless it
+  matches exactly once — requires the named test to fail by its own name, and restores the file
+  byte for byte on every exit it can trap, keeping the pristine copy if a restore ever fails. It
+  refuses symlinks and paths outside the repository and locks the file against concurrent runs.
+- **Release-content guard.** Session memory, handoff notes and generated test output are rejected
+  from commits and pushes by path, from patterns in a committed `.devkit/release-exclude`. Every
+  published commit is checked, merge commits included; a git failure blocks instead of passing.
+- **Execution-options checkpoint.** After a plan is approved, `bench-context.py --manifest` shows
+  the operator dispatches and a token range per option — with first-pass and with-rework figures,
+  each cost labelled measured or assumed — and no code starts until one is chosen.
+- **Oversized-prompt warning.** `dispatch-budget.sh` warns when a single agent prompt is too long or
+  names too many files; oversized prompts were the cause of every agent stall observed.
+
+### Changed
+
+- The story loop validates the story's own diff, dispatches by roster, runs the Reviewer and Stress
+  in parallel after QA, and re-checks narrowly after a fix. The verdict is `verdict.sh`.
+- Agent guides carry scope rules: edit only the listed files, never revert work you did not make,
+  probe only under `$TMPDIR`, falsify through `break-run.sh`, make every error path fail closed and
+  test it. An agent's report is a claim; the evidence is what the checkpoint reproduces.
+- `PROGRESS.md` is local session memory: git-ignored and never committed.
+
+### Lessons behind the guards
+
+Each failure class below was observed while building this release; each has a guard or a rule.
+
+| Failure | Guard |
+|---|---|
+| An agent reported work or evidence that did not exist | `checkpoint-m.sh` checks rows by name and the exact file set; the orchestrator reproduces evidence with `break-run.sh` |
+| A test failed without naming itself, or passed for the wrong reason | `break-run.sh` accepts only a failure that names the row |
+| An agent died mid-test and left code deliberately broken | Break markers; the checkpoint fails while one exists |
+| A mutation hit a comment instead of code and proved nothing | `break-run.sh` refuses a pattern that is not unique |
+| An agent committed, reverted or created files outside its scope | Exact file-set and commit checks; scope rules in every guide |
+| A check that could not measure reported a pass | Every sensor exits 2 (unmeasured) on a failure it cannot see past |
+| A classifier trusted a file's name over its content | Content is scanned before a roster is ever lowered |
+| Oversized prompts stalled agents | The prompt-size warning; split large dispatches |
+| Estimates ignored rework | Rework factors in the execution-options table |
+| A timing bound held only on an idle machine | Test waits are sized for a loaded machine |
+| Session notes shipped in a release | The release-content guard |
+
+**Still open:** an agent told to work in a worktree can edit the main checkout instead. A guard that
+refuses edits outside the active worktree is the next change.
+
 ## [2.6.0] — 2026-09-22
 
 Token and dispatch cost, cut without weakening a guarantee. Three rules the devkit stated and never
