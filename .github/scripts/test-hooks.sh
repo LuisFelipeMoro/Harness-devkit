@@ -220,7 +220,7 @@ out=$(dsp)
 expect "dispatch never blocks" dispatch-budget.sh '{"session_id":"dsp"}' 0 DEVKIT_DISPATCH_BUDGET=1
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
 
-# ── dispatch-budget: prompt-size warning (G3) ─────────────────────────────────
+# ── dispatch-budget: prompt-size warning ──────────────────────────────────────
 # Independent of the dispatch-count latch above: this fires per invocation on
 # tool_input.prompt itself, read through hook-lib's devkit_field.
 prompt_payload() {   # prompt_payload <python-expr-for-prompt-string> <session>

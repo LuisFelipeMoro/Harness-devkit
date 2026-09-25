@@ -5,9 +5,9 @@
 > `devtools` plugin stands alone (no `coding-pipeline` dependency) — on conflict, `coding-pipeline`'s
 > copy wins; change it there first, then propagate here.
 
-`PROGRESS.md` lives at the repo root and is the durable, committed state the
-SessionStart bootstrap hook reads at the start of the next session. It must stay
-in agreement with the rich `/tmp` handoff narrative.
+`PROGRESS.md` lives at the repo root and is the durable, **git-ignored** state the
+SessionStart bootstrap hook reads at the start of the next session. It is local session
+memory, never committed, and it must stay in agreement with the rich `/tmp` handoff narrative.
 
 ```markdown
 # PROGRESS

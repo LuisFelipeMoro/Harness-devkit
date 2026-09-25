@@ -1,4 +1,4 @@
-# release-content-guard.sh (G7) patterns — one glob per line, # comments and
+# release-content-guard.sh patterns — one glob per line, # comments and
 # blank lines ignored. A path matching any pattern here is rejected from a
 # commit (pre-commit --staged) or a push (pre-push --range) — content is never
 # inspected, only the path. Extend this file per-repo; the guard itself never

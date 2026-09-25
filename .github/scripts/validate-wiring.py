@@ -217,7 +217,7 @@ CONTRACT = [
      ["subagent_type: \"bug-investigator\"", "subagent_type: \"coder\""],
      ["subagent_type: \"claude\""]),
 
-    # ST6 — loop.md diff scope and checkpoint structure (multi-agent)
+    # loop.md diff scope and checkpoint structure (multi-agent)
     ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
      ["git diff --name-only release/{slug}-{key}...HEAD",
       "Fail fast", "no QA, Reviewer or Stress dispatch",
@@ -235,7 +235,7 @@ CONTRACT = [
       "dup-gate.sh --worktree"],
      ["/pr-review", "Review + Stress in parallel"]),
 
-    # ST6 — loop.md diff scope and checkpoint structure (task)
+    # loop.md diff scope and checkpoint structure (task)
     ("plugins/coding-pipeline/skills/task/references/loop.md",
      ["git diff --name-only release/{slug}-{key}...HEAD",
       "Fail fast", "no QA, Reviewer or Stress dispatch",
@@ -253,7 +253,7 @@ CONTRACT = [
       "dup-gate.sh --worktree"],
      ["/pr-review", "Review + Stress in parallel"]),
 
-    # ST7 — agents (reviewer stress lens and routing)
+    # agents (reviewer stress lens and routing)
     ("plugins/coding-pipeline/agents/reviewer.md",
      ["Stress Score:", "agents/stress.md",
       "Do not re-run",
@@ -261,12 +261,12 @@ CONTRACT = [
       "gh pr review", "review-{story-slug}.md"],
      []),
 
-    # ST7 — stress conditional
+    # stress conditional
     ("plugins/coding-pipeline/agents/stress.md",
      ["roster `full`", "Folded mode"],
      []),
 
-    # ST7 — qa and gate routing
+    # qa and gate routing
     ("plugins/coding-pipeline/agents/qa.md",
      [],
      ["StressTester in parallel"]),
@@ -275,17 +275,17 @@ CONTRACT = [
      [],
      ["(and Stress in parallel)"]),
 
-    # ST7 — verdict roster
+    # verdict roster
     ("plugins/coding-pipeline/agents/verdict.md",
      ["--roster", "--classify-exit"],
      []),
 
-    # ST7 — thresholds roster
+    # thresholds roster
     ("plugins/coding-pipeline/references/thresholds.md",
      ["## Roster"],
      []),
 
-    # ST8 — skills, standards, references (no story pr-review; task and multi-agent only)
+    # skills, standards, references (no story pr-review; task and multi-agent only)
     ("plugins/coding-pipeline/skills/task/SKILL.md",
      ["release", "/pr-review"],
      ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
@@ -294,27 +294,27 @@ CONTRACT = [
      ["release", "/pr-review"],
      ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
 
-    # ST8 — manifest roster column
+    # manifest roster column
     ("plugins/coding-pipeline/skills/planning/references/phases.md",
      ["| Tier | Roster |"],
      []),
 
-    # ST8 — claude roster table
+    # claude roster table
     ("plugins/coding-pipeline/CLAUDE.md",
      ["| Roster |", "classify-diff"],
      []),
 
-    # ST8 — worktree local mode
+    # worktree local mode
     ("plugins/coding-pipeline/references/delivery-and-worktree.md",
      ["local"],
      ["run /pr-review on it; no findings → gh pr ready, then merge"]),
 
-    # ST8 — readme no story pr-review and roster
+    # readme no story pr-review and roster
     ("README.md",
      ["classify-diff", "roster `full`", "≥ 2 manifest rows"],
      ["PER-STORY REVIEW", "REVIEW (parallel"]),
 
-    # ST10 — planning offers execution options
+    # planning offers execution options
     ("plugins/coding-pipeline/skills/planning/SKILL.md",
      ["Execution options", "--manifest"],
      []),
@@ -326,6 +326,48 @@ CONTRACT = [
     ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
      ["Execution options", "--manifest"],
      []),
+
+    # README describes what the release ships (checkpoint-m.sh, break-run.sh,
+    # release-content guard, execution-options rework ranges), never tells the operator
+    # to commit PROGRESS.md
+    ("README.md",
+     ["checkpoint-m.sh", "break-run.sh", "release-exclude", "with rework"],
+     ["commit PROGRESS.md"]),
+
+    # agent scope guards: $TMPDIR for probes/scratch, break-run.sh for
+    # falsification, never revert/"clean up" a change the agent did not make
+    ("plugins/coding-pipeline/agents/coder.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/qa.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/stress.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/tuner.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+
+    # loop.md: checkpoint M is checkpoint-m.sh, not a hand-run list;
+    # falsification is break-run.sh
+    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+     ["checkpoint-m.sh", "break-run.sh"],
+     []),
+    ("plugins/coding-pipeline/skills/task/references/loop.md",
+     ["checkpoint-m.sh", "break-run.sh"],
+     []),
+
+    # PROGRESS.md is local memory: git-ignored, never committed state
+    ("plugins/coding-pipeline/references/progress-file.md",
+     ["git-ignored"],
+     ["committed state"]),
+    ("plugins/devtools/skills/handoff/references/progress-file.md",
+     ["git-ignored"],
+     ["committed state"]),
+    ("plugins/devtools/skills/handoff/SKILL.md",
+     ["git-ignored"],
+     ["committed state"]),
 ]
 
 # Each contract row is checked against its own file

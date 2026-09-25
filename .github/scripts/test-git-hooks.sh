@@ -302,7 +302,7 @@ run_gate "$d" --worktree; rc=$?
 if [ "$rc" = "2" ]; then ok=0; else ok=1; fi
 gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" "$ok"
 
-# ── release-content-guard.sh (G7): PROGRESS.md, handoff snapshots and
+# ── release-content-guard.sh: PROGRESS.md, handoff snapshots and
 # generated test output must never enter a commit or a push ─────────────────
 # guard_repo <name> — a git repo carrying the real .devkit/release-exclude
 # (committed), so the guard has patterns to check against.
@@ -451,7 +451,7 @@ fi
 # A git failure (not an offending path) must read as UNMEASURED, never as
 # clean — a `< <(...)` process substitution swallows git's own exit status,
 # so a failed `git diff-tree` (corrupt object, transient error) silently
-# looked like an empty, harmless path list (ST12 Review MAJOR). Stub `git` so
+# looked like an empty, harmless path list. Stub `git` so
 # every subcommand passes through to the real binary except `diff-tree`,
 # which exits 128 the way a real failure would.
 d="$(guard_repo guard-gitfail)"
@@ -478,7 +478,7 @@ fi
 # Octopus merges (3+ parents) must be checked exactly like a 2-parent merge:
 # `git diff-tree -m` diffs each parent separately, so a merge with more than
 # one non-first parent must still surface content only introduced by the
-# merge commit itself (ST12 Stress MINOR — Stress verified this by hand; this
+# merge commit itself (verified by hand once; this
 # pins it in the suite). Three branches each add their own file (no
 # overlapping paths, so the octopus merge is conflict-free), then coverage.out
 # is staged and committed as part of the merge itself.

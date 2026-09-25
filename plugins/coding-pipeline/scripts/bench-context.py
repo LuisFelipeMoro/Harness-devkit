@@ -18,7 +18,8 @@ a constant bias cancels; treat absolute figures as ±10%.
 
 Dispatch counts follow the roster model (references/thresholds.md — Roster):
 each story declares a roster (cosmetic/light/standard/full) that fixes which
-agents are dispatched (delivery-diff-scoped-story-loop-2c9fee.md D7).
+agents are dispatched — a decision recorded once in the delivery's own
+architecture file, not restated here.
 
 Usage:
   bench-context.py [--root DIR] [--stories N] [--json] [--baseline FILE] [--mix MIX]
@@ -51,7 +52,7 @@ ROSTER = {
 
 DEFAULT_MIX = {"cosmetic": 1, "light": 1, "standard": 2, "full": 1}
 
-# The pre-2c9fee graph: every row dispatched all seven regardless of roster.
+# The legacy graph: every row dispatched all seven regardless of roster.
 LEGACY_PER_ROW = ["scrum-master", "coder", "qa", "reviewer", "stress", "verdict", "pr-review"]
 
 PLANNING_AGENTS = ["map", "architect", "plan-reviewer"]
@@ -116,15 +117,15 @@ DELIVERY_LABELS = ["delivery: pr-review (release PR)", "delivery: devops"]
 # Read once by the orchestrator, applied inline per story (D8) — no dispatch.
 INLINE = {"orchestrator: verdict.md (read once)": ["agents/verdict.md"]}
 
-# --- per-dispatch token cost (ST10 execution-options checkpoint) -------------
+# --- per-dispatch token cost (execution-options checkpoint) -------------
 # {agent: (tokens, n_samples)}. n_samples == 0 means "assumed" — not yet
-# measured for this delivery; otherwise "measured (n=...)". Seeded from this
-# delivery's own dispatches (PROGRESS.md — Loop rules in force / ST1-3 rows):
-# planning map 77k (haiku, n=1), architect 184k (opus, n=1), plan-reviewer
-# 165k (sonnet, n=1); ST1-ST4 first-pass dispatches: reviewer 66-161k (n=9,
-# mean 106k), coder 59-215k (n=9, mean 137k), qa 82-116k (n=3, mean 99k),
-# stress 72-99k (n=3, mean 85k). Fix rounds are NOT in these means: on this
-# delivery they added ~40-60% per full-roster story on top of first pass.
+# measured; otherwise "measured (n=...)". Seeded from a delivery's own
+# dispatches (PROGRESS.md — Loop rules in force): planning map 77k (haiku,
+# n=1), architect 184k (opus, n=1), plan-reviewer 165k (sonnet, n=1);
+# first-pass dispatches: reviewer 66-161k (n=9, mean 106k), coder 59-215k
+# (n=9, mean 137k), qa 82-116k (n=3, mean 99k), stress 72-99k (n=3, mean
+# 85k). Fix rounds are NOT in these means: they added ~40-60% per
+# full-roster story on top of first pass.
 COST = {
     "map": (77000, 1),
     "architect": (184000, 1),
@@ -139,12 +140,12 @@ COST = {
     "devops": (60000, 0),
 }
 
-# --- rework overhead (ST12/G4) -------------------------------------------------
+# --- rework overhead -------------------------------------------------
 # {roster: (factor, n_samples)}, labelled like COST: n_samples == 0 means
 # "assumed", otherwise "measured (n=...)". A first-pass token total undercounts
 # what a story actually costs — fix rounds from QA/Reviewer findings reopen the
-# Coder dispatch. Seeded from this delivery's own PROGRESS.md (Loop rules in
-# force / ST1-3 rows), stated plainly: full-roster ran n=3 stories, 1.3-1.7x
+# Coder dispatch. Seeded from a delivery's own PROGRESS.md (Loop rules in
+# force), stated plainly: full-roster ran n=3 stories, 1.3-1.7x
 # first-pass across their fix rounds; standard n=1; light n=2. These are seeds,
 # not a claim about every project — a project should replace them with its own
 # measured samples as fix rounds accumulate. cosmetic carries no rework because
@@ -328,7 +329,7 @@ def render(r, baseline=None):
     return "\n".join(out)
 
 
-# --- ST10: execution-options checkpoint (--manifest) --------------------------
+# --- execution-options checkpoint (--manifest) --------------------------
 
 
 def parse_manifest_rosters(path):

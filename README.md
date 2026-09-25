@@ -31,8 +31,8 @@ autonomous agent on the rails:
 | Component | What it is here |
 |-----------|-----------------|
 | **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
-| **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. |
-| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. |
+| **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. A mid-story checkpoint is the same discipline in one command: `checkpoint-m.sh` runs spec coverage, diff scope, stray commits, leftover break markers, duplication and roster escalation to completion and reports every failure at once, never bailing out on the first miss; `break-run.sh` is what makes a test's falsification evidence real instead of hand-typed — it mutates exactly one literal, runs the test, requires the row's own `FAIL: <row>` in the output, then restores the file on every exit path, interrupted or not. |
+| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. Git-ignored — local session memory, never committed, and the same holds for the handoff docs `/handoff` writes. |
 | **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. |
 
 ### Spec-first, falsification-proven
@@ -343,8 +343,10 @@ PLANNING  (all artifacts keyed under docs/deliveries/{key}/)
                         (ACs + Test Case table = frozen contract, carrying the story's Reuse rows
                         and convention exemplars)
   Execution options   → human checkpoint: bench-context.py --manifest shows dispatch counts +
-                        token range for as-planned / all-standard / legacy-full-loop; operator
-                        picks or edits rosters before the first Coder is dispatched
+                        a first-pass token range plus a second range (with rework), rework
+                        weighted by each row's declared Roster, for as-planned / all-standard /
+                        legacy-full-loop; operator picks or edits rosters before the first
+                        Coder is dispatched
 
 IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree; roster-driven: the
                 manifest's declared Roster — cosmetic · light · standard · full — decides which
@@ -901,6 +903,7 @@ Spec is the source of truth — code follows spec, never the reverse.
 | `session-tracker.sh` | PostToolUse | Records which source files changed and whether any gate command ran — the evidence `delivery-gate` reads |
 | `delivery-gate.sh` | Stop | Refuses to call a session done when source files changed and no test, lint, or type-check ever ran |
 | `pr-review-responder.sh` | PostToolUse → Bash | After `git push`: surfaces PR comments; Claude fixes valid issues and replies |
+| `dispatch-budget.sh` | PreToolUse → Agent/Task | Warns once a session passes its subagent-dispatch budget (default 14, tunable via `DEVKIT_DISPATCH_BUDGET`); also flags a single oversized dispatch prompt (too many characters or too many distinct file paths named) before it's sent, so a stalled dispatch gets split instead of retried blind |
 | RTK hook | PreToolUse → Bash | Every Bash command routed through RTK for compact output |
 | Caveman activate | SessionStart | Loads compressed mode; persists across turns |
 | Caveman tracker | UserPromptSubmit | Prevents caveman mode from drifting off mid-session |
@@ -933,6 +936,13 @@ rather than the mistake.
 | `commit-msg` | Every commit | Conventional Commits: `type(scope): description` |
 
 Valid types: `feat` · `fix` · `docs` · `style` · `refactor` · `perf` · `test` · `chore` · `build` · `ci` · `revert`
+
+Both `pre-commit` and `pre-push` also run `release-content-guard.sh` — path-only, so it never
+inspects content: `PROGRESS.md`, generated handoff snapshots, and non-static test output
+(coverage reports, `*.devkit-break` markers left by an interrupted `break-run.sh`) are rejected
+before they can enter a commit or a push. Patterns come from the repo's own committed
+`.devkit/release-exclude` (one glob per line, `#` comments and blank lines ignored) — the guard
+ships with no default list of its own, so a repo extends the set without editing the script.
 
 ---
 

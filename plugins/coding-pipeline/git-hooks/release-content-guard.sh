@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Release content guard (G7) — session memory, handoff snapshots and generated
-# test output must never enter a commit or a push. "Do not let PROGRESS.md and
-# other progress files or tests that are not static go to the release."
+# Release content guard — session memory, handoff snapshots and generated
+# test output must never enter a commit or a push: PROGRESS.md and other
+# progress files, and any test artifact that is not static source, do not
+# belong in what ships.
 #
 # Checks PATHS only, never content: a path matching a pattern is rejected
 # regardless of what it contains, and a static test source under tests/ is
@@ -112,7 +113,7 @@ check_paths() {   # reads NUL-delimited paths on stdin
 # process substitution (the previous shape) discards that status entirely —
 # `git diff-tree` failing on a corrupt object, or any other transient git
 # error, read as an empty path list, which is indistinguishable from "nothing
-# offending" (ST12 Review MAJOR: a failed inspection must never look clean).
+# offending" (a failed inspection must never look clean).
 # Prints "release-content-guard: UNMEASURED — <errmsg>" and returns 2 on
 # failure; the caller passes it straight through as this script's own exit 2.
 run_git_diff() {

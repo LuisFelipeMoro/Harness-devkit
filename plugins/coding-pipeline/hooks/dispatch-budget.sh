@@ -20,7 +20,7 @@ devkit_hook_enabled "pre:agent:dispatch-budget" || exit 0
 
 input=$(cat)
 
-# ── prompt-size warning (G3) — oversized single prompts stalled dispatches ───
+# ── prompt-size warning — oversized single prompts stalled dispatches ───────
 # Advisory only, per dispatch (no session latch): a prompt is either too big
 # this time or it is not. DEVKIT_PROMPT_MAX_CHARS/DEVKIT_PROMPT_MAX_FILES tune
 # the thresholds; devkit_field is the one JSON reader every hook shares.

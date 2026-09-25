@@ -17,7 +17,7 @@ done
 # the hook, or the gate degrades to whole-repo mode on every push.
 # pre-push delegates the duplication gate to these; without them beside it the
 # gate degrades to UNENFORCED on any machine with no global ~/.claude/git-hooks.
-# release-content-guard.sh (G7) is called by both pre-commit and pre-push the
+# release-content-guard.sh is called by both pre-commit and pre-push the
 # same way — missing it here leaves the guard inert on both. base-lib.sh's
 # resolve_base() is sourced by both dup-gate.sh and pre-push's fallback path —
 # missing it degrades dup-gate.sh's attribution and pre-push's manual-run guard
