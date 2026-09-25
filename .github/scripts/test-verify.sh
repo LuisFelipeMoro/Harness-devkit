@@ -28,6 +28,30 @@ mkrepo() {  # mkrepo <dir> — create test repo with main/release/feat branches
     cd - >/dev/null || exit
 }
 
+write_dup_filler() {  # write_dup_filler <path> — a harmless Go file sized
+    # comfortably past dup-gate's own --min-lines/--min-tokens floor, so a
+    # checkpoint-m.sh fixture that must clear the duplication check isn't
+    # reported as "0 lines" against a repo whose only real content is a
+    # one-line test stub.
+    cat > "$1" <<'GOEOF'
+package main
+
+func dupFillerA(t *testing.T) {
+	x := 1
+	y := 2
+	z := x + y
+	_ = z
+}
+
+func dupFillerB(t *testing.T) {
+	x := 1
+	y := 2
+	z := x + y
+	_ = z
+}
+GOEOF
+}
+
 # ── spec-coverage / falsification: names that share a prefix ────────────────
 # `TestParsesToken` and `TestParsesTokenWithExpiry` is an ordinary naming pair.
 # A substring match lets the longer one satisfy the shorter one's row — a PASS
@@ -992,6 +1016,598 @@ cat > "$manifest_noroster" <<'MD'
 MD
 out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
+
+# ══════════════════════════════════════════════════════════════════════════
+# ST11: scripts/verify/checkpoint-m.sh (G1) + scripts/verify/break-run.sh (G2)
+# Every fixture here is synthetic (mkrepo style) — never a reference to this
+# delivery's own files or numbers, per the Hardening section's own rule.
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── checkpoint-m.sh: missing spec row fails ──────────────────────────────────
+cp1="$W/cp1"
+mkrepo "$cp1"
+cd "$cp1" || exit
+printf 'func TestRowA(t *testing.T) {}\n' > impl_test.go
+cat > "$W/cp1-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestRowA` | a | b |
+| `TestRowB` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp1-spec.md" --tests impl_test.go --expect impl_test.go 2>&1); rc=$?
+check "checkpoint-m: missing spec row fails" 1 "$rc" "$out" "M: FAIL spec-rows"
+case "$out" in *TestRowB*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: missing spec row fails — missing row name TestRowB in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: bats and check harness names count ──────────────────────
+cp2="$W/cp2"
+mkrepo "$cp2"
+cd "$cp2" || exit
+cat > cp2_test.sh <<'EOF'
+@test "RowBats" {
+  true
+}
+check "RowCheck" 0 0
+EOF
+write_dup_filler filler.go
+cat > "$W/cp2-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `RowBats` | a | b |
+| `RowCheck` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp2-spec.md" --tests cp2_test.sh --expect cp2_test.sh filler.go 2>&1); rc=$?
+check "checkpoint-m: bats and check harness names count" 0 "$rc" "$out" "M: PASS"
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: extra file fails ────────────────────────────────────────
+cp3="$W/cp3"
+mkrepo "$cp3"
+cd "$cp3" || exit
+printf 'func TestX(t *testing.T) {}\n' > a_test.go
+printf 'stray\n' > b.go
+cat > "$W/cp3-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestX` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp3-spec.md" --tests a_test.go --expect a_test.go 2>&1); rc=$?
+check "checkpoint-m: extra file fails" 1 "$rc" "$out" "M: FAIL file-set"
+case "$out" in *"extra b.go"*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: extra file fails — missing 'extra b.go' in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: missing expected file fails ─────────────────────────────
+cp4="$W/cp4"
+mkrepo "$cp4"
+cd "$cp4" || exit
+printf 'func TestY(t *testing.T) {}\n' > y_test.go
+cat > "$W/cp4-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestY` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp4-spec.md" --tests y_test.go --expect y_test.go never_touched.go 2>&1); rc=$?
+check "checkpoint-m: missing expected file fails" 1 "$rc" "$out" "M: FAIL file-set"
+case "$out" in *"missing never_touched.go"*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: missing expected file fails — missing 'missing never_touched.go' in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: rename must list both paths ─────────────────────────────
+cp5="$W/cp5"
+mkrepo "$cp5"
+cd "$cp5" || exit
+printf 'func TestZ(t *testing.T) {}\n' > a_test.go
+git -c user.email=t@t -c user.name=t add a_test.go
+git -c user.email=t@t -c user.name=t commit -q -m "add a_test.go (shared by release and feat)"
+git branch -f release/x-abc HEAD
+git mv a_test.go b_test.go
+cat > "$W/cp5-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestZ` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp5-spec.md" --tests b_test.go --expect b_test.go 2>&1); rc=$?
+check "checkpoint-m: rename must list both paths" 1 "$rc" "$out" "M: FAIL file-set"
+case "$out" in *"a_test.go"*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: rename must list both paths — the old path a_test.go is not named in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: deletion must be listed ─────────────────────────────────
+cp6="$W/cp6"
+mkrepo "$cp6"
+cd "$cp6" || exit
+printf 'stray\n' > old.go
+git -c user.email=t@t -c user.name=t add old.go
+git -c user.email=t@t -c user.name=t commit -q -m "add old.go (shared by release and feat)"
+git branch -f release/x-abc HEAD
+git rm -q old.go
+printf 'func TestW(t *testing.T) {}\n' > w_test.go
+cat > "$W/cp6-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestW` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp6-spec.md" --tests w_test.go --expect w_test.go 2>&1); rc=$?
+check "checkpoint-m: deletion must be listed" 1 "$rc" "$out" "M: FAIL file-set"
+case "$out" in *"old.go"*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: deletion must be listed — the deleted path old.go is not named in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: unexpected commit fails ─────────────────────────────────
+cp7="$W/cp7"
+mkrepo "$cp7"
+cd "$cp7" || exit
+printf 'func TestC(t *testing.T) {}\n' > c_test.go
+git -c user.email=t@t -c user.name=t add c_test.go
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add c_test.go"
+cat > "$W/cp7-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestC` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp7-spec.md" --tests c_test.go --expect c_test.go 2>&1); rc=$?
+check "checkpoint-m: unexpected commit fails" 1 "$rc" "$out" "M: FAIL commits"
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: leftover break marker fails ─────────────────────────────
+cp8="$W/cp8"
+mkrepo "$cp8"
+cd "$cp8" || exit
+printf 'func TestM(t *testing.T) {}\n' > m_test.go
+printf 'leftover\n' > m_test.go.devkit-break
+cat > "$W/cp8-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestM` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp8-spec.md" --tests m_test.go --expect m_test.go m_test.go.devkit-break 2>&1); rc=$?
+check "checkpoint-m: leftover break marker fails" 1 "$rc" "$out" "M: FAIL break-marker"
+case "$out" in *"m_test.go.devkit-break"*) pass=$((pass + 1)) ;; *) echo "FAIL: checkpoint-m: leftover break marker fails — missing marker path in output"; fail=1 ;; esac
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: reports every failure at once ───────────────────────────
+cp9="$W/cp9"
+mkrepo "$cp9"
+cd "$cp9" || exit
+printf 'func TestN(t *testing.T) {}\n' > n_test.go
+write_dup_filler filler.go
+cat > "$W/cp9-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestN` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp9-spec.md" --tests n_test.go --expect n_test.go filler.go never_here.go --gates false 2>&1); rc=$?
+check "checkpoint-m: reports every failure at once" 1 "$rc" "$out" "M: FAIL (2)"
+# The summary line "M: FAIL (2)" itself starts with "M: FAIL " — matched
+# separately (a check name followed by an em-dash) so it is never counted
+# as one of the individual failures it is summarising.
+fail_lines=$(printf '%s\n' "$out" | grep -cE '^M: FAIL [a-z-]+ — ')
+[ "$fail_lines" = "2" ] && pass=$((pass + 1)) || { echo "FAIL: checkpoint-m: reports every failure at once — expected 2 'M: FAIL' lines, got $fail_lines"; fail=1; }
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: gates command failure is reported ───────────────────────
+cp10="$W/cp10"
+mkrepo "$cp10"
+cd "$cp10" || exit
+printf 'func TestG(t *testing.T) {}\n' > g_test.go
+cat > "$W/cp10-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestG` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp10-spec.md" --tests g_test.go --expect g_test.go --gates false 2>&1); rc=$?
+check "checkpoint-m: gates command failure is reported" 1 "$rc" "$out" "M: FAIL gates"
+cd - >/dev/null || exit
+
+# ── checkpoint-m.sh: all green passes ────────────────────────────────────────
+cp11="$W/cp11"
+mkrepo "$cp11"
+cd "$cp11" || exit
+printf 'func TestOK(t *testing.T) {}\n' > ok_test.go
+write_dup_filler filler.go
+cat > "$W/cp11-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestOK` | a | b |
+MD
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp11-spec.md" --tests ok_test.go --expect ok_test.go filler.go --gates true 2>&1); rc=$?
+check "checkpoint-m: all green passes" 0 "$rc" "$out" "M: PASS"
+cd - >/dev/null || exit
+
+# ── break-run.sh: mutate-run-restore with proof the row failed for itself ───
+cat > "$W/br_check.sh" <<'EOF'
+#!/usr/bin/env bash
+# Exits 0 either way and only prints the verdict: mirrors the harness `check`
+# helpers this repo already uses, where a row's own PASS/FAIL is carried in
+# the text, not the process exit code — so evidence must come from the
+# needle, never from run_rc alone (F2's "accept any non-zero test exit").
+if grep -q '^ENABLED=yes$' "$1"; then
+    echo "PASS: guard-enabled"
+else
+    echo "FAIL: guard-enabled"
+fi
+exit 0
+EOF
+chmod +x "$W/br_check.sh"
+
+# Every fixture in this section lives under $W, deliberately outside any git
+# repository — plain scratch files break-run.sh's own mutate/restore/marker
+# mechanics are exercised against, never meant to model "the repo under
+# test". break-run.sh's containment check (ST11) resolves its cwd-fallback
+# base only when the invoking shell's cwd isn't itself a repo; without these
+# wrappers every fixture here would instead be judged against the real repo
+# this suite runs from and refused as "outside" it. `run_br` runs
+# break-run.sh with cwd=$W without disturbing this script's own cwd; `bg_br`
+# does the same for a backgrounded run, needed so `$!` still names
+# break-run.sh's own pid directly (a subshell wrapper would make `$!` name
+# the subshell instead, breaking every `pgrep -P` below it). The one
+# exception is the "path outside the repository" row itself, which needs a
+# real repo and manages its own cd.
+run_br() { ( cd "$W" && bash "$V/break-run.sh" "$@" ); }
+bg_br() {
+    cd "$W" || exit
+    bash "$V/break-run.sh" "$@" &
+    bg_br_pid=$!
+    cd - >/dev/null || exit
+}
+
+br1="$W/br1"
+mkdir -p "$br1"
+printf 'X=1\nX=1\n' > "$br1/dup.txt"
+before=$(cat "$br1/dup.txt")
+out=$(run_br --file "$br1/dup.txt" --old "X=1" --new "X=2" --row "whatever" -- true 2>&1); rc=$?
+check "break-run: ambiguous pattern refused" 2 "$rc" "$out" "occurs 2"
+after=$(cat "$br1/dup.txt")
+[ "$before" = "$after" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: ambiguous pattern refused — file was modified despite refusal"; fail=1; }
+[ ! -f "$br1/dup.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: ambiguous pattern refused — marker left behind"; fail=1; }
+
+br2="$W/br2"
+mkdir -p "$br2"
+printf 'Y=1\n' > "$br2/f.txt"
+out=$(run_br --file "$br2/f.txt" --old "X=1" --new "X=2" --row "whatever" -- true 2>&1); rc=$?
+check "break-run: absent pattern refused" 2 "$rc" "$out" "occurs 0"
+
+br3="$W/br3"
+mkdir -p "$br3"
+printf 'ENABLED=yes\n' > "$br3/cfg.txt"
+out=$(run_br --file "$br3/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$W/br_check.sh" "$br3/cfg.txt" 2>&1); rc=$?
+check "break-run: passes only when the row fails by name" 0 "$rc" "$out" "FAIL: guard-enabled"
+restored=$(cat "$br3/cfg.txt")
+[ "$restored" = "ENABLED=yes" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: passes only when the row fails by name — file not restored"; fail=1; }
+[ ! -f "$br3/cfg.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: passes only when the row fails by name — marker left behind"; fail=1; }
+
+br4="$W/br4"
+mkdir -p "$br4"
+printf 'ENABLED=yes\n' > "$br4/cfg.txt"
+out=$(run_br --file "$br4/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash -c 'exit 1' 2>&1); rc=$?
+check "break-run: unnamed failure is not evidence" 1 "$rc"
+if printf '%s\n' "$out" | grep -qx "FAIL: guard-enabled"; then
+    echo "FAIL: break-run: unnamed failure is not evidence — falsely treated a silent failure as evidence"
+    fail=1
+else
+    pass=$((pass + 1))
+fi
+restored4=$(cat "$br4/cfg.txt")
+[ "$restored4" = "ENABLED=yes" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: unnamed failure is not evidence — file not restored"; fail=1; }
+
+br5="$W/br5"
+mkdir -p "$br5"
+printf 'ENABLED=yes\n' > "$br5/cfg.txt"
+pristine5=$(cat "$br5/cfg.txt")
+# `bash -c 'kill -TERM $$'` (the prior version of this row) signals the
+# subshell's own PID, never break-run.sh — the mutation restores through the
+# ordinary EXIT path regardless of whether break-run.sh's own INT/TERM trap
+# exists, so that row was unfalsifiable and duplicated "unnamed failure is
+# not evidence". This version signals break-run.sh's own PID (via $!) while
+# it is genuinely blocked on its test command, so removing its `trap ...
+# INT TERM` (break-run.sh:~123) changes the observable exit code from the
+# deliberate 2 to a raw signal-death 143 — that is what this row falsifies.
+bg_br --file "$br5/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- sleep 60 >/dev/null 2>&1
+br5_pid=$bg_br_pid
+
+# Poll (bounded — 5s max) for the pristine-copy marker: it appears only once
+# break-run.sh has mutated the file and is blocked running the test command,
+# which is the one moment a TERM sent to $br5_pid actually exercises its
+# INT/TERM handler instead of racing its startup.
+br5_tries=0
+while [ ! -f "$br5/cfg.txt.devkit-break" ] && [ "$br5_tries" -lt 300 ]; do
+    sleep 0.1
+    br5_tries=$((br5_tries + 1))
+done
+
+if [ ! -f "$br5/cfg.txt.devkit-break" ]; then
+    echo "FAIL: break-run: restores after interruption — marker never appeared, could not signal mid-run"
+    fail=1
+    kill -TERM "$br5_pid" 2>/dev/null
+    wait "$br5_pid" 2>/dev/null
+else
+    # Best-effort: also reap the still-running `sleep 60` child so nothing
+    # outlives this test — bounded regardless (it self-exits within 5s).
+    br5_child=$(pgrep -P "$br5_pid" 2>/dev/null | head -1)
+    kill -TERM "$br5_pid"
+    wait "$br5_pid"
+    br5_rc=$?
+    [ -n "$br5_child" ] && kill -TERM "$br5_child" 2>/dev/null
+    check "break-run: restores after interruption" 2 "$br5_rc"
+    restored5=$(cat "$br5/cfg.txt")
+    [ "$restored5" = "$pristine5" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: restores after interruption — file not restored"; fail=1; }
+    [ ! -f "$br5/cfg.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: restores after interruption — marker left behind"; fail=1; }
+fi
+
+# ── spec-coverage.sh: a row named inside any test helper counts ─────────────
+# Dogfooding checkpoint-m.sh on a repository whose tests name rows inside
+# `expect_says "<name>" …` and inside `echo "FAIL: <name> — …"` produced
+# false "missing row" lines — spec-coverage.sh knew only language patterns
+# plus `check "…"` and bats `@test "…"`, never a generic quoted-literal call.
+# `gate_check("<name>"` pins a second dogfooding finding: the keyword can
+# land as a SUFFIX after `_` (`gate_check`), where `\b` never fires because
+# `_` is itself a word character — the matcher has to treat the keyword as a
+# substring of the identifier, not just its start.
+cat > "$W/sc-helper-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `helper-quoted row` | a | b |
+| `helper-fail row` | a | b |
+| `dup-gate: base resolution shared with the release guard` | a | b |
+MD
+mkdir -p "$W/sc-helper"
+cat > "$W/sc-helper/helper_test.sh" <<'EOF'
+expect_says "helper-quoted row" "some value"
+echo "FAIL: helper-fail row — detail message"
+gate_check "dup-gate: base resolution shared with the release guard" "$ok"
+EOF
+out=$(bash "$V/spec-coverage.sh" "$W/sc-helper-spec.md" "$W/sc-helper" 2>&1); rc=$?
+check "spec-coverage: a row named inside any test helper counts" 0 "$rc" "$out" "3/3"
+
+# ── spec-coverage.sh: a longer name does not satisfy a shorter row ──────────
+# The ST2 prefix lesson (TestParsesToken vs TestParsesTokenWithExpiry) has to
+# survive the wider matcher too, not just the original language patterns.
+cat > "$W/sc-helper2-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `x fails` | a | b |
+MD
+mkdir -p "$W/sc-helper2"
+cat > "$W/sc-helper2/helper2_test.sh" <<'EOF'
+echo "FAIL: x fails loudly — detail"
+EOF
+out=$(bash "$V/spec-coverage.sh" "$W/sc-helper2-spec.md" "$W/sc-helper2" 2>&1); rc=$?
+check "spec-coverage: a longer name does not satisfy a shorter row" 1 "$rc" "$out" "MISSING ROW: x fails"
+
+# ── spec-coverage.sh: a row named only in a comment does not count ──────────
+# The generic matcher (quoted-literal + `FAIL: <name>` extraction) reads every
+# line of every file, so a row's name sitting inside a comment — dead code
+# that never runs — satisfied it just as well as a real call. spec-coverage
+# proves a row is *named*; a comment is not a test.
+cat > "$W/sc-comment-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `comment-only row` | a | b |
+MD
+mkdir -p "$W/sc-comment"
+cat > "$W/sc-comment/comment_test.sh" <<'EOF'
+# FAIL: comment-only row — this line is commented out and never runs
+EOF
+out=$(bash "$V/spec-coverage.sh" "$W/sc-comment-spec.md" "$W/sc-comment" 2>&1); rc=$?
+check "spec-coverage: a row named only in a comment does not count" 1 "$rc" "$out" "MISSING ROW: comment-only row"
+
+# ── break-run.sh: symlink target is refused ──────────────────────────────────
+# A --file that is a symlink must be refused before any copy or mutation —
+# following it would let a killed run corrupt whatever the link points to,
+# including a target outside the repository entirely (ST11 Stress CRITICAL).
+brsym="$W/brsym"
+mkdir -p "$brsym"
+printf 'ENABLED=yes\n' > "$brsym/target.txt"
+target_before=$(cat "$brsym/target.txt")
+ln -s "$brsym/target.txt" "$brsym/link.txt"
+out=$(run_br --file "$brsym/link.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- true 2>&1); rc=$?
+check "break-run: symlink target is refused" 2 "$rc" "$out" "symlink"
+target_after=$(cat "$brsym/target.txt")
+[ "$target_before" = "$target_after" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: symlink target is refused — link target was modified despite refusal"; fail=1; }
+[ ! -f "$brsym/link.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: symlink target is refused — marker left behind"; fail=1; }
+
+# ── break-run.sh: path outside the repository is refused ────────────────────
+# A falsification tool must only ever touch the code under test — refuse any
+# --file whose real path resolves outside the git toplevel (or outside cwd
+# when not in a repo), before any copy or mutation.
+brout="$W/brout"
+mkrepo "$brout"
+printf 'ENABLED=yes\n' > "$W/brout-outside.txt"
+outside_before=$(cat "$W/brout-outside.txt")
+cd "$brout" || exit
+out=$(bash "$V/break-run.sh" --file "../brout-outside.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- true 2>&1); rc=$?
+check "break-run: path outside the repository is refused" 2 "$rc" "$out" "outside"
+cd - >/dev/null || exit
+outside_after=$(cat "$W/brout-outside.txt")
+[ "$outside_before" = "$outside_after" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: path outside the repository is refused — file outside the repo was modified"; fail=1; }
+[ ! -f "$W/brout-outside.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: path outside the repository is refused — marker left behind"; fail=1; }
+
+# ── break-run.sh: concurrent run on the same file is refused ────────────────
+# A plain `cp -p` over an existing marker let a second run silently overwrite
+# the first run's pristine copy — the one thing standing between an
+# interrupted run and a permanently mutated file (ST11 Stress MEDIUM).
+brconc="$W/brconc"
+mkdir -p "$brconc"
+printf 'ENABLED=yes\n' > "$brconc/cfg.txt"
+printf 'PRISTINE-FROM-RUN-ONE\n' > "$brconc/cfg.txt.devkit-break"
+marker_before=$(cat "$brconc/cfg.txt.devkit-break")
+out=$(run_br --file "$brconc/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- true 2>&1); rc=$?
+check "break-run: concurrent run on the same file is refused" 2 "$rc" "$out" "held by another run"
+marker_after=$(cat "$brconc/cfg.txt.devkit-break")
+[ "$marker_before" = "$marker_after" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: concurrent run on the same file is refused — first run's pristine copy was overwritten"; fail=1; }
+rm -f "$brconc/cfg.txt.devkit-break"
+
+# ── break-run.sh: interrupted run leaves no temp output ─────────────────────
+# The test command's output is buffered through a mktemp file so on_interrupt
+# can kill the still-running command first; an interrupted run must not leave
+# that temp file behind (ST11 Stress LOW — they accumulated under repeated
+# interrupts).
+brtmp="$W/brtmp"
+mkdir -p "$brtmp"
+printf 'ENABLED=yes\n' > "$brtmp/cfg.txt"
+tmpdir_for_test="${TMPDIR:-/tmp}"
+before_tmp=$(find "$tmpdir_for_test" -maxdepth 1 -name 'break-run.out.*' 2>/dev/null | sort)
+bg_br --file "$brtmp/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- sleep 60 >/dev/null 2>&1
+brtmp_pid=$bg_br_pid
+brtmp_tries=0
+while [ ! -f "$brtmp/cfg.txt.devkit-break" ] && [ "$brtmp_tries" -lt 300 ]; do
+    sleep 0.1
+    brtmp_tries=$((brtmp_tries + 1))
+done
+if [ ! -f "$brtmp/cfg.txt.devkit-break" ]; then
+    echo "FAIL: break-run: interrupted run leaves no temp output — marker never appeared, could not signal mid-run"
+    fail=1
+    kill -TERM "$brtmp_pid" 2>/dev/null
+    wait "$brtmp_pid" 2>/dev/null
+else
+    brtmp_child=$(pgrep -P "$brtmp_pid" 2>/dev/null | head -1)
+    kill -TERM "$brtmp_pid"
+    wait "$brtmp_pid"
+    brtmp_rc=$?
+    [ -n "$brtmp_child" ] && kill -TERM "$brtmp_child" 2>/dev/null
+    check "break-run: interrupted run leaves no temp output" 2 "$brtmp_rc"
+    after_tmp=$(find "$tmpdir_for_test" -maxdepth 1 -name 'break-run.out.*' 2>/dev/null | sort)
+    if [ "$before_tmp" = "$after_tmp" ]; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: break-run: interrupted run leaves no temp output — leftover break-run.out.* file(s) in $tmpdir_for_test"
+        fail=1
+    fi
+fi
+
+# ── spec-coverage.sh: an unrelated string literal does not count ────────────
+# The old generic matcher counted ANY quoted literal in the file — an
+# unrelated log line could satisfy a row that was never actually tested
+# (ST11 Stress HIGH). Only `FAIL: <name>` or a quoted name that is the first
+# argument of a test-shaped call (check/expect/assert/test/it/describe/
+# should/verify/run in the callee name) may satisfy a row.
+cat > "$W/sc-unrelated-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `x fails` | a | b |
+MD
+mkdir -p "$W/sc-unrelated"
+cat > "$W/sc-unrelated/unrelated_test.go" <<'EOF'
+logger.Info("x fails")
+EOF
+out=$(bash "$V/spec-coverage.sh" "$W/sc-unrelated-spec.md" "$W/sc-unrelated" 2>&1); rc=$?
+check "spec-coverage: an unrelated string literal does not count" 1 "$rc" "$out" "MISSING ROW: x fails"
+
+# ── checkpoint-m.sh: a crashed sub-sensor is unmeasured, not pass ───────────
+# dup-gate exiting 127 (command not found / crashed) is neither the
+# documented 0 (pass), 1 (fail) nor 2 (UNENFORCED) — it must never fall
+# through to "M: PASS" the way only checking `-eq 1` would let it.
+cp12="$W/cp12"
+mkrepo "$cp12"
+cd "$cp12" || exit
+printf 'func TestOK(t *testing.T) {}\n' > ok_test.go
+cat > "$W/cp12-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestOK` | a | b |
+MD
+cat > "$W/stub-dup-gate-crash.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 127
+EOF
+chmod +x "$W/stub-dup-gate-crash.sh"
+out=$(DEVKIT_DUP_GATE="$W/stub-dup-gate-crash.sh" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp12-spec.md" --tests ok_test.go --expect ok_test.go 2>&1); rc=$?
+check "checkpoint-m: a crashed sub-sensor is unmeasured, not pass" 2 "$rc" "$out" "UNMEASURED"
+case "$out" in *"M: PASS"*) echo "FAIL: checkpoint-m: a crashed sub-sensor is unmeasured, not pass — printed M: PASS despite dup-gate exit 127"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
+# ── break-run.sh: CRLF file keeps its line endings ───────────────────────────
+# Only the matched literal on the mutated line may change — a text-mode
+# read/write without newline="" would translate every "\r\n" in the file to
+# "\n" on read and never put the "\r" back on write, corrupting every other
+# line's ending as a side effect of mutating just one of them.
+cat > "$W/crlf_check.py" <<'PY'
+import sys
+with open(sys.argv[1], "rb") as fh:
+    data = fh.read()
+lines = data.split(b"\n")
+ok = len(lines) >= 3 and lines[0] == b"A=1\r" and lines[2] == b"C=3\r"
+print("CRLF-OK" if ok else "CRLF-BAD")
+PY
+brcrlf="$W/brcrlf"
+mkdir -p "$brcrlf"
+printf 'A=1\r\nB=2\r\nC=3\r\n' > "$brcrlf/f.txt"
+cp -p "$brcrlf/f.txt" "$brcrlf/f.orig"
+out=$(run_br --file "$brcrlf/f.txt" --old "B=2" --new "B=9" --row "crlf-check" -- python3 "$W/crlf_check.py" "$brcrlf/f.txt" 2>&1); rc=$?
+check "break-run: CRLF file keeps its line endings" 1 "$rc" "$out" "CRLF-OK"
+if cmp -s "$brcrlf/f.orig" "$brcrlf/f.txt"; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: CRLF file keeps its line endings — file not byte-identical to its pristine copy after restore"
+    fail=1
+fi
+[ ! -f "$brcrlf/f.txt.devkit-break" ] && pass=$((pass + 1)) || { echo "FAIL: break-run: CRLF file keeps its line endings — marker left behind"; fail=1; }
+
+# ── break-run.sh: failed restore keeps the backup ────────────────────────────
+# The marker is the only pristine copy. If cp/cmp cannot put it back (here:
+# the test command itself makes the target read-only), deleting the marker
+# on the way out would leave the mutated file as the only copy in existence.
+brfail="$W/brfail"
+mkdir -p "$brfail"
+printf 'ENABLED=yes\n' > "$brfail/cfg.txt"
+out=$(run_br --file "$brfail/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "restore-fail" -- bash -c 'chmod 444 "$1"' _ "$brfail/cfg.txt" 2>&1); rc=$?
+chmod 644 "$brfail/cfg.txt" 2>/dev/null
+check "break-run: failed restore keeps the backup" 2 "$rc" "$out" "RESTORE FAILED"
+if [ -f "$brfail/cfg.txt.devkit-break" ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: failed restore keeps the backup — pristine copy marker not kept"
+    fail=1
+fi
+rm -f "$brfail/cfg.txt.devkit-break"
+
+# ── break-run.sh: interrupted run kills its test command ─────────────────────
+# Repeated interrupts must not leak processes: a foreground `$(cmd)` leaves
+# the test command running to its own natural end even after break-run.sh
+# itself has been signalled and exited.
+brkill="$W/brkill"
+mkdir -p "$brkill"
+printf 'ENABLED=yes\n' > "$brkill/cfg.txt"
+bg_br --file "$brkill/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- sleep 60 >/dev/null 2>&1
+brkill_pid=$bg_br_pid
+brkill_tries=0
+while [ ! -f "$brkill/cfg.txt.devkit-break" ] && [ "$brkill_tries" -lt 300 ]; do
+    sleep 0.1
+    brkill_tries=$((brkill_tries + 1))
+done
+# The marker appears once break-run.sh has created it, but its `sleep 60`
+# child is forked slightly later — after the mutation and the out_tmp
+# mktemp both run — so a single pgrep right on the marker's heels can race
+# ahead of the fork and find nothing. Poll a bounded extra 5s for the child
+# to actually appear before concluding it never was.
+brkill_child=""
+brkill_tries3=0
+while [ -z "$brkill_child" ] && [ "$brkill_tries3" -lt 50 ]; do
+    brkill_child=$(pgrep -P "$brkill_pid" 2>/dev/null | head -1)
+    [ -n "$brkill_child" ] && break
+    sleep 0.1
+    brkill_tries3=$((brkill_tries3 + 1))
+done
+if [ -z "$brkill_child" ]; then
+    echo "FAIL: break-run: interrupted run kills its test command — marker never appeared, could not locate the sleep 60 child"
+    fail=1
+    kill -TERM "$brkill_pid" 2>/dev/null
+    wait "$brkill_pid" 2>/dev/null
+else
+    kill -TERM "$brkill_pid"
+    wait "$brkill_pid" 2>/dev/null
+    brkill_gone=0
+    brkill_tries2=0
+    while [ "$brkill_tries2" -lt 100 ]; do
+        kill -0 "$brkill_child" 2>/dev/null || { brkill_gone=1; break; }
+        sleep 0.1
+        brkill_tries2=$((brkill_tries2 + 1))
+    done
+    if [ "$brkill_gone" -eq 1 ]; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: break-run: interrupted run kills its test command — sleep 60 child (pid $brkill_child) survived the interrupt"
+        fail=1
+        kill -TERM "$brkill_child" 2>/dev/null
+    fi
+fi
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
