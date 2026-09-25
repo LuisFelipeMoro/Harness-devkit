@@ -104,7 +104,7 @@ check "verdict: all lenses over floor is PRODUCTION READY" 0 "$rc"
 bash "$V/verdict.sh" --review 1.2.3 --stress 9 --qa 9 >/dev/null 2>&1; rc=$?
 check "verdict: malformed score is a usage error, not a traceback" 2 "$rc"
 
-# ── ST10: execution-options checkpoint and roster validation ──────────────────
+# ── execution-options checkpoint and roster validation ─────────────────────────
 # Test 1: bench-context.py rejects unrecognized roster values (capital Standard, unknown huge)
 cat > "$W/manifest-bad-roster.md" <<'MANIFEST'
 | Test | Input | Expected | Roster |
@@ -124,7 +124,7 @@ case "$out" in *"Overall Score"*) echo "FAIL: verdict: roster path hides score o
 bash "$V/verdict.sh" --roster huge --classify-exit 0 >/dev/null 2>&1; rc=$?
 check "verdict: unknown roster value is usage" 2 "$rc"
 
-# ── security-scan --diff: diff-scoped candidates (ST2 tests) ────────────────
+# ── security-scan --diff: diff-scoped candidates ────────────────
 # TV-S0a: positional mode unchanged on code hit — reuses the "$W/sec" fixture
 # built above (guide.md + app.js), no need to recreate it.
 out=$(bash "$V/security-scan.sh" "$W/sec" 2>&1); rc=$?
@@ -178,7 +178,7 @@ out=$(bash "$V/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
 check "security-scan --diff: only-deleted diff is UNMEASURED" 2 "$rc" "$out" "empty diff"
 cd - >/dev/null || exit
 
-# Newline in file name is scanned (Stress ST2 CRITICAL): a `tr '\0' '\n'` split
+# Newline in file name is scanned: a `tr '\0' '\n'` split
 # on the NUL-separated git diff list turns one file with an embedded newline
 # into two missing paths, silently dropping it out of the scan.
 repo2c="$W/repo2c"
@@ -192,7 +192,7 @@ out=$(bash "$V/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
 check "security-scan --diff: newline in file name is scanned" 0 "$rc" "$out" "line.js"
 cd - >/dev/null || exit
 
-# Symlink in diff is never silent (Stress ST2 MAJOR): grep does not follow a
+# Symlink in diff is never silent: grep does not follow a
 # file symlink, so handing one to grep like any other file reads as 0
 # candidates instead of surfacing it for adjudication.
 repo2d="$W/repo2d"
@@ -206,7 +206,7 @@ check "security-scan --diff: symlink in diff is never silent" 0 "$rc" "$out" "[S
 case "$out" in *link.js*) pass=$((pass + 1)) ;; *) echo "FAIL: security-scan --diff: symlink in diff is never silent — link.js path missing from [SYMLINK] output"; fail=1 ;; esac
 cd - >/dev/null || exit
 
-# Pathspec limits the scan (Review ST2 MAJOR): a pathspec argument after the
+# Pathspec limits the scan: a pathspec argument after the
 # base must actually narrow the diff, not be accepted and silently ignored.
 repo2e="$W/repo2e"
 mkrepo "$repo2e"
@@ -221,7 +221,7 @@ check "security-scan --diff: pathspec limits the scan" 0 "$rc" "$out" "a/x.js:1"
 case "$out" in *b/y.js*) echo "FAIL: security-scan --diff: pathspec limits the scan — b/y.js leaked outside the 'a' pathspec"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
 cd - >/dev/null || exit
 
-# git diff failure is reported (Review ST2 MINOR): a real `git diff` failure
+# git diff failure is reported: a real `git diff` failure
 # must not be read as an empty diff. Stub `git` on PATH so every subcommand
 # passes through to the real binary except `diff`, which exits 128.
 repo2f="$W/repo2f"
@@ -320,7 +320,7 @@ check "security-scan --diff: rejects range base" 2 "$rc" "$out" "invalid base re
 out=$(bash "$V/security-scan.sh" --diff release/nope 2>&1); rc=$?
 check "security-scan --diff: unknown ref" 2 "$rc" "$out" "unknown base ref"
 
-# ── tautology-scan --diff: diff-scoped tautology detection (ST3 tests) ──────
+# ── tautology-scan --diff: diff-scoped tautology detection ──────
 
 # TV-T0: positional 0 files still UNMEASURED (preserved; reuses "$W/no-tests"
 # built above for the earlier "tautology-scan: 0 test files" check).
@@ -392,7 +392,7 @@ out=$(python3 "$V/tautology-scan.py" --diff release/x-abc 2>&1); rc=$?
 check "tautology-scan --diff: dirty tree" 2 "$rc" "$out" "uncommitted"
 cd - >/dev/null || exit
 
-# Newline in test file name (same class as the ST2 Stress CRITICAL): splitting
+# Newline in test file name (a newline-split name — a known false-clean class): splitting
 # the NUL-separated git diff list on "\n" instead of "\0" would break this one
 # path into two missing ones and silently drop it from the scan.
 tsr8="$W/tsr8"
@@ -545,7 +545,7 @@ check "tautology-scan --diff: non-UTF-8 file name is not a traceback" 2 "$rc" "$
 case "$out" in *Traceback*) echo "FAIL: tautology-scan --diff: non-UTF-8 file name is not a traceback — a Python Traceback leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
 cd - >/dev/null || exit
 
-# ── classify-diff.sh: verifies a declared roster against the real diff (ST4) ─
+# ── classify-diff.sh: verifies a declared roster against the real diff ─
 
 # Style-only diff passes cosmetic
 repo_c1="$W/repo_c1"
@@ -669,7 +669,7 @@ out=$(bash "$V/classify-diff.sh" --diff release/x-abc --declared huge 2>&1); rc=
 check "classify: unknown declared roster" 2 "$rc"
 cd - >/dev/null || exit
 
-# ── D3 amendment: cosmetic must not trust extension/location alone (ST4) ────
+# ── cosmetic must not trust extension/location alone ────
 
 # security-scan --include-docs: the flag classify-diff's cosmetic content check
 # depends on — default mode filters `.md:` lines for the Reviewer's own noise
@@ -680,7 +680,7 @@ out=$(bash "$V/security-scan.sh" --include-docs "$W/docsec/x.md" 2>&1); rc=$?
 check "security-scan --include-docs scans markdown" 0 "$rc" "$out" "x.md:1"
 
 # A style-extension file holding real code must not pass cosmetic just because
-# of its name (ST4 Stress CRITICAL).
+# of its name .
 repo_c16="$W/repo_c16"
 mkrepo "$repo_c16"
 cd "$repo_c16" || exit
@@ -692,7 +692,7 @@ check "classify: code in a style extension is not cosmetic" 1 "$rc" "$out" "ESCA
 cd - >/dev/null || exit
 
 # A rename to a style extension disguises whatever the origin file actually was
-# (ST4 Stress CRITICAL) — diff-lib's own listing only ever shows the new path.
+#  — diff-lib's own listing only ever shows the new path.
 repo_c17="$W/repo_c17"
 mkrepo "$repo_c17"
 cd "$repo_c17" || exit
@@ -710,7 +710,7 @@ cd - >/dev/null || exit
 # A disguised rename whose original file is dangerous must not settle for the
 # rename's own light classification — the (c) content check has to run on the
 # doc/style file that still exists post-rename, and any security-scan
-# candidate wins over the rename escalation (D3 amendment, ST4).
+# candidate wins over the rename escalation (content wins over the rename rule).
 repo_c21="$W/repo_c21"
 mkrepo "$repo_c21"
 cd "$repo_c21" || exit
@@ -751,7 +751,7 @@ check "classify: pubspec.yaml is a dependency manifest" 1 "$rc" "$out" "→ stan
 cd - >/dev/null || exit
 
 # A missing tautology-scan.py must fail closed with UNMEASURED, never a raw
-# Python traceback (ST3's "never a traceback" contract, extended to ST4).
+# Python traceback (the "never a traceback" contract).
 stubV2="$W/stubverify16"
 mkdir -p "$stubV2"
 cp "$V/classify-diff.sh" "$stubV2/classify-diff.sh"
@@ -808,11 +808,11 @@ case "$out" in *"empty diff"*) echo "FAIL: classify: deleting a source file is n
 cd - >/dev/null || exit
 
 # Newline in a source file name must not be split into two missing paths
-# (same class as the ST2 Stress CRITICAL finding). A second plain file sits
+# (the newline-split false-clean class). A second plain file sits
 # alongside it so a name split (1 real file -> 2 bogus paths) is observable:
 # correctly read, this diff has 2 non-test source files (<= 2, light); split,
 # it has 3 (> 2, standard) -- a real threshold difference, not just a re-run
-# of ST2's own already-falsified check on the shared library.
+# of the already-falsified check on the shared library.
 repo_c14="$W/repo_c14"
 mkrepo "$repo_c14"
 cd "$repo_c14" || exit
@@ -850,14 +850,14 @@ out=$(bash "$stubV/classify-diff.sh" --diff release/x-abc --declared light 2>&1)
 check "classify: security-scan unmeasured propagates" 2 "$rc" "$out" "stubbed failure for classify-diff test"
 cd - >/dev/null || exit
 # ══════════════════════════════════════════════════════════════════════════
-# Batch A (2c9fee) — ST5 verdict.sh roster · ST9/ST10 bench-context.py
-# Keep this section contiguous — a second batch appends classify-diff (ST4)
-# rows separately and a merge should not have to interleave the two.
+# verdict.sh roster and bench-context.py checks.
+# Keep this section contiguous — a second, separate batch appends
+# classify-diff rows and a merge should not have to interleave the two.
 # ══════════════════════════════════════════════════════════════════════════
 
 BENCH="$ROOT/plugins/coding-pipeline/scripts/bench-context.py"
 
-# ── ST5: verdict.sh --roster / --classify-exit (D2) ─────────────────────────
+# ── verdict.sh --roster / --classify-exit (D2) ─────────────────────────
 # TV-V0a/b/c and the "no roster label" row are Preserve rows already covered
 # above (lines ~76-81); this section adds the roster-specific behaviour only.
 
@@ -903,7 +903,7 @@ standard_score=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --revi
 [ -n "$legacy_score" ] && [ "$legacy_score" = "$standard_score" ] && rc=0 || rc=1
 check "verdict: standard formula equals legacy" 0 "$rc"
 
-# ── ST9: bench-context.py roster model (PROFILES uniform/mixed, --mix) ──────
+# ── bench-context.py roster model (PROFILES uniform/mixed, --mix) ──────
 
 out=$(python3 "$BENCH" --json 2>&1); rc=$?
 check "bench: uniform 5-story delivery is 20 dispatches" 0 "$rc" "$out" '"delivery_dispatches": 20'
@@ -941,7 +941,7 @@ check "bench: baseline JSON from c342347 still loads" 0 "$rc" "$out" "| 40 | 20 
 out=$(python3 "$BENCH" --mix 'light=x' --json 2>&1); rc=$?
 check "bench: malformed mix" 2 "$rc"
 
-# ── ST10: execution-options checkpoint (bench-context.py --manifest) ────────
+# ── execution-options checkpoint (bench-context.py --manifest) ──────────────
 # The `contract: planning offers execution options` row (validate-wiring §7)
 # is a separate batch's responsibility — not added here.
 
@@ -959,7 +959,7 @@ check "bench: manifest options listed" 0 "$rc" "$out" "as planned"
 case "$out" in *"all standard"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'all standard'"; fail=1 ;; esac
 case "$out" in *"legacy full loop"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'legacy full loop'"; fail=1 ;; esac
 
-# ST10: test with custom fixture COST where qa has n=0 (unsampled)
+# test with custom fixture COST where qa has n=0 (unsampled)
 out=$(python3 -c "
 import sys
 sys.dont_write_bytecode = True
@@ -1018,12 +1018,11 @@ out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
 # ══════════════════════════════════════════════════════════════════════════
-# Batch B (2c9fee) — ST12 G4 (bench-context.py REWORK) · G5 (tautology-scan
-# TEST_FILE) — synthetic fixtures only, no reference to this delivery's own
-# numbers or file names.
+# bench-context.py REWORK and tautology-scan.py TEST_FILE checks — synthetic
+# fixtures only, no reference to any one delivery's own numbers or file names.
 # ══════════════════════════════════════════════════════════════════════════
 
-# ── G4: bench-context.py --manifest shows a with-rework range ───────────────
+# ── bench-context.py --manifest shows a with-rework range ───────────────────
 out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
 check "bench: manifest shows with-rework range" 0 "$rc" "$out" "with rework"
 with_rework_lines=$(printf '%s' "$out" | grep -c "with rework" || true)
@@ -1054,7 +1053,7 @@ light_line=$(printf '%s' "$out" | grep '| light ' || true)
 case "$light_line" in *measured*) echo "FAIL: bench: rework factor labelled measured or assumed — light row says measured instead of assumed"; fail=1 ;;
     *) pass=$((pass + 1)) ;; esac
 
-# ── G5: tautology-scan.py TEST_FILE — bats, hyphenated test-*.sh, tests/ dir ─
+# ── tautology-scan.py TEST_FILE — bats, hyphenated test-*.sh, tests/ dir ────
 mkdir -p "$W/g5-shapes/tests"
 printf 'echo hi\n' > "$W/g5-shapes/test-x.sh"
 printf 'func TestX(t *testing.T) {}\n' > "$W/g5-shapes/x_test.go"
@@ -1111,7 +1110,7 @@ fi
 # security-scan.sh must fail closed the same way classify-diff.sh already
 # does (tested above as "classify: missing tautology-scan is unmeasured, not
 # a traceback") when tautology-scan.py is missing beside it — its own
-# fail-closed path was untested (ST12 QA/Review MINOR).
+# fail-closed path was untested before this.
 stubV3="$W/stubverify17"
 mkdir -p "$stubV3"
 cp "$V/security-scan.sh" "$stubV3/security-scan.sh"
@@ -1129,9 +1128,9 @@ case "$out" in *Traceback*) echo "FAIL: security-scan: missing TEST_FILE source 
 cd - >/dev/null || exit
 
 # ══════════════════════════════════════════════════════════════════════════
-# ST11: scripts/verify/checkpoint-m.sh (G1) + scripts/verify/break-run.sh (G2)
-# Every fixture here is synthetic (mkrepo style) — never a reference to this
-# delivery's own files or numbers, per the Hardening section's own rule.
+# scripts/verify/checkpoint-m.sh + scripts/verify/break-run.sh
+# Every fixture here is synthetic (mkrepo style) — never a reference to any
+# one delivery's own files or numbers, per the Hardening section's own rule.
 # ══════════════════════════════════════════════════════════════════════════
 
 # ── checkpoint-m.sh: missing spec row fails ──────────────────────────────────
@@ -1341,7 +1340,7 @@ chmod +x "$W/br_check.sh"
 # Every fixture in this section lives under $W, deliberately outside any git
 # repository — plain scratch files break-run.sh's own mutate/restore/marker
 # mechanics are exercised against, never meant to model "the repo under
-# test". break-run.sh's containment check (ST11) resolves its cwd-fallback
+# test". break-run.sh's containment check resolves its cwd-fallback
 # base only when the invoking shell's cwd isn't itself a repo; without these
 # wrappers every fixture here would instead be judged against the real repo
 # this suite runs from and refused as "outside" it. `run_br` runs
@@ -1468,7 +1467,7 @@ out=$(bash "$V/spec-coverage.sh" "$W/sc-helper-spec.md" "$W/sc-helper" 2>&1); rc
 check "spec-coverage: a row named inside any test helper counts" 0 "$rc" "$out" "3/3"
 
 # ── spec-coverage.sh: a longer name does not satisfy a shorter row ──────────
-# The ST2 prefix lesson (TestParsesToken vs TestParsesTokenWithExpiry) has to
+# The prefix lesson (TestParsesToken vs TestParsesTokenWithExpiry) has to
 # survive the wider matcher too, not just the original language patterns.
 cat > "$W/sc-helper2-spec.md" <<'MD'
 | Test Name | Input | Expected |
@@ -1502,7 +1501,7 @@ check "spec-coverage: a row named only in a comment does not count" 1 "$rc" "$ou
 # ── break-run.sh: symlink target is refused ──────────────────────────────────
 # A --file that is a symlink must be refused before any copy or mutation —
 # following it would let a killed run corrupt whatever the link points to,
-# including a target outside the repository entirely (ST11 Stress CRITICAL).
+# including a target outside the repository entirely.
 brsym="$W/brsym"
 mkdir -p "$brsym"
 printf 'ENABLED=yes\n' > "$brsym/target.txt"
@@ -1533,7 +1532,7 @@ outside_after=$(cat "$W/brout-outside.txt")
 # ── break-run.sh: concurrent run on the same file is refused ────────────────
 # A plain `cp -p` over an existing marker let a second run silently overwrite
 # the first run's pristine copy — the one thing standing between an
-# interrupted run and a permanently mutated file (ST11 Stress MEDIUM).
+# interrupted run and a permanently mutated file.
 brconc="$W/brconc"
 mkdir -p "$brconc"
 printf 'ENABLED=yes\n' > "$brconc/cfg.txt"
@@ -1548,8 +1547,8 @@ rm -f "$brconc/cfg.txt.devkit-break"
 # ── break-run.sh: interrupted run leaves no temp output ─────────────────────
 # The test command's output is buffered through a mktemp file so on_interrupt
 # can kill the still-running command first; an interrupted run must not leave
-# that temp file behind (ST11 Stress LOW — they accumulated under repeated
-# interrupts).
+# that temp file behind — they accumulated under repeated
+# interrupts.
 brtmp="$W/brtmp"
 mkdir -p "$brtmp"
 printf 'ENABLED=yes\n' > "$brtmp/cfg.txt"
@@ -1585,8 +1584,8 @@ fi
 
 # ── spec-coverage.sh: an unrelated string literal does not count ────────────
 # The old generic matcher counted ANY quoted literal in the file — an
-# unrelated log line could satisfy a row that was never actually tested
-# (ST11 Stress HIGH). Only `FAIL: <name>` or a quoted name that is the first
+# unrelated log line could satisfy a row that was never actually tested.
+# Only `FAIL: <name>` or a quoted name that is the first
 # argument of a test-shaped call (check/expect/assert/test/it/describe/
 # should/verify/run in the callee name) may satisfy a row.
 cat > "$W/sc-unrelated-spec.md" <<'MD'

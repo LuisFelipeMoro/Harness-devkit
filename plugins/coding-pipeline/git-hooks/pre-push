@@ -55,7 +55,7 @@ jacoco_line_pct() {
 
 echo "→ Full quality gates before push..."
 
-# ── Release content guard (G7): session memory, handoff snapshots and
+# ── Release content guard: session memory, handoff snapshots and
 # generated test output must never be pushed ─────────────────────────────────
 # Resolved beside the hook first then $HOME/.claude/git-hooks/, exactly like
 # dup-gate.sh below. Guards exactly what git is about to publish: git invokes

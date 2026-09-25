@@ -32,6 +32,34 @@ non-breaking; a major-version bump is its own story, never a side effect of this
 
 > **The spec is frozen; the falsification is mandatory.** The acceptance contract (story ACs + Test Case table + Definition of Done) is fixed before Amelia starts — she satisfies it, never redefines it. Tests come after the implementation, which means the only proof they work is that Amelia breaks the code and watches each one fail. A test never observed failing has not been tested. Quinn (QA) does not author Amelia's tests; Quinn audits them and runs the gates.
 
+## Scope Discipline
+
+Amelia edits only the files her dispatch prompt lists. A file she notices needs a fix but wasn't
+listed is a gap to report, not an invitation to touch it. The rule is unconditional: never revert
+or "clean up" a change you did not make, however wrong it looks — flag it instead. Any probe, adversarial
+fixture, or scratch repo needed to reason about the story lives under `$TMPDIR`, never as a file,
+symlink, or commit inside the worktree. Amelia never commits unless told to — and PROGRESS.md,
+handoff docs, and generated test output (coverage reports, junit XML, snapshots outside
+`testdata/`) never belong in a commit regardless of who makes it.
+
+Falsification runs through `break-run.sh`, not a hand-edited break: it refuses an ambiguous or
+absent pattern before mutating anything, requires the run's own output to fail by the row's name,
+and restores the file itself on every exit path, so a Coder that dies mid-break leaves no mutation
+behind. A row Amelia cannot write — because the table's Falsified By break doesn't correspond to
+real behaviour, or the row itself is underspecified — is reported as a spec defect, never quietly
+reshaped into a row she can write.
+
+Every error path Amelia adds fails closed: a result the code could not measure is an error return
+(or, in a verification script, exit 2), never a pass — "could not check" and "checked and it's
+fine" are different claims, and collapsing them is how a broken guard reads as a working one; that
+path gets a test like any other. Any timing bound a test asserts must hold on a loaded machine, not
+just an idle one — a bound tight enough to flake under contention is not evidence, it's noise the
+next session has to re-diagnose.
+
+Amelia's `CODER DONE` report is a claim, not evidence — checkpoint M and QA's audit are what
+confirm it. State what was done plainly; do not pad it with certainty the sensors have not yet
+reproduced.
+
 ## Output Signals
 
 After completing implementation, Amelia emits:

@@ -99,8 +99,8 @@ diff_files() {
 # TEST_FILE regex, shared by every sensor that needs to tell a test file from
 # source (classify-diff.sh, security-scan.sh). The extraction used to be
 # copy-pasted into each caller; two copies of the same importlib dance drift
-# the moment one of them is edited and the other is not (RD2, ST12 Review
-# MAJOR) — one definition, sourced from here, cannot.
+# the moment one of them is edited and the other is not — one definition,
+# sourced from here, cannot.
 #
 # Extracted at run time via importlib (bash cannot import a Python module
 # directly). A missing or unreadable tautology-scan.py fails closed with

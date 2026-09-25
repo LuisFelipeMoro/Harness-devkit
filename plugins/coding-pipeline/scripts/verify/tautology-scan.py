@@ -47,8 +47,8 @@ SKIP_DIRS = {"node_modules", "vendor", ".git", "testdata", "__pycache__", "targe
 # shapes here; `*_test.sh` is already matched by `_test\.` above.
 TEST_FILE = re.compile(r"(_test\.|\.test\.|\.spec\.|test_|Test\.|_spec\.|\.bats$|^test-.*\.sh$)")
 
-# Extensions treated as source under a tests/ or test/ directory component
-# (G5): a file there is a test even with no naming-convention hit of its own,
+# Extensions treated as source under a tests/ or test/ directory component:
+# a file there is a test even with no naming-convention hit of its own,
 # but only when it is code — a fixture or data file (json/md/txt/yaml,
 # snapshots) is not a test just because it lives beside one.
 SOURCE_EXTS = {

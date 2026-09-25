@@ -19,7 +19,7 @@
 #      files changed                                                -> standard
 #   5. else                                                         -> light
 #
-# A symlink is never classified by its name (Stress ST2/ST3 class: a name-only
+# A symlink is never classified by its name (the same class as a name-only
 # rule lets a symlink disguise anything as anything) — it always counts as a
 # non-test source file, whatever it is named. Deletions are excluded from
 # diff-lib's own listing (--diff-filter=d — nothing left to scan) but must still
