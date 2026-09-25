@@ -1,15 +1,17 @@
 #!/bin/bash
-# Install git hooks into the current repo's .git/hooks/
+# Install git hooks into the repo's common git dir (shared by all worktrees)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "ERROR: not in a git repository"; exit 1; }
+HOOKS_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/hooks"
+mkdir -p "$HOOKS_DIR"
 
 for hook in pre-commit pre-push commit-msg; do
     if [ -f "$SCRIPT_DIR/$hook" ]; then
-        cp "$SCRIPT_DIR/$hook" "$REPO_ROOT/.git/hooks/$hook"
-        chmod +x "$REPO_ROOT/.git/hooks/$hook"
-        echo "✓ Installed: .git/hooks/$hook"
+        cp "$SCRIPT_DIR/$hook" "$HOOKS_DIR/$hook"
+        chmod +x "$HOOKS_DIR/$hook"
+        echo "✓ Installed: $HOOKS_DIR/$hook"
     fi
 done
 
@@ -24,9 +26,9 @@ done
 # to whole-repo/skipped mode.
 for helper in dup-gate.sh dup-attribution.py release-content-guard.sh base-lib.sh; do
     if [ -f "$SCRIPT_DIR/$helper" ]; then
-        cp "$SCRIPT_DIR/$helper" "$REPO_ROOT/.git/hooks/$helper"
-        chmod +x "$REPO_ROOT/.git/hooks/$helper"
-        echo "✓ Installed: .git/hooks/$helper"
+        cp "$SCRIPT_DIR/$helper" "$HOOKS_DIR/$helper"
+        chmod +x "$HOOKS_DIR/$helper"
+        echo "✓ Installed: $HOOKS_DIR/$helper"
     fi
 done
 
