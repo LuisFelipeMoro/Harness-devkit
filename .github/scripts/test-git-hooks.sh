@@ -364,6 +364,22 @@ else
     fail=1
 fi
 
+# Installing from inside a linked worktree: there `.git` is a file, not a
+# directory, so a hard-coded "$top/.git/hooks" path makes cp fail and, under
+# set -e, aborts the whole devkit install half-way. Hooks live in the common
+# git dir, shared by every worktree, which is where they must land.
+d="$(fixture install-worktree)"
+( cd "$d" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base \
+    && git worktree add -q wt >/dev/null 2>&1 )
+rc=0
+out="$(cd "$d/wt" && bash "$ROOT/plugins/coding-pipeline/git-hooks/install.sh" 2>&1)" || rc=$?
+if [ "$rc" = "0" ] && [ -x "$d/.git/hooks/pre-commit" ] && [ -x "$d/.git/hooks/release-content-guard.sh" ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: install: hooks install from a linked worktree — exit $rc, hooks missing from the common git dir: $out"
+    fail=1
+fi
+
 # Every tracked file of the real devkit repo, restaged in a throwaway repo —
 # a dry run over `git ls-files` that must pass: the guard must not false-fire
 # on the repo's own real sources or docs that merely mention PROGRESS.md.

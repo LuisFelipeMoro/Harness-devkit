@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.7.1] — 2026-09-25
+
+### Fixed
+
+- **Installing from inside a git worktree aborted half-way.** `git-hooks/install.sh` copied hooks to
+  `<toplevel>/.git/hooks/`, but in a linked worktree `.git` is a file, so `cp` failed with "Not a
+  directory" and `set -e` stopped the whole devkit install at step 3/5. Hooks now go to the repo's
+  common git dir (`git rev-parse --git-common-dir`), which every worktree shares, and the success
+  message prints where they actually landed.
+
+### Versions
+
+| Plugin | Version | Why |
+|---|---|---|
+| `coding-pipeline` | 2.7.0 → **2.7.1** | Hook installer fix. |
+
 ## [2.7.0] — 2026-09-25
 
 Half the subagent dispatches for the same guarantees, and a set of guards that close the ways a
