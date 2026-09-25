@@ -17,7 +17,12 @@ done
 # the hook, or the gate degrades to whole-repo mode on every push.
 # pre-push delegates the duplication gate to these; without them beside it the
 # gate degrades to UNENFORCED on any machine with no global ~/.claude/git-hooks.
-for helper in dup-gate.sh dup-attribution.py; do
+# release-content-guard.sh is called by both pre-commit and pre-push the
+# same way — missing it here leaves the guard inert on both. base-lib.sh's
+# resolve_base() is sourced by both dup-gate.sh and pre-push's fallback path —
+# missing it degrades dup-gate.sh's attribution and pre-push's manual-run guard
+# to whole-repo/skipped mode.
+for helper in dup-gate.sh dup-attribution.py release-content-guard.sh base-lib.sh; do
     if [ -f "$SCRIPT_DIR/$helper" ]; then
         cp "$SCRIPT_DIR/$helper" "$REPO_ROOT/.git/hooks/$helper"
         chmod +x "$REPO_ROOT/.git/hooks/$helper"

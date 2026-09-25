@@ -7,6 +7,11 @@
 
 > **RTK**: All commands below use `rtk` prefix. The `rtk hook claude` PreToolUse hook also intercepts every Bash call transparently — so even without an explicit prefix, RTK filters output. Use `rtk proxy <cmd>` when you need raw unfiltered output (debugging, structured parsing). Never prefix RTK meta-commands (`rtk gain`, `rtk discover`, `rtk proxy`) with `rtk` again.
 
+> **Every roster runs this mechanical checkpoint** — format, lint, build, existing tests, dup-gate,
+> vuln, and (standard/full) coverage/race — `cosmetic` through `full`, with no exceptions. What
+> scales with roster is which *agents* get dispatched on top of it (Reviewer, QA, Stress), never
+> these gates.
+
 ## Go
 | Gate | Command | Pass |
 |------|---------|------|
@@ -212,7 +217,7 @@ its Verdict.
 | Signal | Emitted by | Meaning | Pipeline action |
 |--------|-----------|---------|-----------------|
 | `CODER DONE` | Coder (Amelia) | Tests-first cycle complete, ready for QA audit | Route to Quinn |
-| `QA→REVIEWER APPROVAL` | QA (Quinn) | Audit passed, all gates green, coverage met | Route to Reviewer (and Stress in parallel) |
+| `QA→REVIEWER APPROVAL` | QA (Quinn) | Audit passed, all gates green, coverage met | Route to Reviewer; Stress only for roster `full` |
 | `QA→CODER BUG REPORT` | QA (Quinn) | Gate failed — implementation bug | Route to Amelia (count iteration) |
 | `QA→CODER TEST GAP` | QA (Quinn) | AC lacks a real test, or test is tautological/over-mocked | Route to Amelia (count iteration) |
 | `QA→CODER COVERAGE REQUEST` | QA (Quinn) | Coverage below threshold, implementation refactor needed | Route to Amelia (count iteration) |

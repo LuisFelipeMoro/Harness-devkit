@@ -172,31 +172,48 @@ hotfix/{slug}                            single fix, cut from main · PR → mai
 | `feat/{key}-{story-slug}` | `release/{slug}-{key}` | **Default, one per story.** The unit of review. | PR → its release branch (the story review) |
 | `hotfix/{slug}` | `main` | A single fix (`/bug-fix`). No release branch, no story branches. | PR → `main` |
 
+### Review mode: `pr` vs `local` (no GitHub remote, or `gh` unavailable)
+
+Decided **once per delivery**, at the first story's branch/commit step, and recorded in the
+delivery file header note and `PROGRESS.md`: mode is `pr` iff `git remote get-url origin` exits 0
+**and** `gh auth status` exits 0 **and** the human approved the first push below; otherwise `local`.
+A delivery never switches mode partway through — that would split the review trail across a PR
+thread and a file. In `local` mode every rule below still applies; only the *how* changes: a story
+branch is still cut and merged, it is only never pushed, and the reviewing agent writes its findings
+to `docs/deliveries/{key}/review-{story-slug}.md` (or `review-release.md`) instead of posting them
+via `gh pr review`.
+
 Rules:
 
 1. **Every delivery gets a release branch**, even a one-story delivery. It is the unit the final
    PR is opened from and the base every story branch is cut from.
-2. **Every story gets its own branch and its own PR into the release branch.** This is the default,
-   not an optimisation for large stories. The story PR is where `/pr-review` runs with the story's
-   ACs, Test Case table, Reuse Map and Blast Radius in context — the review that has the tightest
-   spec and the smallest diff, and therefore the one most likely to catch something. Merge with
+2. **Every story gets its own branch and, in `pr` mode, its own draft PR into the release branch.**
+   This is the default, not an optimisation for large stories. The story is reviewed by the
+   Reviewer agent dispatched with the story's ACs, Test Case table, Reuse Map and Blast Radius in
+   context — the tightest spec and the smallest diff, and therefore the review most likely to catch
+   something. There is no separate story-level `/pr-review` invocation: the Reviewer *is* that
+   review, posting inline on the PR (`pr` mode) or to the review file (`local` mode). Merge with
    `--no-ff` after the Verdict passes, so the story stays visible as a unit in the release history.
-   - The one exception is a story whose diff is genuinely trivial (a config value, a copy fix)
-     **and** which the manifest projected under ~50 lines. Commit those straight to the release
-     branch and say so — an exception taken silently is indistinguishable from the rule not being
-     followed.
-3. **Two reviews, different jobs, neither optional.** The story PR reviews the change against its
-   spec. The release PR reviews the delivery as one diff — cross-story duplication, plan drift, and
-   the Gaps block — which no story-level review can see. A finding at the release stage that a story
-   review should have caught is worth naming as such: it says the story spec was too loose.
+   - The one exception is a story whose roster is `cosmetic` (doc/style/copy only, no behaviour
+     change) **and** which the manifest projected under ~50 lines. Commit those straight to the
+     release branch and say so — an exception taken silently is indistinguishable from the rule not
+     being followed.
+3. **Two reviews, different jobs, neither optional.** The story review checks the change against its
+   own spec. The release PR review checks the delivery as one diff — cross-story duplication, plan
+   drift, and the Gaps block — which no story-level review can see. A finding at the release stage
+   that a story review should have caught is worth naming as such: it says the story spec was too
+   loose. The release review is always `/pr-review` in `pr` mode, or the equivalent file-based pass
+   in `local` mode — it never moves or disappears when story-level review changes.
 4. **Bug fixes bypass the release/story structure entirely.** `/bug-fix` cuts `hotfix/{slug}` from
    `main`, commits the fix and its RED-proven regression test, and opens a PR to `main`, reviewed
    there. No release branch, no story branches on top of one.
 5. **A PR to `main` may only be opened from a `release/*` or `hotfix/*` branch.** Never from a story
    branch, never from a detached worktree HEAD. Story PRs target the release branch and nothing else.
-6. **Every PR opens as a draft.** Promote with `gh pr ready` only after the reviewer pass on it
-   returns no findings; opening or promoting is the last automated step of its stage either way.
-   Report the URL and stop. Do not merge, do not enable auto-merge, and never push to `main`.
+6. **Every PR opens as a draft.** Promote with `gh pr ready` only after the reviewing agent's pass
+   on it returns no findings; opening or promoting is the last automated step of its stage either
+   way. Report the URL and stop. Do not merge, do not enable auto-merge, and never push to `main`.
+   In `local` mode there is no PR to open or promote — "no findings" in the review file is the
+   equivalent gate before the merge in step F.
 
 ### Commands
 
@@ -205,16 +222,21 @@ Rules:
 git checkout -b "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
   "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
 
-# story done (Verdict passed) — its own PR, reviewed against its own spec
+# story done (Verdict passed), pr mode — its own draft PR, reviewed inline by the Reviewer agent
 git push -u origin "feat/${DELIVERY_KEY}-${STORY_SLUG}"
 gh pr create --draft --base "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
   --head "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
   --title "${STORY_SLUG}" --body "Delivery-Key: ${DELIVERY_KEY} · Story: ${STORY_SLUG} …"
-# → run /pr-review on it; no findings → gh pr ready, then merge into the release branch once green
+# → Reviewer posts findings via `gh pr review`; no findings → gh pr ready, then merge into the
+#   release branch once green
 git checkout "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
 git merge --no-ff "feat/${DELIVERY_KEY}-${STORY_SLUG}"
 
-# delivery done — the terminal step
+# story done, local mode — no push, no PR; the Reviewer writes the same findings to a file
+# → docs/deliveries/{key}/review-${STORY_SLUG}.md; no findings → merge as above
+
+# delivery done — the terminal step (unchanged by review mode; local mode still opens no PR
+# until a remote exists — the human takes the file-based review trail from there)
 git push -u origin "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
 gh pr create --draft --base main --head "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
   --title "{Feature Name}" --body "Delivery-Key: ${DELIVERY_KEY} …"

@@ -1,6 +1,6 @@
 # Reference: PROGRESS.md — Harness Memory & Progress
 
-`PROGRESS.md` lives at the repo root. It is the devkit's cross-session memory: pipelines and `/handoff` append to it; the SessionStart bootstrap hook (`hooks/session-bootstrap.sh`) reads it so the next session starts with context instead of blind.
+`PROGRESS.md` lives at the repo root. It is the devkit's cross-session memory: pipelines and `/handoff` append to it; the SessionStart bootstrap hook (`hooks/session-bootstrap.sh`) reads it so the next session starts with context instead of blind. It is **git-ignored, local session state** — read straight off disk, never committed, and never part of the release content the guard checks.
 
 ## Schema
 

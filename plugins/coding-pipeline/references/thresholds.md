@@ -33,6 +33,24 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 | Tautological test | MAJOR — caps QA score at 4 |
 | Review/Stress score gap | > 3 → WARNING note, verdict unchanged |
 
+## Roster
+
+`scripts/verify/verdict.sh --roster R --classify-exit N` applies these lenses and floors on top of
+the Scores table above, which still governs `standard`/`full`/the roster-absent legacy path.
+
+| Roster | Lenses required | Score | Floors | Extra hard gates |
+|---|---|---|---|---|
+| (absent) | Review · Stress · QA | 35/35/30 (legacy) | Review ≥ 7 · Stress ≥ 7 | — |
+| `cosmetic` | none — any score flag given = exit 2 | n/a — gates only | — | `--hard-gate-fail`, `--critical-security > 0`, or `--classify-exit ≠ 0` → NOT READY |
+| `light` | Review · Stress; `--qa` given = exit 2 | (R·0.35 + S·0.35) / 0.70 | Review ≥ 7 · Stress ≥ 7 | orchestrator passes any non-zero spec-coverage/falsification/tautology-scan result as `--hard-gate-fail` |
+| `standard` | Review · Stress · QA — Stress is the Reviewer's folded lens | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+| `full` | Review · Stress · QA — Stress is a dispatched agent | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+
+`--classify-exit` is mandatory whenever `--roster` is given; a non-zero value is always NOT READY
+(`roster not verified (classify-diff exit N)`) regardless of score — an escalation the orchestrator
+has not resolved must never ship. `standard` never changes the outcome a legacy run would give for
+the same three scores; only the Stress label differs (`[folded]` vs `[dispatched]`).
+
 ## Limits
 
 | Thing | Limit |

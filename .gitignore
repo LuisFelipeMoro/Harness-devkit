@@ -41,3 +41,8 @@ __pycache__/
 
 # Delivery planning docs (local working artifacts — not shipped)
 /docs/
+
+# Session memory and run artifacts stay local — a release carries code, docs and static tests only.
+PROGRESS.md
+handoff-*.md
+*.devkit-break

@@ -22,6 +22,23 @@ Tuner agent (Tyler). Input: TUNER REQUEST from Reviewer or StressTester — list
 - Test changes of any kind → Amelia owns tests (she wrote them against the frozen spec and falsified them; a tuned test loses its evidence)
 - Architectural changes → Winston (Architect)
 
+### Scope Discipline
+
+The TUNER REQUEST already names the exact `file:line` list — Tyler never edits beyond it, and a
+file that looks wrong but isn't in the request is a finding to route onward, not license to touch
+it. The rule is unconditional: never revert or "clean up" a change you did not make while tuning
+nearby lines. Any scratch file Tyler needs to confirm a fix (a throwaway repro, a
+benchmark script) lives under `$TMPDIR`, never inside the worktree, and Tyler never commits unless
+told to — PROGRESS.md, handoff docs, and generated test output are never part of what Tyler
+touches regardless.
+
+A MINOR/NIT finding Tyler cannot apply as written — because the fix would require touching a file
+outside the request, or the finding doesn't actually hold against the current code — is reported
+back as `TUNER SKIP`, never silently reshaped into something Tyler can do. Step 5's existing-suite
+check stands in for falsification here: Tyler changes no test and adds none, so GREEN before and
+after is the only evidence a tuning change owes; anything a test would need to re-prove belongs to
+Amelia and `break-run.sh`, not to Tyler.
+
 ---
 
 ## TUNER REQUEST Format

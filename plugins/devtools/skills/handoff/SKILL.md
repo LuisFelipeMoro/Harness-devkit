@@ -5,7 +5,7 @@ description: 'Use when ending a long session or switching context. Compacts the 
 
 Compact the conversation into a single, standalone handoff document. Save to `/tmp/handoff-<YYYY-MM-DD-HHMMSS>.md`. Print the path and a 3-line summary.
 
-Also update the Harness memory file: write/refresh `PROGRESS.md` at the repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons` — schema in `references/progress-file.md`). The `/tmp` handoff is the rich narrative; `PROGRESS.md` is the durable, committed state the SessionStart bootstrap hook reads next session. The two must agree.
+Also update the Harness memory file: write/refresh `PROGRESS.md` at the repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons` — schema in `references/progress-file.md`). The `/tmp` handoff is the rich narrative; `PROGRESS.md` is the durable, **git-ignored**, local session state the SessionStart bootstrap hook reads next session — it is never committed. The two must agree.
 
 ## Rules
 

@@ -16,7 +16,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 errors = []
-checked = {"manifest": 0, "hook": 0, "link": 0, "agent": 0, "skill": 0, "routing": 0, "desc": 0}
+checked = {"manifest": 0, "hook": 0, "link": 0, "agent": 0, "skill": 0, "routing": 0, "desc": 0, "contract": 0}
 
 
 def err(kind, where, msg):
@@ -207,6 +207,195 @@ for name, pdir in declared.items():
             continue
         if not QUOTED_PHRASE.search(dm.group(1).strip()):
             err("desc", rel(skill_md), "description carries no quoted trigger phrase")
+
+# ── 7. contract: dispatch and coding-pipeline naming conventions ────────────────
+# §7 is the host where later sub-tasks extend with rows for loop.md, agents, skills.
+# dispatch.md guards against the generic-agent regression that dropped model assignment.
+# Data-driven contract: (path, must_contain: list[str], must_not: list[str])
+CONTRACT = [
+    ("plugins/coding-pipeline/skills/bug-fix/references/dispatch.md",
+     ["subagent_type: \"bug-investigator\"", "subagent_type: \"coder\""],
+     ["subagent_type: \"claude\""]),
+
+    # loop.md diff scope and checkpoint structure (multi-agent)
+    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+     ["git diff --name-only release/{slug}-{key}...HEAD",
+      "Fail fast", "no QA, Reviewer or Stress dispatch",
+      "TEST GAP", "Coder", "never straight to D",
+      "back to M",
+      "QA re-audits only if tests changed", "confirmation",
+      "run every mechanical check", "all failures",
+      "3 round trips", "ask the operator",
+      "security-scan.sh --diff", "tautology-scan.py --diff",
+      "classify-diff.sh --diff",
+      "roster `full`",
+      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
+      "≥ 2 manifest rows",
+      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
+      "dup-gate.sh --worktree"],
+     ["/pr-review", "Review + Stress in parallel"]),
+
+    # loop.md diff scope and checkpoint structure (task)
+    ("plugins/coding-pipeline/skills/task/references/loop.md",
+     ["git diff --name-only release/{slug}-{key}...HEAD",
+      "Fail fast", "no QA, Reviewer or Stress dispatch",
+      "TEST GAP", "Coder", "never straight to D",
+      "back to M",
+      "QA re-audits only if tests changed", "confirmation",
+      "run every mechanical check", "all failures",
+      "3 round trips", "ask the operator",
+      "security-scan.sh --diff", "tautology-scan.py --diff",
+      "classify-diff.sh --diff",
+      "roster `full`",
+      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
+      "≥ 2 manifest rows",
+      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
+      "dup-gate.sh --worktree"],
+     ["/pr-review", "Review + Stress in parallel"]),
+
+    # agents (reviewer stress lens and routing)
+    ("plugins/coding-pipeline/agents/reviewer.md",
+     ["Stress Score:", "agents/stress.md",
+      "Do not re-run",
+      "security-scan.sh --diff",
+      "gh pr review", "review-{story-slug}.md"],
+     []),
+
+    # stress conditional
+    ("plugins/coding-pipeline/agents/stress.md",
+     ["roster `full`", "Folded mode"],
+     []),
+
+    # qa and gate routing
+    ("plugins/coding-pipeline/agents/qa.md",
+     [],
+     ["StressTester in parallel"]),
+
+    ("plugins/coding-pipeline/references/quality-gate-reference.md",
+     [],
+     ["(and Stress in parallel)"]),
+
+    # verdict roster
+    ("plugins/coding-pipeline/agents/verdict.md",
+     ["--roster", "--classify-exit"],
+     []),
+
+    # thresholds roster
+    ("plugins/coding-pipeline/references/thresholds.md",
+     ["## Roster"],
+     []),
+
+    # skills, standards, references (no story pr-review; task and multi-agent only)
+    ("plugins/coding-pipeline/skills/task/SKILL.md",
+     ["release", "/pr-review"],
+     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
+
+    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+     ["release", "/pr-review"],
+     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
+
+    # manifest roster column
+    ("plugins/coding-pipeline/skills/planning/references/phases.md",
+     ["| Tier | Roster |"],
+     []),
+
+    # claude roster table
+    ("plugins/coding-pipeline/CLAUDE.md",
+     ["| Roster |", "classify-diff"],
+     []),
+
+    # worktree local mode
+    ("plugins/coding-pipeline/references/delivery-and-worktree.md",
+     ["local"],
+     ["run /pr-review on it; no findings → gh pr ready, then merge"]),
+
+    # readme no story pr-review and roster
+    ("README.md",
+     ["classify-diff", "roster `full`", "≥ 2 manifest rows"],
+     ["PER-STORY REVIEW", "REVIEW (parallel"]),
+
+    # planning offers execution options
+    ("plugins/coding-pipeline/skills/planning/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
+
+    ("plugins/coding-pipeline/skills/task/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
+
+    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+     ["Execution options", "--manifest"],
+     []),
+
+    # README describes what the release ships (checkpoint-m.sh, break-run.sh,
+    # release-content guard, execution-options rework ranges), never tells the operator
+    # to commit PROGRESS.md
+    ("README.md",
+     ["checkpoint-m.sh", "break-run.sh", "release-exclude", "with rework"],
+     ["commit PROGRESS.md"]),
+
+    # agent scope guards: $TMPDIR for probes/scratch, break-run.sh for
+    # falsification, never revert/"clean up" a change the agent did not make
+    ("plugins/coding-pipeline/agents/coder.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/qa.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/stress.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+    ("plugins/coding-pipeline/agents/tuner.md",
+     ["$TMPDIR", "break-run.sh", "never revert"],
+     []),
+
+    # loop.md: checkpoint M is checkpoint-m.sh, not a hand-run list;
+    # falsification is break-run.sh
+    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+     ["checkpoint-m.sh", "break-run.sh"],
+     []),
+    ("plugins/coding-pipeline/skills/task/references/loop.md",
+     ["checkpoint-m.sh", "break-run.sh"],
+     []),
+
+    # PROGRESS.md is local memory: git-ignored, never committed state
+    ("plugins/coding-pipeline/references/progress-file.md",
+     ["git-ignored"],
+     ["committed state"]),
+    ("plugins/devtools/skills/handoff/references/progress-file.md",
+     ["git-ignored"],
+     ["committed state"]),
+    ("plugins/devtools/skills/handoff/SKILL.md",
+     ["git-ignored"],
+     ["committed state"]),
+]
+
+# Each contract row is checked against its own file
+for path, must_contain, must_not in CONTRACT:
+    checked["contract"] += 1
+    full = os.path.join(ROOT, path)
+    if not os.path.isfile(full):
+        err("contract", path, "file missing")
+        continue
+    text = read(full)
+    for phrase in must_contain:
+        if phrase not in text:
+            err("contract", path, f"must contain '{phrase}'")
+    for phrase in must_not:
+        if phrase in text:
+            err("contract", path, f"must not contain '{phrase}'")
+
+# Glob check: no md files under plugins/coding-pipeline/ contain subagent_type: "claude"
+coding_pipeline_dir = os.path.join(ROOT, "plugins/coding-pipeline")
+checked["contract"] += 1
+for dirpath, dirnames, filenames in os.walk(coding_pipeline_dir):
+    for fn in filenames:
+        if not fn.endswith(".md"):
+            continue
+        path = os.path.join(dirpath, fn)
+        text = read(path)
+        if "subagent_type: \"claude\"" in text:
+            err("contract", rel(path), "must not contain 'subagent_type: \"claude\"'")
 
 print(f"checked: {checked}")
 if errors:

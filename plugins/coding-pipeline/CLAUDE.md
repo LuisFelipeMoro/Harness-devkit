@@ -100,10 +100,11 @@ Rules:
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.
-- **Three dispatches per story is the target shape** — Coder, QA, Reviewer. That is the agile
-  equivalent: one implementer, one independent test auditor (earned, because tests are written
-  after the code), one reviewer of the PR diff. Story generation is a template fill, the verdict is
-  arithmetic, and a second reviewer of the same diff finds what the first one did.
+- **Three dispatches per story is the target shape for roster `standard`** — Coder, QA, Reviewer;
+  a lighter or heavier roster dispatches fewer or more (see the Roster table under Proportionality).
+  That is the agile equivalent: one implementer, one independent test auditor (earned, because
+  tests are written after the code), one reviewer of the PR diff. Story generation is a template
+  fill, the verdict is arithmetic, and a second reviewer of the same diff finds what the first one did.
 - **Before dispatching, ask whether a sensor answers it.** `scripts/verify/*.sh` cover spec
   coverage, falsification evidence, mechanical tautologies, security candidates and the verdict
   arithmetic; grep answers "where is X" and "does this pattern exist" for the price of a tool call.
@@ -194,18 +195,26 @@ legible → durable → small, with every finding naming its cost) · never comm
 the session hooks.
 There is no "too small to test" and no "too small to gate."
 
-**Scales — pick the lightest lane that fits:**
+**Scales — pick the lightest roster that fits.** Lane and roster are one concept: the manifest's
+`Roster` column (`cosmetic · light · standard · full`) is what a story declares, and
+`classify-diff.sh` verifies it against the real diff — it only escalates, never de-escalates.
+**Mechanical gates run on every roster, with no exception** — format, lint, existing tests,
+dup-gate, vuln; what scales is which *agents* get dispatched, never whether the gates run.
 
-| Lane | When | Ceremony |
-|------|------|----------|
-| Trivial | No behaviour change: docs, comments, formatting, or a rename whose callers the compiler verifies | No spec table, no new tests, no delivery file. Run the gates, state the lane. |
-| Inline spec-first | Behaviour change, ≤2 files, no new dependency or external surface | Test Case table inline → implement → test → falsify → `/code-review-gate` |
-| `/task` | One focused feature or a change spanning >2 files | Architecture pass + sub-task loop |
-| `/multi-agent` | Epic, greenfield, or anything needing a PRD | Full pipeline, delivery file, worktree |
+| Roster | = Lane | When | Dispatches |
+|------|------|------|------|
+| `cosmetic` | Trivial | doc/style/copy files only — no behaviour change | Coder (haiku) only; no spec table, no new tests, no delivery file |
+| `light` | Inline spec-first | behaviour change, ≤2 non-test source files, no dependency change, no trigger tag | Coder + Reviewer (folded Stress lens); Test Case table inline → implement → test → falsify |
+| `standard` | `/task` sub-task | default — one focused feature or a change spanning >2 files | Coder + QA + Reviewer (folded Stress lens) |
+| `full` | — | any trigger tag, or Architect-declared shared state | Coder + QA + Reviewer + StressTester |
 
-**State the lane before starting** — "Trivial: comment fix, gates only." An unstated lane
-defaults to the heavier one. Picking Trivial for something that changes behaviour is itself a
-finding, so when the lane is arguable, take the heavier one and say why.
+`/multi-agent` (epic, greenfield, or anything needing a PRD) runs the full pipeline, delivery
+file, and worktree regardless of roster — roster there is decided per manifest row, not for the
+delivery as a whole.
+
+**State the roster before starting** — "cosmetic: comment fix, gates only." An unstated roster
+defaults to the heavier one. Picking `cosmetic` for something that changes behaviour is itself a
+finding, so when the roster is arguable, take the heavier one and say why.
 
 This does not loosen skill routing: the rule above — *a task that "feels simple" is not an
 exception* — still holds. A lane sets how much spec and artifact ceremony a change carries,
