@@ -19,6 +19,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 devkit_hook_enabled "pre:agent:dispatch-budget" || exit 0
 
 input=$(cat)
+
+# ── prompt-size warning (G3) — oversized single prompts stalled dispatches ───
+# Advisory only, per dispatch (no session latch): a prompt is either too big
+# this time or it is not. DEVKIT_PROMPT_MAX_CHARS/DEVKIT_PROMPT_MAX_FILES tune
+# the thresholds; devkit_field is the one JSON reader every hook shares.
+prompt="$(devkit_field "$input" tool_input.prompt)"
+if [ -n "$prompt" ]; then
+    prompt_max_chars="${DEVKIT_PROMPT_MAX_CHARS:-6000}"
+    prompt_max_files="${DEVKIT_PROMPT_MAX_FILES:-8}"
+    prompt_chars=${#prompt}
+    # File-path-shaped tokens: at least one path separator, ending in a
+    # dotted extension. A heuristic, not a parser — good enough to flag "this
+    # prompt names a pile of files", not to enumerate them precisely.
+    prompt_files=$(printf '%s' "$prompt" \
+        | grep -oE '[A-Za-z0-9_.~/-]*/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+' \
+        | sort -u | wc -l | tr -d ' ')
+    if [ "$prompt_chars" -gt "$prompt_max_chars" ] || [ "$prompt_files" -gt "$prompt_max_files" ]; then
+        echo "devkit dispatch-budget: prompt is ${prompt_chars} chars and names ${prompt_files} distinct \
+file paths (limits: ${prompt_max_chars} chars / ${prompt_max_files} files) — split the task."
+    fi
+fi
+
 state="$(devkit_state_dir "$input")" || exit 0
 
 printf 'x' >> "$state/dispatches"

@@ -220,5 +220,31 @@ out=$(dsp)
 expect "dispatch never blocks" dispatch-budget.sh '{"session_id":"dsp"}' 0 DEVKIT_DISPATCH_BUDGET=1
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
 
+# ── dispatch-budget: prompt-size warning (G3) ─────────────────────────────────
+# Independent of the dispatch-count latch above: this fires per invocation on
+# tool_input.prompt itself, read through hook-lib's devkit_field.
+prompt_payload() {   # prompt_payload <python-expr-for-prompt-string> <session>
+    python3 -c "
+import json
+print(json.dumps({'session_id': '$2', 'tool_input': {'prompt': $1}}))
+"
+}
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspp1" "${TMPDIR:-/tmp}/claude-devkit/dspp2" "${TMPDIR:-/tmp}/claude-devkit/dspp3"
+
+out=$(prompt_payload "'a' * 7000" dspp1 | bash "$HOOKS/dispatch-budget.sh" 2>&1)
+case "$out" in *split*) pass=$((pass + 1)) ;;
+    *) echo "FAIL: dispatch-budget: oversized prompt warns — got: $out"; fail=1 ;; esac
+
+nine_files="'edit src/a.go src/b.go src/c.go src/d.go src/e.go src/f.go src/g.go src/h.go src/i.go'"
+out=$(prompt_payload "$nine_files" dspp2 | bash "$HOOKS/dispatch-budget.sh" 2>&1)
+case "$out" in *split*) pass=$((pass + 1)) ;;
+    *) echo "FAIL: dispatch-budget: prompt naming many files warns — got: $out"; fail=1 ;; esac
+
+normal="'x' * 480 + ' see src/a.go and src/b.go'"
+out=$(prompt_payload "$normal" dspp3 | bash "$HOOKS/dispatch-budget.sh" 2>&1)
+case "$out" in *split*) echo "FAIL: dispatch-budget: normal prompt is silent — got: $out"; fail=1 ;;
+    *) pass=$((pass + 1)) ;; esac
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspp1" "${TMPDIR:-/tmp}/claude-devkit/dspp2" "${TMPDIR:-/tmp}/claude-devkit/dspp3"
+
 echo "hook tests: $pass passed, exit=$fail"
 exit $fail

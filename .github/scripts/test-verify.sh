@@ -993,6 +993,83 @@ MD
 out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
+# ══════════════════════════════════════════════════════════════════════════
+# Batch B (2c9fee) — ST12 G4 (bench-context.py REWORK) · G5 (tautology-scan
+# TEST_FILE) — synthetic fixtures only, no reference to this delivery's own
+# numbers or file names.
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── G4: bench-context.py --manifest shows a with-rework range ───────────────
+out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
+check "bench: manifest shows with-rework range" 0 "$rc" "$out" "with rework"
+with_rework_lines=$(printf '%s' "$out" | grep -c "with rework" || true)
+[ "$with_rework_lines" -ge 3 ] && pass=$((pass + 1)) \
+    || { echo "FAIL: bench: manifest shows with-rework range — expected 3 option rows, got $with_rework_lines"; fail=1; }
+
+out=$(python3 -c "
+import sys
+sys.dont_write_bytecode = True
+import importlib.util
+spec = importlib.util.spec_from_file_location('bench', '$BENCH')
+bench = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bench)
+
+# Fixture REWORK with 'light' unsampled (n=0) — everything else sampled.
+fixture_rework = {
+    'full': (1.5, 3),
+    'standard': (1.3, 1),
+    'light': (1.2, 0),   # unsampled
+    'cosmetic': (1.0, 2),
+}
+rosters = bench.parse_manifest_rosters('$manifest_fixture')
+options = bench.compute_options(rosters, rework=fixture_rework)
+print(bench.render_manifest(rosters, options, rework=fixture_rework))
+" 2>&1); rc=$?
+check "bench: rework factor labelled measured or assumed — fixture REWORK provided" 0 "$rc" "$out" "assumed"
+light_line=$(printf '%s' "$out" | grep '| light ' || true)
+case "$light_line" in *measured*) echo "FAIL: bench: rework factor labelled measured or assumed — light row says measured instead of assumed"; fail=1 ;;
+    *) pass=$((pass + 1)) ;; esac
+
+# ── G5: tautology-scan.py TEST_FILE — bats, hyphenated test-*.sh, tests/ dir ─
+mkdir -p "$W/g5-shapes/tests"
+printf 'echo hi\n' > "$W/g5-shapes/test-x.sh"
+printf 'func TestX(t *testing.T) {}\n' > "$W/g5-shapes/x_test.go"
+printf '@test "x" { true; }\n' > "$W/g5-shapes/a.bats"
+printf 'echo hi\n' > "$W/g5-shapes/tests/t.sh"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-shapes" 2>&1); rc=$?
+check "tautology-scan: shell and bats test names are tests" 0 "$rc" "$out" "4 test file(s)"
+
+mkdir -p "$W/g5-data/tests/fixtures"
+printf '{}\n' > "$W/g5-data/tests/fixtures/data.json"
+printf '# notes\n' > "$W/g5-data/tests/README.md"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-data" 2>&1); rc=$?
+check "tautology-scan: data under tests/ is not a test" 2 "$rc" "$out" "UNMEASURED"
+
+mkdir -p "$W/g5-vendor/vendor/tests"
+printf 'echo hi\n' > "$W/g5-vendor/vendor/tests/t.sh"
+out=$(python3 "$V/tautology-scan.py" "$W/g5-vendor" 2>&1); rc=$?
+check "tautology-scan: skip dirs still win over tests/" 2 "$rc" "$out" "UNMEASURED"
+
+# security-scan diff-mode kept its own narrower test-file regex
+# (_test.|.test.|.spec.), so a hyphenated test-*.sh or a .bats fixture file
+# was scanned as source — a fixture string like "eval(x)" inside it read as
+# a real candidate and escalated classify-diff to `full`. It must reuse
+# tautology-scan.py's TEST_FILE the way classify-diff.sh already does, and a
+# genuine source hit in the same diff must still be reported.
+repoTF="$W/repoTF"
+mkrepo "$repoTF"
+cd "$repoTF" || exit
+printf 'run_case "rejects eval(x) input"\n' > test-x.sh
+printf '@test "rejects eval(x)" { false; }\n' > a.bats
+printf 'eval(x)\n' > app.js
+git -c user.email=t@t -c user.name=t add test-x.sh a.bats app.js
+git -c user.email=t@t -c user.name=t commit -q -m "feat: add test fixtures and real source"
+out=$(bash "$V/security-scan.sh" --diff release/x-abc 2>&1); rc=$?
+check "security-scan: test files use the shared TEST_FILE definition" 0 "$rc" "$out" "app.js:1"
+case "$out" in *test-x.sh*) echo "FAIL: security-scan: test files use the shared TEST_FILE definition — test-x.sh leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+case "$out" in *a.bats*) echo "FAIL: security-scan: test files use the shared TEST_FILE definition — a.bats leaked into output"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
+cd - >/dev/null || exit
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

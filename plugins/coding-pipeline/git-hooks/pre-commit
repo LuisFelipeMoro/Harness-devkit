@@ -13,6 +13,16 @@ is_android_gradle() {
         || grep -q 'android {' build.gradle.kts 2>/dev/null
 }
 
+# ── Release content guard (G7): session memory, handoff snapshots and
+# generated test output must never enter a commit ───────────────────────────
+guard="$(dirname "$0")/release-content-guard.sh"
+[ -f "$guard" ] || guard="$HOME/.claude/git-hooks/release-content-guard.sh"
+if [ ! -f "$guard" ]; then
+    echo "WARN: release-content-guard.sh not found beside the hook — release content UNENFORCED. Re-run: bash ~/.claude/git-hooks/install.sh"
+else
+    bash "$guard" --staged || exit 1
+fi
+
 # Go
 if [ -f go.mod ]; then
     echo "→ Go: format"

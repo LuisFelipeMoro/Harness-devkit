@@ -1,0 +1,31 @@
+# release-content-guard.sh (G7) patterns — one glob per line, # comments and
+# blank lines ignored. A path matching any pattern here is rejected from a
+# commit (pre-commit --staged) or a push (pre-push --range) — content is never
+# inspected, only the path. Extend this file per-repo; the guard itself never
+# hard-codes a pattern of its own.
+
+# Session memory — local only, read from disk by the SessionStart hook, never
+# committed (references/progress-file.md).
+PROGRESS.md
+
+# A generated handoff snapshot (skills/handoff), timestamped by the skill that
+# writes it — not the skill's own template, which is legitimately tracked.
+**/handoff-[0-9]*.md
+
+# A break-run.sh mutation marker left behind by a dead falsification run.
+*.devkit-break
+
+# Generated test output — produced by running the suite, never a static test
+# source. A file under a testdata/ directory is a fixture, not output, and is
+# never matched by these patterns. `**/` makes these depth-agnostic — a
+# report nested under a module directory is still caught, not just one at the
+# repo root; *.lcov, *.pyc and *.devkit-break already cross `/` on their own
+# since the guard matches paths, not filenames.
+**/coverage.out
+*.lcov
+**/coverage/**
+**/junit*.xml
+**/test-results/**
+**/.pytest_cache/**
+**/__pycache__/**
+*.pyc

@@ -43,7 +43,33 @@ SKIP_DIRS = {"node_modules", "vendor", ".git", "testdata", "__pycache__", "targe
 # Test-file shape, shared by the positional walk and diff-mode filtering — a
 # single source so a future consumer (e.g. classify-diff.sh) names one pattern,
 # not a second copy that can drift from this one.
-TEST_FILE = re.compile(r"(_test\.|\.test\.|\.spec\.|test_|Test\.|_spec\.)")
+# `.bats` (bats-core shell tests) and hyphenated `test-*.sh` join the naming
+# shapes here; `*_test.sh` is already matched by `_test\.` above.
+TEST_FILE = re.compile(r"(_test\.|\.test\.|\.spec\.|test_|Test\.|_spec\.|\.bats$|^test-.*\.sh$)")
+
+# Extensions treated as source under a tests/ or test/ directory component
+# (G5): a file there is a test even with no naming-convention hit of its own,
+# but only when it is code — a fixture or data file (json/md/txt/yaml,
+# snapshots) is not a test just because it lives beside one.
+SOURCE_EXTS = {
+    "py", "js", "ts", "tsx", "jsx", "go", "rs", "java", "kt", "rb", "php",
+    "sh", "bash", "dart", "cs", "swift",
+}
+
+
+def is_test_file(path: str) -> bool:
+    """True when `path` is a test source: it matches TEST_FILE's naming
+    shapes, or it sits under a tests/ or test/ directory component and has a
+    source extension. SKIP_DIRS is applied by the caller (os.walk pruning for
+    the positional walk, in_skip_dir() for diff mode) — this function does not
+    re-check it, so a skip-dir path never reaches here in the first place."""
+    base = os.path.basename(path)
+    if TEST_FILE.search(base):
+        return True
+    ext = os.path.splitext(base)[1].lstrip(".").lower()
+    if ext not in SOURCE_EXTS:
+        return False
+    return "tests" in path.split(os.sep) or "test" in path.split(os.sep)
 
 
 def in_skip_dir(path: str) -> bool:
@@ -156,8 +182,9 @@ def walk(paths):
         for root, dirs, files in os.walk(p):
             dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
             for f in files:
-                if TEST_FILE.search(f):
-                    yield os.path.join(root, f)
+                full = os.path.join(root, f)
+                if is_test_file(full):
+                    yield full
 
 
 def scan(path, hits, unmeasured):
@@ -213,7 +240,7 @@ def main(argv):
             return 2
         seen = [
             f for f in result
-            if TEST_FILE.search(os.path.basename(f)) and not in_skip_dir(f)
+            if is_test_file(f) and not in_skip_dir(f)
         ]
         if not seen:
             print("TAUTOLOGY-SCAN: UNMEASURED — no test file in diff", file=sys.stderr)

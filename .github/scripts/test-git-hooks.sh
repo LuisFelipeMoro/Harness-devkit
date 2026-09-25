@@ -252,26 +252,38 @@ run_gate() {        # run_gate <fixture-dir> [args] — exit code of dup-gate.sh
     ( cd "$dir" && PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" "$@" >/dev/null 2>&1 )
 }
 
+# The assertions below (through the missing-jscpd check) capture `rc=$?` right
+# after each command and branch on it, instead of `cmd; [ "$?" = ... ]` /
+# `gate_check ... $?` — shellcheck flags the latter shape (SC2181-style:
+# checking $? in a separate statement, then letting a later command's exit
+# status leak into `gate_check`'s argument). No behaviour change.
+#
 # Attribution reads base...HEAD, so a clone that is only on disk is invisible to it
 # unless the snapshot commits it. This is the whole reason the flag exists.
 d="$(dup_fixture dup-wip)"
 seq 1 30 | sed 's/^/wip line /' > "$d/wip.txt"
 dup_stub "$d" wip.txt 1 30
 before_status="$(git -C "$d" status --porcelain)"; before_head="$(git -C "$d" rev-parse HEAD)"
-run_gate "$d" --worktree; [ "$?" = "1" ]
-gate_check "worktree mode blocks a clone that is not committed yet" $?
+run_gate "$d" --worktree; rc=$?
+if [ "$rc" = "1" ]; then ok=0; else ok=1; fi
+gate_check "worktree mode blocks a clone that is not committed yet" "$ok"
 
 # A gate is a read: the caller's tree, index, HEAD and worktree list come back as
 # they were. A leaked worktree or commit is a mutation nobody asked for.
-[ "$(git -C "$d" status --porcelain)" = "$before_status" ] \
+if [ "$(git -C "$d" status --porcelain)" = "$before_status" ] \
     && [ "$(git -C "$d" rev-parse HEAD)" = "$before_head" ] \
-    && [ "$(git -C "$d" worktree list | wc -l | tr -d ' ')" = "1" ]
-gate_check "worktree mode leaves the repo exactly as it found it" $?
+    && [ "$(git -C "$d" worktree list | wc -l | tr -d ' ')" = "1" ]; then
+    ok=0
+else
+    ok=1
+fi
+gate_check "worktree mode leaves the repo exactly as it found it" "$ok"
 
 # Without the flag the gate measures commits — what pre-push is about to send —
 # so local work in progress is not charged to the push.
-run_gate "$d"; [ "$?" = "0" ]
-gate_check "default mode does not charge uncommitted work" $?
+run_gate "$d"; rc=$?
+if [ "$rc" = "0" ]; then ok=0; else ok=1; fi
+gate_check "default mode does not charge uncommitted work" "$ok"
 
 # From a subdirectory the snapshot must still place new files at their repo path;
 # a cwd-relative untracked list dropped sub/wip.txt at the snapshot root, where
@@ -279,14 +291,201 @@ gate_check "default mode does not charge uncommitted work" $?
 d="$(dup_fixture dup-subdir)"
 mkdir -p "$d/sub"; seq 1 30 | sed 's/^/sub line /' > "$d/sub/wip.txt"
 dup_stub "$d" sub/wip.txt 1 30
-( cd "$d/sub" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" --worktree >/dev/null 2>&1 ); [ "$?" = "1" ]
-gate_check "worktree mode from a subdirectory snapshots files at their repo path" $?
+( cd "$d/sub" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" --worktree >/dev/null 2>&1 ); rc=$?
+if [ "$rc" = "1" ]; then ok=0; else ok=1; fi
+gate_check "worktree mode from a subdirectory snapshots files at their repo path" "$ok"
 
 # Called explicitly, a missing tool is exit 2, never 0: /quality-gate must be able
 # to tell "clean" from "never measured".
 d="$(fixture dup-gate-missing)"
-run_gate "$d" --worktree; [ "$?" = "2" ]
-gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" $?
+run_gate "$d" --worktree; rc=$?
+if [ "$rc" = "2" ]; then ok=0; else ok=1; fi
+gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" "$ok"
+
+# ── release-content-guard.sh (G7): PROGRESS.md, handoff snapshots and
+# generated test output must never enter a commit or a push ─────────────────
+# guard_repo <name> — a git repo carrying the real .devkit/release-exclude
+# (committed), so the guard has patterns to check against.
+guard_repo() {
+    local dir; dir="$(fixture "$1")"
+    ( cd "$dir" || exit 1
+      git init -q .; git config user.email t@t; git config user.name t
+      git config commit.gpgsign false
+      mkdir -p .devkit
+      cp "$ROOT/.devkit/release-exclude" .devkit/release-exclude
+      git add -A >/dev/null && git commit -qm base
+      git branch -M main )
+    printf '%s' "$dir"
+}
+
+# expect_exit_says <name> <hook> <dir> <want-exit> <needle> — one row, one
+# assertion: both the exit code and that the offending path was actually named.
+expect_exit_says() {
+    local name="$1" hook="$2" dir="$3" want="$4" needle="$5" out got ok
+    out="$(run_hook "$hook" "$dir")"; got=$?
+    ok=1
+    [ "$got" = "$want" ] || ok=0
+    case "$out" in *"$needle"*) ;; *) ok=0 ;; esac
+    if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+        echo "FAIL: $name — exit $got (want $want), missing '$needle' — got: $out"; fail=1
+    fi
+}
+
+d="$(guard_repo guard-progress)"
+printf 'session notes\n' > "$d/PROGRESS.md"
+( cd "$d" && git add PROGRESS.md )
+expect_exit_says "release-guard: PROGRESS.md cannot be committed" pre-commit "$d" 1 "PROGRESS.md"
+
+d="$(guard_repo guard-handoff)"
+mkdir -p "$d/docs"; printf 'snapshot\n' > "$d/docs/handoff-2026-01-01.md"
+( cd "$d" && git add docs/handoff-2026-01-01.md )
+expect_exit_says "release-guard: handoff doc cannot be committed" pre-commit "$d" 1 "docs/handoff-2026-01-01.md"
+
+d="$(guard_repo guard-coverage)"
+printf 'mode: atomic\n' > "$d/coverage.out"
+( cd "$d" && git add coverage.out && git commit -qm "oops: generated coverage" )
+expect_exit_says "release-guard: generated test output cannot be pushed" pre-push "$d" 1 "coverage.out"
+
+d="$(guard_repo guard-static-tests)"
+mkdir -p "$d/tests"
+printf 'def test_x(): pass\n' > "$d/tests/test_x.py"
+printf 'func TestX(t *testing.T) {}\n' > "$d/a_test.go"
+printf 'echo hi\n' > "$d/test-x.sh"
+( cd "$d" && git add tests/test_x.py a_test.go test-x.sh )
+expect_exit "release-guard: static test sources pass" pre-commit "$d" 0
+
+d="$(fixture guard-install)"
+( cd "$d" && git init -q . >/dev/null )
+( cd "$d" && bash "$ROOT/plugins/coding-pipeline/git-hooks/install.sh" >/dev/null 2>&1 )
+if [ -x "$d/.git/hooks/release-content-guard.sh" ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: release-guard: installed beside the hooks — .git/hooks/release-content-guard.sh missing or not executable"
+    fail=1
+fi
+
+# Every tracked file of the real devkit repo, restaged in a throwaway repo —
+# a dry run over `git ls-files` that must pass: the guard must not false-fire
+# on the repo's own real sources or docs that merely mention PROGRESS.md.
+d="$(guard_repo guard-self)"
+while IFS= read -r f; do
+    mkdir -p "$d/$(dirname "$f")"
+    cp "$ROOT/$f" "$d/$f" 2>/dev/null || : > "$d/$f"
+done < <(git -C "$ROOT" ls-files)
+( cd "$d" && git add -A )
+expect_exit "release-guard: this repository passes its own guard" pre-commit "$d" 0
+
+# ── pre-push reads git's own ref-line protocol: guard exactly what is being
+# published, not a merge-base guess ───────────────────────────────────────────
+zero_sha="0000000000000000000000000000000000000000"
+
+# run_push <dir> <local-sha> <remote-sha> — feeds one git pre-push stdin ref
+# line (<local ref> <local sha1> <remote ref> <remote sha1>), exactly the shape
+# git itself pipes in; echoes output, returns exit code.
+run_push() {
+    local dir="$1" lsha="$2" rsha="$3"
+    ( cd "$dir" && printf 'refs/heads/main %s refs/heads/main %s\n' "$lsha" "$rsha" \
+        | PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/pre-push" origin "$dir" 2>&1 )
+}
+
+# New branch (remote sha all zeros): every commit `git rev-list <lsha> --not
+# --remotes` finds is checked on its own, not just the tip's net diff — an
+# offending file two commits back, under an otherwise-clean tip, is still caught.
+d="$(guard_repo guard-newbranch)"
+( cd "$d" && printf 'session notes\n' > PROGRESS.md && git add PROGRESS.md && git commit -qm "oops: progress"
+  printf 'clean\n' > c.txt && git add c.txt && git commit -qm "clean tail commit" )
+lsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$lsha" "$zero_sha")"; got=$?
+ok=1; [ "$got" = "1" ] || ok=0
+case "$out" in *"PROGRESS.md"*) ;; *) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: pre-push checks every pushed commit — exit $got, got: $out"; fail=1
+fi
+
+# Merge commits must be checked too: `git diff-tree` prints nothing for a
+# merge commit unless told to diff it against each parent — the commonest
+# integration flow (resolve a conflict, commit the merge) let offending
+# content ride a new-branch push straight through.
+d="$(guard_repo guard-merge-resolution)"
+( cd "$d" || exit 1
+  printf 'base line\n' > shared.txt
+  git add shared.txt && git commit -qm "add shared file"
+  git checkout -q -b branch-a
+  printf 'branch-a line\n' > shared.txt
+  git commit -qam "branch-a edits shared line"
+  git checkout -q main
+  git checkout -q -b branch-b
+  printf 'branch-b line\n' > shared.txt
+  git commit -qam "branch-b edits shared line"
+  git checkout -q branch-a
+  git merge branch-b -q >/dev/null 2>&1
+  printf 'resolved line\n' > shared.txt
+  printf 'session notes from merge resolution\n' > PROGRESS.md
+  git add -f PROGRESS.md shared.txt
+  git commit -qm "merge branch-b into branch-a: resolve conflict" )
+lsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$lsha" "$zero_sha")"; got=$?
+ok=1; [ "$got" = "1" ] || ok=0
+case "$out" in *"PROGRESS.md"*) ;; *) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: merge resolution content is checked on a new-branch push — exit $got, got: $out"; fail=1
+fi
+
+# Existing branch: uses exactly <remote sha>..<local sha>. Content already on
+# the remote (before rsha) is never re-flagged; only the delta is checked, and
+# an offending file inside that delta is still caught.
+d="$(guard_repo guard-remoterange)"
+( cd "$d" && printf 'session notes\n' > PROGRESS.md && git add PROGRESS.md && git commit -qm "already on remote" )
+rsha="$(cd "$d" && git rev-parse HEAD)"
+( cd "$d" && printf 'mode: atomic\n' > coverage.out && git add coverage.out && git commit -qm "oops: coverage"
+  printf 'clean\n' > c.txt && git add c.txt && git commit -qm "clean tail commit" )
+lsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$lsha" "$rsha")"; got=$?
+ok=1; [ "$got" = "1" ] || ok=0
+case "$out" in *"coverage.out"*) ;; *) ok=0 ;; esac
+case "$out" in *"PROGRESS.md"*) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: pre-push uses the remote sha range — exit $got, got: $out"; fail=1
+fi
+
+# Branch deletion (local sha all zeros): nothing is being published, so the
+# guard is skipped even though the deleted branch's history has offending
+# content — a deletion push must never be blocked.
+d="$(guard_repo guard-deletion)"
+( cd "$d" && printf 'session notes\n' > PROGRESS.md && git add PROGRESS.md && git commit -qm "oops: progress" )
+rsha="$(cd "$d" && git rev-parse HEAD)"
+out="$(run_push "$d" "$zero_sha" "$rsha")"; got=$?
+if [ "$got" = "0" ]; then pass=$((pass + 1)); else
+    echo "FAIL: release-guard: branch deletion push is skipped — exit $got, got: $out"; fail=1
+fi
+
+# A path nested under a subdirectory must be caught exactly like one at the
+# repo root — the defaults in .devkit/release-exclude are depth-agnostic.
+d="$(guard_repo guard-nested-coverage)"
+mkdir -p "$d/backend"
+printf 'mode: atomic\n' > "$d/backend/coverage.out"
+( cd "$d" && git add backend/coverage.out )
+expect_exit_says "release-guard: nested generated output is caught" pre-commit "$d" 1 "backend/coverage.out"
+
+# ── shared base resolution (RD2): dup-gate.sh must depend on base-lib.sh, not
+# carry its own re-typed copy of the base-resolution loop — moving the shared
+# file aside has to visibly degrade dup-gate.sh's attribution, or the two never
+# shared anything to begin with.
+d="$(fixture dup-shared-base)"
+( cd "$d" && git init -q . && git config user.email t@t && git config user.name t && git config commit.gpgsign false
+  printf 'hi\n' > a.txt && git add -A && git commit -qm base )
+base_lib_real="$HOOKS/base-lib.sh"
+mv "$base_lib_real" "$base_lib_real.disabled"
+out="$( cd "$d" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"
+mv "$base_lib_real.disabled" "$base_lib_real"
+case "$out" in *"base-lib.sh not found"*) ok=0 ;; *) ok=1 ;; esac
+gate_check "dup-gate: base resolution shared with the release guard" "$ok"
+
+d="$(guard_repo guard-extend)"
+printf '*.tmp\n' >> "$d/.devkit/release-exclude"
+printf 'scratch\n' > "$d/x.tmp"
+( cd "$d" && git add x.tmp .devkit/release-exclude )
+expect_exit_says "release-guard: patterns come from the committed file" pre-commit "$d" 1 "x.tmp"
 
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"
