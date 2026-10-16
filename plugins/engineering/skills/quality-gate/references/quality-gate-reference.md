@@ -13,6 +13,8 @@
 | Vuln | `rtk govulncheck ./...` | No vulnerabilities |
 | SQL | `rtk sqlc vet` | Zero *(skip if no sqlc.yaml)* |
 | Coverage | `rtk go test -coverprofile=coverage.out -covermode=atomic ./... && go tool cover -func=coverage.out \| tail -1` | ≥ 85% |
+| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` | Reported, never fails the gate — needs Go toolchain ≥ 1.26 (`go version`); older toolchain: report `modernize: skipped (toolchain < 1.26)` |
+> `modernize` is advisory: a non-zero exit means suggestions exist — or the build failed, which the Vet row owns. Report it as `modernize: ADVISORY {n} files`; it never fails a gate, never caps a score, and `-diff` never rewrites a file.
 
 ## TypeScript / React / Next.js
 | Gate | Command | Pass |

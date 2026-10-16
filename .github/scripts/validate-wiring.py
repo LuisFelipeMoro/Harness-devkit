@@ -370,20 +370,93 @@ CONTRACT = [
      ["committed state"]),
 ]
 
+# Named rows carry their Test Case name and print `FAIL: <name>` on failure, so
+# break-run.sh can prove a row failed for itself.
+def contract_check(name, path, must_contain, must_not):
+    CONTRACT.append((path, must_contain, must_not, name))
+
+# 4e6020 S1: Go refresh
+contract_check("contract_go_modern_idioms_rule",
+    "plugins/coding-pipeline/references/go-modern-idioms.md",
+    ["| Idiom | Min Go |",
+     "Apply a row only when the module's `go` directive is at least its Min Go",
+     "`wg.Go(f)`", "`errors.AsType[T]`",
+     "JetBrains/go-modern-guidelines"],
+    ["json/v2"])
+
+contract_check("contract_go_modern_idioms_no_127",
+    "plugins/coding-pipeline/references/go-modern-idioms.md",
+    [],
+    ["json/v2"])
+
+contract_check("link_go_md_to_idioms",
+    "plugins/coding-pipeline/references/languages/go.md",
+    ["[`../go-modern-idioms.md`](../go-modern-idioms.md)"],
+    [])
+
+contract_check("contract_go_md_version_fixes",
+    "plugins/coding-pipeline/references/languages/go.md",
+    ["spell it `any`, never `interface{}`",
+     "From `go 1.25` start `WaitGroup` goroutines with `wg.Go(f)`",
+     "only below `go 1.22`"],
+    ["never `interface{}` / `any` in a signature",
+     "never at the end of the function; `defer wg.Done()` goes inside the goroutine closure",
+     "in leaf tests, with the loop variable captured"])
+
+contract_check("contract_gate_ref_modernize_cp",
+    "plugins/coding-pipeline/references/quality-gate-reference.md",
+    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
+     "never fails the gate",
+     "`-diff` never rewrites a file"],
+    ["(and Stress in parallel)", "go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_modernize_eng",
+    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
+    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
+     "never fails the gate",
+     "`-diff` never rewrites a file"],
+    ["(and Stress in parallel)", "go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_no_unpinned_fetch",
+    "plugins/coding-pipeline/references/quality-gate-reference.md",
+    [],
+    ["go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_no_unpinned_fetch_eng",
+    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
+    [],
+    ["go run golang.org/x/tools"])
+
+contract_check("contract_qa_advisory_never_caps",
+    "plugins/coding-pipeline/agents/qa.md",
+    ["advisory rows never cap the score", "- **Go advisory**: "],
+    [])
+
+contract_check("contract_eng_report_advisory",
+    "plugins/engineering/skills/quality-gate/references/execution-and-report.md",
+    ["Advisory rows (Go"],
+    [])
+
+contract_check("contract_language_index_unchanged",
+    "plugins/coding-pipeline/references/language-rules-reference.md",
+    [],
+    ["go-modern-idioms"])
+
 # Each contract row is checked against its own file
-for path, must_contain, must_not in CONTRACT:
+for path, must_contain, must_not, *name in CONTRACT:
     checked["contract"] += 1
+    name_prefix = f"FAIL: {name[0]} — " if name else ""
     full = os.path.join(ROOT, path)
     if not os.path.isfile(full):
-        err("contract", path, "file missing")
+        err("contract", path, f"{name_prefix}file missing")
         continue
     text = read(full)
     for phrase in must_contain:
         if phrase not in text:
-            err("contract", path, f"must contain '{phrase}'")
+            err("contract", path, f"{name_prefix}must contain '{phrase}'")
     for phrase in must_not:
         if phrase in text:
-            err("contract", path, f"must not contain '{phrase}'")
+            err("contract", path, f"{name_prefix}must not contain '{phrase}'")
 
 # Glob check: no md files under plugins/coding-pipeline/ contain subagent_type: "claude"
 coding_pipeline_dir = os.path.join(ROOT, "plugins/coding-pipeline")

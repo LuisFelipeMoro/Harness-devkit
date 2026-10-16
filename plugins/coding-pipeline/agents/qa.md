@@ -229,6 +229,7 @@ See `references/quality-gate-reference.md` for complete per-language gate comman
 Key gates per language (all prefixed with `rtk` — hook intercepts automatically if prefix omitted):
 - **All stacks, before the per-language gates**: `bash ~/.claude/git-hooks/dup-gate.sh --worktree` — Gate PASS = exit 0 (≤ 3% introduced by this delivery; exit 2 = UNENFORCED, not a pass). Duplication is language-agnostic and invisible to every gate below it: a copy-pasted block lints clean, types clean, and covers clean.
 - **Go**: `rtk golangci-lint run` · `rtk go vet ./...` · `rtk go test -race ./...` · `rtk govulncheck ./...`
+- **Go advisory**: `rtk proxy go fix -diff ./...` — report `modernize: ADVISORY {n} files` or `modernize: skipped (toolchain < 1.26)`; advisory rows never cap the score.
 - **JS/TS/React**: `rtk lint` · `rtk tsc --noEmit` · `rtk prettier --check .` · `rtk next build` (Next.js) / `rtk vite build` or `rtk npm run build` (React SPA) · `rtk npm audit --audit-level=high`
 - **Java**: `rtk mvn spotbugs:check` · `rtk mvn checkstyle:check` · `rtk mvn dependency-check:check`
 - **PHP**: `rtk vendor/bin/phpstan analyse --level 8` · `rtk vendor/bin/phpcs` · `rtk composer audit`
@@ -274,7 +275,7 @@ Start file with:
 // Score: {X}/10  (spec: {n}/{N} rows · falsified: {n}/{N} · coverage: {actual}% vs {target}% floor · security: {n}/{total} scenarios · error paths: {pct}%)
 // Falsification: {n}/{N} evidence lines valid · spot-checked {list} — all went red | FAILED: {test that survived its break}
 // Audit: {CLEAN — every row implemented, every test falsified, zero tautologies | GAPS: list}
-// Gates: {gate}: PASS|FAIL · {gate}: PASS|FAIL  [all gates for the story's language]
+// Gates: {gate}: PASS|FAIL · {gate}: PASS|FAIL  [all gates for the story's language] · modernize: ADVISORY {n} files | skipped  [Go only]
 // Scenarios: {comma-separated key scenarios}
 // Security: {list of security scenarios covered}
 ```

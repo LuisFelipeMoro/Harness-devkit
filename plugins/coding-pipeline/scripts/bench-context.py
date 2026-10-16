@@ -80,6 +80,7 @@ DISPATCH = {
         "agents/coder.md",
         "agents/coder-backend.md",
         "references/languages/go.md",
+        "references/go-modern-idioms.md",
         "references/spec-driven-reference.md",
     ],
     "story: qa": ["agents/qa.md", "references/quality-gate-reference.md"],
