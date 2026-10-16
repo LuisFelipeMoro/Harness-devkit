@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse(Agent|Task) — count subagent dispatches against a session budget.
 #
-# CLAUDE.md's Sub-agent Discipline caps three per *turn* and nothing per session,
+# CLAUDE.md's Sub-agent Discipline caps writers at three per *turn* (read-only fan-out is wider) and nothing per session,
 # so a pipeline can spend sixty dispatches without ever breaking the rule. Each
 # dispatch is its own request with its own prompt, which is why subagent-heavy
 # sessions read as a separate cost line from long ones.
