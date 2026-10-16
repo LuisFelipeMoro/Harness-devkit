@@ -12,7 +12,7 @@ Optimization must never change behaviour: a characterization test pins the curre
 - Done when: the benchmark shows before/after numbers and the characterization test stays GREEN.
 
 ## Steps
-Latency spread across layers or services rather than one hot function: start with `references/latency-budget.md` (trace first, then fix by layer); it routes back to step 5 for the fix.
+Latency spread across layers or services rather than one hot function: start with `references/latency-budget.md` (trace first, then fix by layer); it routes back to steps 4-5 for the fix.
 1. Enable the pprof endpoint on an internal port per `references/pprof-setup-and-capture.md`.
 2. Capture CPU, heap, goroutine, block, and mutex profiles with the commands in `references/pprof-setup-and-capture.md`.
 3. Analyse the profiles at the pprof prompt (`top10`, `list`, flame graph) per `references/pprof-setup-and-capture.md`; the widest bars at the top of the flame mark the hot path.

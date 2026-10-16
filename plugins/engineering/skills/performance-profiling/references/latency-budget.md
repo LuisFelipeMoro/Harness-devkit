@@ -23,6 +23,6 @@ Work the table biggest share first. Map each layer to its lever, and follow the 
 
 ## Re-measure
 
-Take the same trace again and run the before/after benchmark from optimize-and-benchmark.md. The characterization test stays green through every change; a faster trace with a red characterization test is not a fix.
+Take the same trace again and run the before/after benchmark from optimize-and-benchmark.md. The characterization test is written before the first change (SKILL.md step 4) and stays green through every change; a faster trace with a red characterization test is not a fix.
 
 Source note: paraphrased from a pasted checklist. Its illustrative millisecond figures are deliberately not carried over.
