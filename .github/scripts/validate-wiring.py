@@ -442,6 +442,41 @@ contract_check("contract_language_index_unchanged",
     [],
     ["go-modern-idioms"])
 
+# 4e6020 S2: Latency fundamentals
+contract_check("contract_perf_fix_rows",
+    "plugins/engineering/skills/performance-profiling/references/optimize-and-benchmark.md",
+    ["SetMaxOpenConns", "MaxIdleConnsPerHost", "named invalidation owner",
+     "errgroup.WithContext", "off the request path", "Cursor pagination",
+     "EXPLAIN ANALYZE", "sync.Pool", "-gcflags=\"-m\""],
+    [])
+
+contract_check("contract_latency_budget",
+    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
+    ["## Trace first", "## Fix by layer", "/observability",
+     "sets no millisecond thresholds", "](optimize-and-benchmark.md)"],
+    ["20ms", "30ms", "50ms", "15ms", "50 ms", "20 ms"])
+
+contract_check("link_latency_budget_resolves",
+    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
+    ["](optimize-and-benchmark.md)"],
+    [])
+
+contract_check("contract_perf_skill_routes",
+    "plugins/engineering/skills/performance-profiling/SKILL.md",
+    ["`references/latency-budget.md` (trace first, then fix by layer)",
+     "references/optimize-and-benchmark.md"],
+    [])
+
+contract_check("characterization_perf_trigger_desc",
+    "plugins/engineering/skills/performance-profiling/SKILL.md",
+    ['"pprof"', '"latency"'],
+    [])
+
+contract_check("contract_architect_latency_fields",
+    "plugins/coding-pipeline/agents/architect.md",
+    ["Remote calls per request:", "invalidation trigger"],
+    [])
+
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:
     checked["contract"] += 1
