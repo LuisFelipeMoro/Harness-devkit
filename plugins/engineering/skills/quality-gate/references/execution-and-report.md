@@ -27,6 +27,6 @@ For common fixes per gate failure, see `references/quality-gate-reference.md`.
 Overall: ❌ FAIL — 1 gate failed. Fix before handoff.
 ```
 
-Advisory rows (Go `modernize`) report `ADVISORY` or `skipped` and never counts toward Overall.
+Advisory rows (Go `modernize`) report `ADVISORY` or `skipped` and never count toward Overall.
 
 Full pass line: `Overall: ✅ PASS — all gates green · {X}% coverage · {N} tests`

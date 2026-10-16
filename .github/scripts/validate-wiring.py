@@ -422,9 +422,14 @@ contract_check("contract_gate_ref_no_unpinned_fetch",
     [],
     ["go run golang.org/x/tools"])
 
+contract_check("contract_gate_ref_no_unpinned_fetch_eng",
+    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
+    [],
+    ["go run golang.org/x/tools"])
+
 contract_check("contract_qa_advisory_never_caps",
     "plugins/coding-pipeline/agents/qa.md",
-    ["advisory rows never cap the score", "modernize: ADVISORY"],
+    ["advisory rows never cap the score", "- **Go advisory**: "],
     [])
 
 contract_check("contract_eng_report_advisory",
