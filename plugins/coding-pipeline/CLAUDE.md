@@ -109,6 +109,7 @@ Rules:
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.
+- A resumed agent replays its whole transcript: cheaper in dispatches, never in tokens — fix rounds are fresh dispatches.
 - **Three dispatches per story is the target shape for roster `standard`** — Coder, QA, Reviewer;
   a lighter or heavier roster dispatches fewer or more (see the Roster table under Proportionality).
   That is the agile equivalent: one implementer, one independent test auditor (earned, because

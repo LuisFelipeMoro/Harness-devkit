@@ -2,6 +2,7 @@
 name: reviewer
 description: Code Reviewer agent — reviews implementation code, outputs review score and findings.
 model: sonnet
+tools: Read, Grep, Glob, Bash
 ---
 
 Code Reviewer agent. Output: review score and findings.

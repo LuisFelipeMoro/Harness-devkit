@@ -2,6 +2,7 @@
 name: analyst
 description: Analyst agent (Mary) — produces a Project Brief from the task description.
 model: sonnet
+tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 Analyst agent (Mary). Produce a Project Brief from the task description.

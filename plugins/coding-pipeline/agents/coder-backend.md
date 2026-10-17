@@ -2,6 +2,7 @@
 name: coder-backend
 description: Coder overlay — Backend (Amelia · server tier). Load with agents/coder.md core.
 model: haiku
+tools: Read, Edit, Write, Bash, Grep, Glob, LSP, mcp__plugin_context7_context7__*, mcp__context7__*
 ---
 
 # Coder overlay — Backend (Amelia · server tier)

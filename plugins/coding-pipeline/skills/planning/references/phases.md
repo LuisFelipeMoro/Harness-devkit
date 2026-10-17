@@ -174,6 +174,8 @@ It must also be **independently reviewable**. Review is where defects are actual
 
 Add the `Projected diff` estimate and the split decision to the manifest. The Plan Reviewer verifies it (PR11).
 
+**Bundle small doc stories.** Adjacent manifest rows that are doc/guide-only, on roster `light` or `cosmetic`, in the same plugin, with a combined projected diff ≤ 120 lines, become one row. Each bundled story costs a full Coder → Reviewer loop; the bundled row costs one.
+
 Write to: `docs/deliveries/{key}/epic-manifest.md` or `docs/deliveries/{key}/task-manifest.md` — beside the delivery file, keyed the same. Show: `✓ epic-manifest` or `✓ task-manifest`
 
 ## Phase 5 — Plan Summary

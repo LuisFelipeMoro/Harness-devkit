@@ -2,6 +2,7 @@
 name: coder-frontend
 description: Coder overlay — Frontend / Client (Amelia · UI tier). Load with agents/coder.md core.
 model: haiku
+tools: Read, Edit, Write, Bash, Grep, Glob, LSP, mcp__plugin_context7_context7__*, mcp__context7__*
 ---
 
 # Coder overlay — Frontend / Client (Amelia · UI tier)
