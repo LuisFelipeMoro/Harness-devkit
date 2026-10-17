@@ -35,9 +35,8 @@ teams. Four stories, each judged on its own.
 - **Model aliases are named as the source of truth.** The model table pins no version: the
   `opus`, `sonnet` and `haiku` aliases resolve to the newest model in each family, and the two skills
   that restate the table defer to it.
-- **Latency budget routes through the characterization test step.**
-- **Engineering gate copy is pinned.** The engineering plugin's copy of the gate reference no longer
-  fetches an unpinned tool, and QA's advisory wording is sharper.
+- **Latency budget routes through the characterization test step.** A fix is chosen only after a characterization test is written first (steps 4–5 of the performance-profiling skill), and that test must stay green through the change.
+- **Engineering gate copy is guarded.** A wiring check rejects an unpinned `go run golang.org/x/tools` fetch in the engineering plugin's gate reference, and QA's advisory wording is sharper.
 
 ### Credits
 
