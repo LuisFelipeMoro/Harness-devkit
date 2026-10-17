@@ -95,8 +95,16 @@ Rules:
 
 - **1 sub-agent** — default. Good for one focused task (exploration, data fetch, implementation).
 - **2 sub-agents** — great. Use for two genuinely independent parallel tasks with no shared state.
-- **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning.
-- **Never spawn 4+** in a single turn.
+- **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning. (writers; read-only fan-out below)
+- **Never spawn 4+ writers** in a single turn; read-only subagents are capped separately, below.
+- **Read-only fan-out** — subagents whose agent type has no Edit/Write/NotebookEdit tools
+  (Explore, Plan: the checkable case). The orchestrator attests that each prompt forbids
+  mutation and that no shell command mutates state. Such subagents may fan out wider, up to the
+  read-only width in `references/thresholds.md`, each returning its capped summary or one table.
+  Freeze the shared contract (questions, return shape, scope per worker) before fanning out;
+  workers never coordinate with each other. Read-only dispatches may run in the background;
+  the gate chain stays in the foreground. Inside a pipeline the orchestrator coordinates
+  (dispatches, runs sensors, merges returns) and writes no implementation code.
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.

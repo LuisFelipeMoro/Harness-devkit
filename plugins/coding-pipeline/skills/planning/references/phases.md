@@ -40,6 +40,8 @@ write **`docs/deliveries/{key}/codebase-map.md`**:
 | Contracts in force | Existing signatures, error shapes, table/column names, config keys the feature must not contradict |
 | Test conventions | Where tests live, framework, fixture/mock style, how existing tests are named |
 
+When the PRD touches two or more independent areas (separate plugins, packages or services), fan the mapping out by vector — one read-only mapper per area, within the `Read-only subagents per turn` row in `references/thresholds.md`, each returning its sections as tables — and merge the returns into the one `codebase-map.md` yourself: mappers never write it.
+
 ### Blast radius — the rules
 
 Everything else in the map is context. This row is a measurement, and it is the one most often

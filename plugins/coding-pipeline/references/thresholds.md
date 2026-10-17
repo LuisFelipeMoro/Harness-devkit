@@ -56,8 +56,9 @@ the same three scores; only the Stress label differs (`[folded]` vs `[dispatched
 | Thing | Limit |
 |---|---|
 | Context ceiling | 80% of window (warn at 60%) — sensor: `hooks/context-budget.sh` |
-| Subagent dispatches | 14 per session, advisory — 3 per story (Coder · QA · Reviewer) × 3 stories + 3 planning + 2 delivery. Sensor: `hooks/dispatch-budget.sh` |
-| Subagents per turn | 3 (never 4+) |
+| Subagent dispatches | 14 per session, advisory — 3 per story (Coder · QA · Reviewer) × 3 stories + 3 planning (one mapper; a Phase 0.5 vector fan-out (planning `phases.md`) adds one dispatch per extra area) + 2 delivery. Sensor: `hooks/dispatch-budget.sh` |
+| Writer subagents per turn | 3 (never 4+); read-only subagents are counted separately in the next row |
+| Read-only subagents per turn | 6 — each returns ≤ 150 words or one table; every one counts toward the session dispatch budget |
 | Tuner iterations | 2 per pipeline run |
 | Bug-Fix Loop iterations | 3, then `QA ESCALATION` |
 | Plan-review rounds | 2 |

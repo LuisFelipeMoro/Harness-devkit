@@ -477,6 +477,47 @@ contract_check("contract_architect_latency_fields",
     ["Remote calls per request:", "invalidation trigger"],
     [])
 
+# 4e6020 S3: Orchestration fan-out rules
+contract_check("contract_thresholds_widths",
+    "plugins/coding-pipeline/references/thresholds.md",
+    ["## Roster", "| Writer subagents per turn | 3 (never 4+)", "| Read-only subagents per turn | 6",
+     "every one counts toward the session dispatch budget", "≤ 150 words or one table"],
+    ["| Subagents per turn | 3 (never 4+) |"])
+
+contract_check("contract_claude_md_fanout",
+    "plugins/coding-pipeline/CLAUDE.md",
+    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
+     "the gate chain stays in the foreground", "Freeze the shared contract",
+     "the orchestrator coordinates", "writes no implementation code"],
+    ["- **Never spawn 4+** in a single turn.", "up to 6"])
+
+contract_check("contract_worktree_doc_background",
+    "plugins/coding-pipeline/references/delivery-and-worktree.md",
+    ["local", "Read-only subagents (Explore, code mapping) may still run in parallel",
+     "`Read-only subagents per turn`", "never a polling loop",
+     "never dispatch parallel Coder subagents into the same worktree"],
+    [])
+
+contract_check("characterization_sequential_stories",
+    "plugins/coding-pipeline/references/delivery-and-worktree.md",
+    ["never dispatch parallel Coder subagents into the same worktree"],
+    [])
+
+contract_check("contract_phase05_vector",
+    "plugins/coding-pipeline/skills/planning/references/phases.md",
+    ["| Tier | Roster |", "fan the mapping out by vector", "mappers never write it"],
+    [])
+
+contract_check("contract_dispatch_hook_comment",
+    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
+    ["caps writers at three per *turn*"],
+    ["caps three per *turn*"])
+
+contract_check("characterization_hooks_suite",
+    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
+    ["# CLAUDE.md's Sub-agent Discipline caps writers at three per *turn*"],
+    [])
+
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:
     checked["contract"] += 1
