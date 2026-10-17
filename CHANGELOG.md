@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.8.1] — 2026-10-17
+
+### Changed
+
+- **/multi-agent and /task recommend the thin orchestrator.** When the session is not running as
+  `claude --agent orchestrator`, they print the exact relaunch commands once and never block:
+  `/multi-agent` always, `/task` only when the blast radius is big. The main session carried most of
+  the delivery's cost (measured on one delivery).
+
 ## [2.8.0] — 2026-10-16
 
 Go idioms that are checked against the module's own Go version, a latency method that starts with a

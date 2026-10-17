@@ -656,6 +656,22 @@ contract_check("contract_session_model_and_boundary",
     ["/model sonnet", "/clear, then /multi-agent"],
     [])
 
+# The skill's recommendation and the orchestrator's detection anchor must not drift apart.
+contract_check("contract_orchestrator_recommendation",
+    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+    ["claude --agent orchestrator", "You are the delivery orchestrator"],
+    [])
+
+contract_check("contract_orchestrator_recommendation",
+    "plugins/coding-pipeline/skills/task/SKILL.md",
+    ["claude --agent orchestrator"],
+    [])
+
+contract_check("contract_orchestrator_recommendation",
+    "plugins/coding-pipeline/agents/orchestrator.md",
+    ["You are the delivery orchestrator"],
+    [])
+
 contract_check("contract_bundle_rule",
     "plugins/coding-pipeline/skills/planning/references/phases.md",
     ["≤ 120 lines", "become one row"],

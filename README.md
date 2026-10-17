@@ -43,6 +43,27 @@ is unchanged. It needs the flat install (`bash install.sh`). A plugin-manager in
 subagent frontmatter hooks, so there only the `tools:` allowlist applies, and the Bash guard that
 keeps the session to git and gates does not run.
 
+**Why start here.** Measured on one delivery (4e6020), the main session was ~64% of the cost. A normal
+session reads files and carries every agent's output, so its context grows across the run and is
+re-sent on every call. The orchestrator cannot read files, so its context stays small. It defaults to
+`sonnet`. Startup context is ~37.6k (one in-session measurement; a plain session was 45–46k), so the
+saving comes from slower growth, not a smaller start. `/task` can only judge its blast radius after
+its manifest, so its hint arrives after planning; the relaunch is cheap because state lives in the
+worktree. A running session cannot be converted, so launch it before the pipeline:
+
+- `claude --agent orchestrator`, then `/multi-agent <task>` (or `/task <task>`). Optional alias: `alias cco='claude --agent orchestrator'`.
+- `/multi-agent` always prints these commands once when the session is not the orchestrator. `/task` prints them only when the blast radius is big. Neither blocks.
+- A delivery resumes losslessly from its worktree and `PROGRESS.md`.
+
+**Worth it when:**
+- multi-story `/multi-agent` deliveries, or `/task` with a wide blast radius (≥ 2 sub-tasks)
+- long or unattended runs
+- many agent round trips (the main context otherwise grows and is re-sent on every call)
+
+**Not worth it when:**
+- a single small change, a narrow `/task`, `/bug-fix` or a quick question
+- exploring or editing files yourself, or anything where you want Read/Edit in the main session
+
 
 ### Spec-first, falsification-proven
 
