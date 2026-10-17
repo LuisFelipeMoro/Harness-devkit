@@ -10,6 +10,7 @@
 # Structure is checked, not substrings: heredoc bodies are dropped first (commit
 # messages and PROGRESS entries carry arbitrary text), then the command is split
 # on every separator, and each segment must start with an allowed word.
+# Known limit: heredoc stripping is not quote-aware, so a quoted `<<WORD` can hide a line.
 set -uf
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./hook-lib.sh
@@ -100,12 +101,14 @@ EOF_TARGETS
         bash)
             target="${args%%[[:space:]]*}"
             case "$target" in
+                *..*) block ;;
                 */scripts/verify/*.sh|*/git-hooks/dup-gate.sh|.github/scripts/*.sh|install.sh|*/install.sh|*/scripts/delivery-state.sh) ;;
                 *) block ;;
             esac ;;
         python3)
             target="${args%%[[:space:]]*}"
             case "$target" in
+                *..*) block ;;
                 .github/scripts/*.py|*/scripts/bench-context.py) ;;
                 *) block ;;
             esac ;;

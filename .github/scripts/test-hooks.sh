@@ -285,6 +285,9 @@ orch_expect "test_orchestrator_guard_blocks" 2 'echo x > src/a.go'
 orch_expect "test_orchestrator_guard_blocks" 2 'bash scripts/other.sh'
 orch_expect "test_orchestrator_guard_blocks" 2 'git status $(cat x)'
 orch_expect "test_orchestrator_guard_blocks" 2 'git log `cat x`'
+orch_expect "test_orchestrator_guard_blocks" 2 'git log < README.md'
+orch_expect "test_orchestrator_guard_blocks" 2 'bash ../x/scripts/verify/../../evil.sh'
+orch_expect "test_orchestrator_guard_blocks" 2 'python3 .github/scripts/../x.py'
 
 # Fail open: an unparseable payload, and the devkit's per-hook kill switch.
 expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{not json' 0
