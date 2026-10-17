@@ -21,6 +21,11 @@ func TestProcessOrder_BehaviourUnchanged(t *testing.T) {
 | Goroutine leak | goroutine started but never exits | Always use context cancellation; use `errgroup`; check goroutine profile |
 | Slow DB queries | Missing index, N+1 queries | Add index; batch queries; use `EXPLAIN ANALYZE` |
 | High `runtime.mallocgc` | Excessive heap allocations | Escape analysis: `go build -gcflags="-m" ./...` to see what escapes |
+| Slow under load, waiting on connections | Pool unbounded, too small, or never recycled | `db.SetMaxOpenConns` / `SetMaxIdleConns` / `SetConnMaxLifetime` sized from a load test; one shared `http.Client` whose `Transport.MaxIdleConnsPerHost` is raised from its default of 2 |
+| Same expensive read on every request | No cache, or a cache nobody owns | Cache with an explicit TTL and a named invalidation owner — the code path that writes the source data invalidates it; bound its size |
+| Request waits on chained service calls | Serial service-to-service calls | Remove the call (the data is already in scope), batch it (one call for N ids), or run independent calls with `errgroup.WithContext` and a per-call timeout |
+| Request path does work the caller never waits for | Email, audit fan-out, analytics inline | Move it off the request path to a queue or bounded worker with its own retry and idempotency key |
+| Large responses dominate transfer time | Unbounded lists, verbose payloads | Cursor pagination with a max page size; trim fields; gzip only where the benchmark shows transfer, not CPU, dominates |
 
 ## Benchmark before/after
 

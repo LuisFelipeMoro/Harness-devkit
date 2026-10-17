@@ -80,6 +80,7 @@ DISPATCH = {
         "agents/coder.md",
         "agents/coder-backend.md",
         "references/languages/go.md",
+        "references/go-modern-idioms.md",
         "references/spec-driven-reference.md",
     ],
     "story: qa": ["agents/qa.md", "references/quality-gate-reference.md"],
@@ -126,6 +127,11 @@ INLINE = {"orchestrator: verdict.md (read once)": ["agents/verdict.md"]}
 # (n=9, mean 137k), qa 82-116k (n=3, mean 99k), stress 72-99k (n=3, mean
 # 85k). Fix rounds are NOT in these means: they added ~40-60% per
 # full-roster story on top of first pass.
+# Subagent baseline, measured on delivery 4e6020: a subagent starts at ~45k
+# tokens, ~26k of them inherited tool definitions. A probe with every tool
+# available measured 41.5k; with the pipeline allowlist it measured 14.9k
+# (tools: frontmatter, STORY-5). The COST numbers above are not changed until
+# a post-change delivery measures them.
 COST = {
     "map": (77000, 1),
     "architect": (184000, 1),
@@ -139,6 +145,13 @@ COST = {
     "pr-review": (90000, 0),
     "devops": (60000, 0),
 }
+
+# --- main session (execution-options checkpoint) ---------------------
+# (calls_per_story, avg_context_tokens, n_samples). Measured on delivery 4e6020:
+# 180 orchestrator calls over 4 stories plus planning, on an opus main session.
+# Processed tokens, billed mostly as cache reads — kept out of the subagent
+# totals because its unit is per call, not per dispatch.
+ORCH = (45, 170_000, 1)
 
 # --- rework overhead -------------------------------------------------
 # {roster: (factor, n_samples)}, labelled like COST: n_samples == 0 means
@@ -416,11 +429,25 @@ def compute_options(rosters, cost=None, rework=None):
     return options
 
 
-def render_manifest(rosters, options, cost=None, rework=None):
+def orchestrator_estimate(stories, orch=None):
+    if orch is None:
+        orch = ORCH
+    calls, ctx, n = orch
+    return {
+        "stories": stories,
+        "calls_per_story": calls,
+        "avg_context": ctx,
+        "n_samples": n,
+        "tokens": stories * calls * ctx,
+    }
+
+
+def render_manifest(rosters, options, cost=None, rework=None, orch=None):
     if cost is None:
         cost = COST
     if rework is None:
         rework = REWORK
+    est = orchestrator_estimate(len(rosters), orch)
     out = [f"# Execution options — {len(rosters)} manifest rows", ""]
     out.append("| Agent | Cost (tokens) | Basis |")
     out.append("|---|---:|---|")
@@ -444,10 +471,18 @@ def render_manifest(rosters, options, cost=None, rework=None):
             f"| {name} | {o['dispatches']} | {fmt(o['tokens_low'])}–{fmt(o['tokens_high'])} tok "
             f"| {fmt(o['rework_low'])}–{fmt(o['rework_high'])} tok (with rework) |"
         )
+    out.append("")
+    out.append("| Estimate | Tokens | Basis |")
+    out.append("|---|---:|---|")
+    out.append(
+        f"| Main session ({est['stories']} stories × {est['calls_per_story']} calls × {fmt(est['avg_context'])} avg context) "
+        f"| {fmt(est['tokens'])} | measured (n={est['n_samples']}) — processed tokens, billed mostly as cache reads; "
+        f"measured on an opus session — a sonnet session prices the same tokens lower |"
+    )
     return "\n".join(out)
 
 
-def run_manifest(path, as_json, cost=None, rework=None):
+def run_manifest(path, as_json, cost=None, rework=None, orch=None):
     if cost is None:
         cost = COST
     if rework is None:
@@ -462,11 +497,17 @@ def run_manifest(path, as_json, cost=None, rework=None):
         cost_json = {a: {"tokens": t, "n_samples": n} for a, (t, n) in cost.items()}
         rework_json = {r: {"factor": f, "n_samples": n} for r, (f, n) in rework.items()}
         print(json.dumps(
-            {"rows": len(rosters), "options": options, "cost": cost_json, "rework": rework_json},
+            {
+                "rows": len(rosters),
+                "options": options,
+                "cost": cost_json,
+                "rework": rework_json,
+                "orchestrator": orchestrator_estimate(len(rosters), orch),
+            },
             indent=2,
         ))
     else:
-        print(render_manifest(rosters, options, cost=cost, rework=rework))
+        print(render_manifest(rosters, options, cost=cost, rework=rework, orch=orch))
     return 0
 
 

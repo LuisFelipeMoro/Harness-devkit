@@ -13,7 +13,7 @@ Spec-first AI development harness for [Claude Code](https://claude.ai/code). Dro
 - **Isolated per delivery** — each pipeline run gets its own git worktree (`.worktrees/dlv-{key}/`) and release branch, and writes its plan to `docs/deliveries/delivery-{slug}-{key}.md` instead of clobbering your repo's own `architecture.md`. Two deliveries never share a file or a working tree. The pipeline never commits or merges to `main` — the furthest it goes on its own is opening a PR.
 - **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
 - **12-agent coding pipeline** — Analyst → PM → codebase discovery → Architect → grill-me plan stress → **Plan Reviewer** → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps → PR review
-- **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap.
+- **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap. Aliases resolve to the newest model in each family.
 - **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Next.js, Flutter, HTMX, Kotlin Android, HTML/CSS. Each file names an **authority chain** (Uber Go Style · Effective Java · Rust API Guidelines · Rules of React · Effective Dart · PER Coding Style · Kotlin Coding Conventions · WAI-ARIA APG) and the agent loads exactly the one in play — a specialist in that language for that story, targeting the current stable release unless the project pins otherwise
 - **Security-first quality gates** — OWASP Web Top 10 + OWASP LLM Top 10 2025 enforced at every stage
 - **23 skills** (slash commands) — architecture, security review, DB migrations, observability, PR review, release management, and more
@@ -33,7 +33,16 @@ autonomous agent on the rails:
 | **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
 | **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. A mid-story checkpoint is the same discipline in one command: `checkpoint-m.sh` runs spec coverage, diff scope, stray commits, leftover break markers, duplication and roster escalation to completion and reports every failure at once, never bailing out on the first miss; `break-run.sh` is what makes a test's falsification evidence real instead of hand-typed — it mutates exactly one literal, runs the test, requires the row's own `FAIL: <row>` in the output, then restores the file on every exit path, interrupted or not. |
 | **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. Git-ignored — local session memory, never committed, and the same holds for the handoff docs `/handoff` writes. |
-| **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. |
+| **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. Read-only subagents may fan out wider than writers (width in `thresholds.md`); writers stay ≤ 3 per turn and stories stay sequential. Agent teams are documented, opt-in, and never enabled by the installer. An opt-in thin orchestrator (`claude --agent orchestrator`) keeps the main session off file reads. |
+
+### Thin orchestrator (opt-in)
+
+`claude --agent orchestrator` starts the main session as a dispatcher: it runs git, `gh` and the
+gates, and sends every read, search and edit to a subagent. It is opt-in; a normal `claude` session
+is unchanged. It needs the flat install (`bash install.sh`). A plugin-manager install ignores
+subagent frontmatter hooks, so there only the `tools:` allowlist applies, and the Bash guard that
+keeps the session to git and gates does not run.
+
 
 ### Spec-first, falsification-proven
 
@@ -650,7 +659,7 @@ or:
 
 **Use when:** a service is slow, latency is high, or you need to find the bottleneck before optimizing.
 
-**What happens:** For Go: runs `pprof` CPU + memory profile, interprets the flamegraph, identifies the hot path, proposes targeted fixes. For other stacks: applies language-appropriate profiling workflow. Never optimizes without data.
+**What happens:** For Go: runs `pprof` CPU + memory profile, interprets the flamegraph, identifies the hot path, proposes targeted fixes. For other stacks: applies language-appropriate profiling workflow. Never optimizes without data. When latency is spread across services, it starts trace-first with a layer-by-layer latency budget before choosing a fix.
 
 **Example:**
 ```
@@ -882,6 +891,7 @@ Spec is the source of truth — code follows spec, never the reverse.
 | Coverage | ≥ 85% | ≥ 85% | ≥ 85% | ≥ 80% | ≥ 85% |
 | Race | `go test -race` | — | — | — | — |
 | Vuln | `govulncheck` | `npm audit` | `npm audit` | — | — |
+| Modernize *(advisory)* | `go fix -diff` (Go ≥ 1.26, reports only) | — | — | — | — |
 | Spec lint | `spectral lint` | `spectral lint` | — | — | — |
 
 ### Security
@@ -920,7 +930,7 @@ failing open beats blocking every tool call because a payload shape changed.
 | `DEVKIT_HOOK_PROFILE=off` | Every guard is inert |
 | `DEVKIT_HOOK_PROFILE=standard` | Default. Guards block; `delivery-gate` warns |
 | `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
-| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `post:session-tracker`, `stop:delivery-gate` |
+| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `pre:bash:orchestrator-guard`, `post:session-tracker`, `stop:delivery-gate` |
 
 `strict` blocks a given session only once — a Stop hook that blocks forever traps the operator
 rather than the mistake.

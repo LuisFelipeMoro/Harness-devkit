@@ -1017,6 +1017,29 @@ MD
 out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
+# ── test_bench_main_session_row: 4 stories × 45 calls × 170k = 30,600,000 ───
+main_fixture="$W/manifest-4row.md"
+cat > "$main_fixture" <<'MD'
+| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
+|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
+| ST-A: does X | R1 | — | none | ~10 lines | Bash | Backend | light |
+| ST-B: does Y | R2 | — | none | ~10 lines | Bash | Backend | full |
+| ST-C: does Z | R3 | — | none | ~10 lines | Bash | Backend | standard |
+| ST-D: does W | R4 | — | none | ~10 lines | Bash | Backend | cosmetic |
+MD
+out=$(python3 "$BENCH" --manifest "$main_fixture" 2>&1); rc=$?
+main_row=$(printf '%s' "$out" | grep '^| Main session' || true)
+case "$main_row" in *"30,600,000"*"measured (n=1)"*) main_ok=0 ;; *) main_ok=1 ;; esac
+check "test_bench_main_session_row" 0 "$rc" "$out" "Main session"
+check "test_bench_main_session_row" 0 "$main_ok"
+json_main=$(python3 "$BENCH" --manifest "$main_fixture" --json 2>&1); rc=$?
+orch_tokens=$(printf '%s' "$json_main" | python3 -c "
+import json, sys
+print(json.load(sys.stdin)['orchestrator']['tokens'])
+" 2>/dev/null || echo missing)
+[ "$rc" = 0 ] && [ "$orch_tokens" = 30600000 ] && orch_ok=0 || orch_ok=1
+check "test_bench_main_session_row" 0 "$orch_ok"
+
 # ══════════════════════════════════════════════════════════════════════════
 # bench-context.py REWORK and tautology-scan.py TEST_FILE checks — synthetic
 # fixtures only, no reference to any one delivery's own numbers or file names.
@@ -1718,6 +1741,42 @@ else
         kill -TERM "$brkill_child" 2>/dev/null
     fi
 fi
+
+# ── delivery-state.sh: the orchestrator's only resume read and status write ──
+DS="$ROOT/plugins/coding-pipeline/scripts/delivery-state.sh"
+dsdir="$W/ds"
+mkdir -p "$dsdir/docs/deliveries" && cd "$dsdir" || exit
+git init -q -b main
+git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+git branch release/demo-abc123
+git branch feat/abc123-s1 release/demo-abc123
+git -c user.email=t@t -c user.name=t checkout -q -b feat/abc123-s2 release/demo-abc123
+git -c user.email=t@t -c user.name=t commit -q --allow-empty -m s2
+git checkout -q main
+printf '# Delivery\n\n| Field | Value |\n|---|---|\n| Status | Planning (approved 2026-10-16) |\n| Created | 2026-10-17 |\n' \
+    > docs/deliveries/delivery-demo-abc123.md
+ds_before=$(cat docs/deliveries/delivery-demo-abc123.md)
+
+out=$(bash "$DS" --key abc123 2>&1); rc=$?
+case "$out" in *"| Status | Planning"*"path: "*"delivery-demo-abc123.md"*) ds_show=0 ;; *) ds_show=1 ;; esac
+case "$out" in *"merged into release/demo-abc123: feat/abc123-s1"*) ds_merged=0 ;; *) ds_merged=1 ;; esac
+[ "$rc" = 0 ] && [ "$ds_show" = 0 ] && ds_first=0 || ds_first=1
+check "test_delivery_state" 0 "$ds_first"
+check "test_delivery_state" 0 "$ds_merged"
+[ "$(printf '%s\n' "$out" | wc -l)" -le 20 ] && ds_cap=0 || ds_cap=1
+check "test_delivery_state" 0 "$ds_cap"
+
+bash "$DS" --key abc123 --set "In Progress" >/dev/null 2>&1; rc=$?
+ds_changed=$(diff <(printf '%s\n' "$ds_before") docs/deliveries/delivery-demo-abc123.md | grep -c '^[<>]')
+ds_row=$(grep -c '^| Status | In Progress |$' docs/deliveries/delivery-demo-abc123.md)
+[ "$rc" = 0 ] && [ "$ds_changed" = 2 ] && [ "$ds_row" = 1 ] && ds_set=0 || ds_set=1
+check "test_delivery_state" 0 "$ds_set"
+
+ds_mid=$(cat docs/deliveries/delivery-demo-abc123.md)
+bash "$DS" --key abc123 --set Bogus >/dev/null 2>&1; rc=$?
+[ "$rc" = 1 ] && [ "$(cat docs/deliveries/delivery-demo-abc123.md)" = "$ds_mid" ] && ds_bogus=0 || ds_bogus=1
+check "test_delivery_state" 0 "$ds_bogus"
+cd "$ROOT" || exit
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"

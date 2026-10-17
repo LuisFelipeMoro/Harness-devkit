@@ -40,6 +40,8 @@ write **`docs/deliveries/{key}/codebase-map.md`**:
 | Contracts in force | Existing signatures, error shapes, table/column names, config keys the feature must not contradict |
 | Test conventions | Where tests live, framework, fixture/mock style, how existing tests are named |
 
+When the PRD touches two or more independent areas (separate plugins, packages or services), fan the mapping out by vector — one read-only mapper per area, within the `Read-only subagents per turn` row in `references/thresholds.md`, each returning its sections as tables — and merge the returns into the one `codebase-map.md` yourself: mappers never write it.
+
 ### Blast radius — the rules
 
 Everything else in the map is context. This row is a measurement, and it is the one most often
@@ -171,6 +173,8 @@ Each task/sub-task must be **independently testable** — expressible as one or 
 It must also be **independently reviewable**. Review is where defects are actually caught, and reviewer effectiveness collapses with diff size — for a human and for an agent alike, a large diff gets skimmed rather than read, and the approval it produces means nothing. Size every row against a projected diff: **≤ 200 changed lines is the target, 400 the soft ceiling, 800 the hard one.** Past 800 the row is split, not justified. Isolate mechanical bulk (generated code, compiler-verified renames, formatting passes) into its own row — 40 lines of logic hidden inside 600 mechanical ones is the worst diff there is to review, and worse than either half alone.
 
 Add the `Projected diff` estimate and the split decision to the manifest. The Plan Reviewer verifies it (PR11).
+
+**Bundle small doc stories.** Adjacent manifest rows that are doc/guide-only, on roster `light` or `cosmetic`, in the same plugin, with a combined projected diff ≤ 120 lines, become one row. Each bundled story costs a full Coder → Reviewer loop; the bundled row costs one.
 
 Write to: `docs/deliveries/{key}/epic-manifest.md` or `docs/deliveries/{key}/task-manifest.md` — beside the delivery file, keyed the same. Show: `✓ epic-manifest` or `✓ task-manifest`
 

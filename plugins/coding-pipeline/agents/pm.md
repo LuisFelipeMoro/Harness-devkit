@@ -2,6 +2,7 @@
 name: pm
 description: PM agent (John) — produces a PRD from the Project Brief.
 model: sonnet
+tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 PM agent (John). Produce a PRD from the Project Brief.

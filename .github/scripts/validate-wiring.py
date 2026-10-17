@@ -85,6 +85,10 @@ for name, pdir in declared.items():
         continue
     hooks_json = os.path.join(hdir, "hooks.json")
     blob = read(hooks_json) if os.path.isfile(hooks_json) else ""
+    # An agent's frontmatter hooks wire a script for that agent alone (C34's orchestrator guard).
+    adir = os.path.join(pdir, "agents")
+    if os.path.isdir(adir):
+        blob += "".join(read(os.path.join(adir, a)) for a in os.listdir(adir) if a.endswith(".md"))
     for f in sorted(os.listdir(hdir)):
         if not f.endswith(".sh") or f == "hook-lib.sh":
             continue
@@ -370,20 +374,308 @@ CONTRACT = [
      ["committed state"]),
 ]
 
-# Each contract row is checked against its own file
-for path, must_contain, must_not in CONTRACT:
+# Named rows carry their Test Case name and print `FAIL: <name>` on failure, so
+# break-run.sh can prove a row failed for itself.
+def contract_check(name, path, must_contain, must_not):
+    CONTRACT.append((path, must_contain, must_not, name))
+
+# Frontmatter tools: is scoped to the first `---` block, which contract_check's
+# substring match cannot do. Entries are split on commas outside parentheses so
+# `Agent(a, b)` stays one entry; a required entry matches by prefix.
+def frontmatter_tools(path):
+    lines = read(os.path.join(ROOT, path)).split("\n")
+    if not lines or lines[0] != "---":
+        return None
+    for line in lines[1:]:
+        if line == "---":
+            break
+        if line.startswith("tools:"):
+            entries, depth, current = [], 0, ""
+            for ch in line[len("tools:"):]:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                if ch == "," and depth == 0:
+                    entries.append(current.strip())
+                    current = ""
+                else:
+                    current += ch
+            entries.append(current.strip())
+            return [e for e in entries if e]
+    return None
+
+def tools_check(name, path, required=(), forbidden=()):
     checked["contract"] += 1
+    if not os.path.isfile(os.path.join(ROOT, path)):
+        err("contract", path, f"FAIL: {name} — file missing")
+        return
+    tools = frontmatter_tools(path)
+    if tools is None:
+        errors.append(f"[contract] FAIL: {name} — {path}: no tools: line")
+        return
+    for t in forbidden:
+        if any(e == t or e.startswith(t + "(") for e in tools):
+            errors.append(f"[contract] FAIL: {name} — {path}: tools: contains {t}")
+    for r in required:
+        if not any(e.startswith(r) for e in tools):
+            errors.append(f"[contract] FAIL: {name} — {path}: tools: lacks {r}")
+
+
+# 4e6020 S1: Go refresh
+contract_check("contract_go_modern_idioms_rule",
+    "plugins/coding-pipeline/references/go-modern-idioms.md",
+    ["| Idiom | Min Go |",
+     "Apply a row only when the module's `go` directive is at least its Min Go",
+     "`wg.Go(f)`", "`errors.AsType[T]`",
+     "JetBrains/go-modern-guidelines"],
+    ["json/v2"])
+
+contract_check("contract_go_modern_idioms_no_127",
+    "plugins/coding-pipeline/references/go-modern-idioms.md",
+    [],
+    ["json/v2"])
+
+contract_check("link_go_md_to_idioms",
+    "plugins/coding-pipeline/references/languages/go.md",
+    ["[`../go-modern-idioms.md`](../go-modern-idioms.md)"],
+    [])
+
+contract_check("contract_go_md_version_fixes",
+    "plugins/coding-pipeline/references/languages/go.md",
+    ["spell it `any`, never `interface{}`",
+     "From `go 1.25` start `WaitGroup` goroutines with `wg.Go(f)`",
+     "only below `go 1.22`"],
+    ["never `interface{}` / `any` in a signature",
+     "never at the end of the function; `defer wg.Done()` goes inside the goroutine closure",
+     "in leaf tests, with the loop variable captured"])
+
+contract_check("contract_gate_ref_modernize_cp",
+    "plugins/coding-pipeline/references/quality-gate-reference.md",
+    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
+     "never fails the gate",
+     "`-diff` never rewrites a file"],
+    ["(and Stress in parallel)", "go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_modernize_eng",
+    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
+    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
+     "never fails the gate",
+     "`-diff` never rewrites a file"],
+    ["(and Stress in parallel)", "go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_no_unpinned_fetch",
+    "plugins/coding-pipeline/references/quality-gate-reference.md",
+    [],
+    ["go run golang.org/x/tools"])
+
+contract_check("contract_gate_ref_no_unpinned_fetch_eng",
+    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
+    [],
+    ["go run golang.org/x/tools"])
+
+contract_check("contract_qa_advisory_never_caps",
+    "plugins/coding-pipeline/agents/qa.md",
+    ["advisory rows never cap the score", "- **Go advisory**: "],
+    [])
+
+contract_check("contract_eng_report_advisory",
+    "plugins/engineering/skills/quality-gate/references/execution-and-report.md",
+    ["Advisory rows (Go"],
+    [])
+
+contract_check("contract_language_index_unchanged",
+    "plugins/coding-pipeline/references/language-rules-reference.md",
+    [],
+    ["go-modern-idioms"])
+
+# 4e6020 S2: Latency fundamentals
+contract_check("contract_perf_fix_rows",
+    "plugins/engineering/skills/performance-profiling/references/optimize-and-benchmark.md",
+    ["SetMaxOpenConns", "MaxIdleConnsPerHost", "named invalidation owner",
+     "errgroup.WithContext", "off the request path", "Cursor pagination",
+     "EXPLAIN ANALYZE", "sync.Pool", "-gcflags=\"-m\""],
+    [])
+
+contract_check("contract_latency_budget",
+    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
+    ["## Trace first", "## Fix by layer", "/observability",
+     "sets no millisecond thresholds", "](optimize-and-benchmark.md)"],
+    ["20ms", "30ms", "50ms", "15ms", "50 ms", "20 ms"])
+
+contract_check("link_latency_budget_resolves",
+    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
+    ["](optimize-and-benchmark.md)"],
+    [])
+
+contract_check("contract_perf_skill_routes",
+    "plugins/engineering/skills/performance-profiling/SKILL.md",
+    ["`references/latency-budget.md` (trace first, then fix by layer)",
+     "references/optimize-and-benchmark.md"],
+    [])
+
+contract_check("characterization_perf_trigger_desc",
+    "plugins/engineering/skills/performance-profiling/SKILL.md",
+    ['"pprof"', '"latency"'],
+    [])
+
+contract_check("contract_architect_latency_fields",
+    "plugins/coding-pipeline/agents/architect.md",
+    ["Remote calls per request:", "invalidation trigger"],
+    [])
+
+# 4e6020 S3: Orchestration fan-out rules
+contract_check("contract_thresholds_widths",
+    "plugins/coding-pipeline/references/thresholds.md",
+    ["## Roster", "| Writer subagents per turn | 3 (never 4+)", "| Read-only subagents per turn | 6",
+     "every one counts toward the session dispatch budget", "≤ 150 words or one table"],
+    ["| Subagents per turn | 3 (never 4+) |"])
+
+contract_check("contract_claude_md_fanout",
+    "plugins/coding-pipeline/CLAUDE.md",
+    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
+     "the gate chain stays in the foreground", "Freeze the shared contract",
+     "the orchestrator coordinates", "writes no implementation code"],
+    ["- **Never spawn 4+** in a single turn.", "up to 6"])
+
+contract_check("contract_worktree_doc_background",
+    "plugins/coding-pipeline/references/delivery-and-worktree.md",
+    ["local", "Read-only subagents (Explore, code mapping) may still run in parallel",
+     "`Read-only subagents per turn`", "never a polling loop",
+     "never dispatch parallel Coder subagents into the same worktree"],
+    [])
+
+contract_check("characterization_sequential_stories",
+    "plugins/coding-pipeline/references/delivery-and-worktree.md",
+    ["never dispatch parallel Coder subagents into the same worktree"],
+    [])
+
+contract_check("contract_phase05_vector",
+    "plugins/coding-pipeline/skills/planning/references/phases.md",
+    ["| Tier | Roster |", "fan the mapping out by vector", "mappers never write it"],
+    [])
+
+contract_check("contract_dispatch_hook_comment",
+    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
+    ["caps writers at three per *turn*"],
+    ["caps three per *turn*"])
+
+contract_check("characterization_hooks_suite",
+    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
+    ["# CLAUDE.md's Sub-agent Discipline caps writers at three per *turn*"],
+    [])
+
+# 4e6020 S4: Agent teams, models, release
+contract_check("contract_agent_teams_doc",
+    "plugins/coding-pipeline/references/agent-teams.md",
+    ["Experimental and opt-in", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "named subagent",
+     "never set by the installer", "read-only lanes only", "not user consent",
+     "| Worktree isolation |", "| Implementer ≠ validator |", "| Dispatch budget |",
+     "| Plan approval |", "| Context ceiling |", "| Skills |", "## Cost",
+     "https://code.claude.com/docs/en/agent-teams"],
+    [])
+
+contract_check("contract_installers_never_enable_teams",
+    "install.sh",
+    [],
+    ["AGENT_TEAMS"])
+
+contract_check("contract_installers_never_enable_teams",
+    "plugins/coding-pipeline/scripts/install-global.sh",
+    [],
+    ["AGENT_TEAMS"])
+
+contract_check("contract_no_team_hooks",
+    "plugins/coding-pipeline/hooks/hooks.json",
+    [],
+    ["TeammateIdle", "TaskCompleted", "TaskCreated"])
+
+contract_check("contract_claude_md_teams_and_alias",
+    "plugins/coding-pipeline/CLAUDE.md",
+    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
+     "the gate chain stays in the foreground", "Freeze the shared contract",
+     "the orchestrator coordinates", "writes no implementation code",
+     "`references/agent-teams.md`", "aliases resolve to the newest model in each family"],
+    ["- **Never spawn 4+** in a single turn.", "up to 6"])
+
+contract_check("characterization_skill_model_restatements",
+    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+    ["CLAUDE.md Model assignment table"],
+    [])
+
+contract_check("characterization_skill_model_restatements",
+    "plugins/coding-pipeline/skills/task/SKILL.md",
+    ["CLAUDE.md Model assignment table"],
+    [])
+
+contract_check("contract_changelog_attribution",
+    "CHANGELOG.md",
+    ["## [2.8.0]", "**JetBrains/go-modern-guidelines** (Apache-2.0)",
+     "**danicat/skills** (Apache-2.0)", "paraphrased (no text copied)"],
+    [])
+
+contract_check("contract_readme_refresh",
+    "README.md",
+    ["`go fix -diff` (Go ≥ 1.26, reports only)", "Read-only subagents may fan out wider than writers",
+     "layer-by-layer latency budget", "Aliases resolve to the newest model in each family"],
+    ["Agent teams are enabled"])
+
+# 4e6020 S5: Token efficiency
+# Every non-architect pipeline agent declares its tools: allowlist (C25); the
+# validators additionally cannot write, so implementer != validator is mechanical.
+TOOLS_ALLOWLIST_AGENTS = [
+    "qa", "reviewer", "stress", "verdict", "plan-reviewer",
+    "coder", "coder-backend", "coder-frontend",
+    "tuner", "devops", "bug-investigator",
+    "analyst", "pm", "scrum-master",
+]
+for agent in TOOLS_ALLOWLIST_AGENTS:
+    tools_check("contract_agent_tools_allowlist",
+        f"plugins/coding-pipeline/agents/{agent}.md")
+
+for agent in ["qa", "reviewer", "stress", "verdict", "plan-reviewer"]:
+    tools_check("contract_validators_cannot_edit",
+        f"plugins/coding-pipeline/agents/{agent}.md",
+        forbidden=("Edit", "Write"))
+
+# C34: the thin orchestrator dispatches and runs gates; it cannot read or search
+# files into its own context.
+tools_check("contract_orchestrator_tools",
+    "plugins/coding-pipeline/agents/orchestrator.md",
+    required=("Agent(", "Bash", "SendMessage", "AskUserQuestion"),
+    forbidden=("Read", "Edit", "Write", "Grep", "Glob", "WebFetch", "WebSearch"))
+
+# C27-C29: the rules the orchestrator and the planner load must say what they say.
+contract_check("contract_loop_dispatch_hygiene",
+    "plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+    ["never Reads the delivery file", "replays the agent's whole history", "Never pasted conversation"],
+    [])
+
+contract_check("contract_session_model_and_boundary",
+    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+    ["/model sonnet", "/clear, then /multi-agent"],
+    [])
+
+contract_check("contract_bundle_rule",
+    "plugins/coding-pipeline/skills/planning/references/phases.md",
+    ["≤ 120 lines", "become one row"],
+    [])
+
+# Each contract row is checked against its own file
+for path, must_contain, must_not, *name in CONTRACT:
+    checked["contract"] += 1
+    name_prefix = f"FAIL: {name[0]} — " if name else ""
     full = os.path.join(ROOT, path)
     if not os.path.isfile(full):
-        err("contract", path, "file missing")
+        err("contract", path, f"{name_prefix}file missing")
         continue
     text = read(full)
     for phrase in must_contain:
         if phrase not in text:
-            err("contract", path, f"must contain '{phrase}'")
+            err("contract", path, f"{name_prefix}must contain '{phrase}'")
     for phrase in must_not:
         if phrase in text:
-            err("contract", path, f"must not contain '{phrase}'")
+            err("contract", path, f"{name_prefix}must not contain '{phrase}'")
 
 # Glob check: no md files under plugins/coding-pipeline/ contain subagent_type: "claude"
 coding_pipeline_dir = os.path.join(ROOT, "plugins/coding-pipeline")

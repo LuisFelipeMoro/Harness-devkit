@@ -4,6 +4,11 @@ Steps A–F of `SKILL.md` Phase 2, repeated per epic. All work happens inside th
 worktree (`.worktrees/dlv-{key}/`) on `release/{slug}-{key}` — see
 [../../../references/delivery-and-worktree.md](../../../references/delivery-and-worktree.md).
 
+**Dispatch hygiene (all steps)** — the orchestrator's own context is the largest cost measured on a delivery, so:
+- The orchestrator never Reads the delivery file or a story whole. For an anchor it uses `grep -n` / `sed -n`.
+- A resume costs a full transcript: `SendMessage` replays the agent's whole history, and `dispatch-budget.sh` does not count it. The only allowed resume is the QA re-audit (step C, and the Tuner paragraph under D). Reviewer and Stress confirmation passes are fresh **haiku** dispatches given only their own prior findings, because a resumed agent keeps its sonnet model. Every fix round (Coder, Tuner) is a fresh dispatch with the finding list (see B).
+- Dispatch prompt shape: paths, the frozen excerpt the agent must match, and a return cap. Never pasted conversation, and never tool output longer than 40 lines.
+
 **A. Stories** — `agents/scrum-master.md`, dispatched only when the Epic Manifest for this epic has **≥ 2 manifest rows**; a single-row epic has the orchestrator fill the story template directly, no dispatch
 - Input: Epic Manifest rows for current epic + the delivery file
 - Output: one `story-{slug}.md` per task (scoped architecture sections only; include Security Points and the row's declared Roster)
@@ -82,11 +87,11 @@ See `references/quality-gate-reference.md` **Bug-Fix Loop Protocol** (and **Loop
 
 If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Tyler):
 - Tyler applies MINOR/NIT fixes; emits `TUNER COMPLETE`
-- Re-checks after a fix round are **narrow, never a full re-review**: QA re-audits only if tests changed, resuming the same QA agent rather than a fresh dispatch; Reviewer and Stress each run a confirmation pass on only their own prior findings, on haiku.
+- Re-checks after a fix round are **narrow, never a full re-review**: QA re-audits only if tests changed, resuming the same QA agent via `SendMessage` rather than a fresh dispatch (the one allowed resume); Reviewer and Stress each run a fresh haiku confirmation pass on only their own prior findings.
 - Any code fix — Tuner's included — goes back to M first.
 - Maximum 2 iterations; on `TUNER LIMIT REACHED` → proceed to E
 
-**E. Verdict** — `scripts/verify/verdict.sh --roster {roster} --classify-exit {n}` computes the gate, score and threshold; `agents/verdict.md` is read once per delivery and its Security Gate, narrative and Verdict Self-Check are applied **inline by the orchestrator** — no Verdict agent is dispatched per story
+**E. Verdict** — `scripts/verify/verdict.sh --roster {roster} --classify-exit {n}` computes the gate, score and threshold; `agents/verdict.md` is read once per delivery and its Security Gate, narrative and Verdict Self-Check are applied **inline by the orchestrator** — no Verdict agent is dispatched per story. Under `claude --agent orchestrator` (opt-in thin main session) the orchestrator applies the Verdict Self-Check from its own prompt and does not read `agents/verdict.md`. Thin mode runs no `grep`/`sed` under the guard: reading an anchor or filling a single-row story (step A) goes to the Scrum Master or an Explore dispatch with a return cap.
 - Input: Review score + Stress score (dispatched or folded) + QA summary (when QA ran) + AC checklist
 - Security Gate section required; unmitigated CRITICAL security = automatic NOT READY
 - `--classify-exit` non-zero (the declared roster was under-scoped) is itself a NOT READY reason, independent of score

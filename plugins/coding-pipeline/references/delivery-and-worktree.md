@@ -133,6 +133,9 @@ interference and no merge choreography. Two coders editing one tree concurrently
 overwrite each other, so never dispatch parallel Coder subagents into the same worktree.
 
 Read-only subagents (Explore, code mapping) may still run in parallel — they mutate nothing.
+Their width is the `Read-only subagents per turn` row in `references/thresholds.md`. They may run in
+the background, but a step that consumes their result waits for every completion notification —
+never a polling loop. Writers stay serial for the reason above: one tree, one writer at a time.
 
 ### Teardown
 
