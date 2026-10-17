@@ -375,6 +375,49 @@ CONTRACT = [
 def contract_check(name, path, must_contain, must_not):
     CONTRACT.append((path, must_contain, must_not, name))
 
+# Frontmatter tools: is scoped to the first `---` block, which contract_check's
+# substring match cannot do. Entries are split on commas outside parentheses so
+# `Agent(a, b)` stays one entry; a required entry matches by prefix.
+def frontmatter_tools(path):
+    lines = read(os.path.join(ROOT, path)).split("\n")
+    if not lines or lines[0] != "---":
+        return None
+    for line in lines[1:]:
+        if line == "---":
+            break
+        if line.startswith("tools:"):
+            entries, depth, current = [], 0, ""
+            for ch in line[len("tools:"):]:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                if ch == "," and depth == 0:
+                    entries.append(current.strip())
+                    current = ""
+                else:
+                    current += ch
+            entries.append(current.strip())
+            return [e for e in entries if e]
+    return None
+
+def tools_check(name, path, required=(), forbidden=()):
+    checked["contract"] += 1
+    if not os.path.isfile(os.path.join(ROOT, path)):
+        err("contract", path, f"FAIL: {name} — file missing")
+        return
+    tools = frontmatter_tools(path)
+    if tools is None:
+        errors.append(f"[contract] FAIL: {name} — {path}: no tools: line")
+        return
+    for t in forbidden:
+        if any(e == t or e.startswith(t + "(") for e in tools):
+            errors.append(f"[contract] FAIL: {name} — {path}: tools: contains {t}")
+    for r in required:
+        if not any(e.startswith(r) for e in tools):
+            errors.append(f"[contract] FAIL: {name} — {path}: tools: lacks {r}")
+
+
 # 4e6020 S1: Go refresh
 contract_check("contract_go_modern_idioms_rule",
     "plugins/coding-pipeline/references/go-modern-idioms.md",
@@ -572,6 +615,24 @@ contract_check("contract_readme_refresh",
     ["`go fix -diff` (Go ≥ 1.26, reports only)", "Read-only subagents may fan out wider than writers",
      "layer-by-layer latency budget", "Aliases resolve to the newest model in each family"],
     ["Agent teams are enabled"])
+
+# 4e6020 S5: Token efficiency
+# Every non-architect pipeline agent declares its tools: allowlist (C25); the
+# validators additionally cannot write, so implementer != validator is mechanical.
+TOOLS_ALLOWLIST_AGENTS = [
+    "qa", "reviewer", "stress", "verdict", "plan-reviewer",
+    "coder", "coder-backend", "coder-frontend",
+    "tuner", "devops", "bug-investigator",
+    "analyst", "pm", "scrum-master",
+]
+for agent in TOOLS_ALLOWLIST_AGENTS:
+    tools_check("contract_agent_tools_allowlist",
+        f"plugins/coding-pipeline/agents/{agent}.md")
+
+for agent in ["qa", "reviewer", "stress", "verdict", "plan-reviewer"]:
+    tools_check("contract_validators_cannot_edit",
+        f"plugins/coding-pipeline/agents/{agent}.md",
+        forbidden=("Edit", "Write"))
 
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:

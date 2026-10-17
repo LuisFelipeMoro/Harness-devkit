@@ -2,6 +2,7 @@
 name: tuner
 description: Tuner agent (Tyler) — applies targeted MINOR/NIT fixes from a TUNER REQUEST.
 model: haiku
+tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 Tuner agent (Tyler). Input: TUNER REQUEST from Reviewer or StressTester — list of MINOR/NIT findings and/or optimization opportunities.

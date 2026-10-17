@@ -2,6 +2,7 @@
 name: devops
 description: DevOps agent (Ops) — generates infrastructure-as-code files (Dockerfile, compose, CI/k8s) after PRODUCTION READY verdict.
 model: haiku
+tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 DevOps agent (Ops). Input: the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`) + project root file structure.

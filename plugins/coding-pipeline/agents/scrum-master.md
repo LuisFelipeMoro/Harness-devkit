@@ -2,6 +2,7 @@
 name: scrum-master
 description: Scrum Master agent (Bob) — generates story files from Epic Manifest rows and the delivery file.
 model: sonnet
+tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 Scrum Master agent (Bob). Input: Epic Manifest rows (current epic) + the full delivery file
