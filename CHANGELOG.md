@@ -15,7 +15,7 @@ teams. Four stories, each judged on its own.
 - **Named contract rows.** `validate-wiring.py` gains `contract_check(name, …)`, so a failing row
   prints `FAIL: <name>` and can be falsified with `break-run.sh`.
 - **Trace-first latency budget.** `references/latency-budget.md` traces one slow request before it
-  picks a fix by layer. `/performance-profiling` routes to it when latency is spread across services. It routes back to the characterization test step.
+  picks a fix by layer. `/performance-profiling` routes to it when latency is spread across services. Fixes chosen from the budget return to steps 4–5, so a characterization test pins current behaviour before the first change.
 - **Cross-layer fixes.** The performance-profiling fixes table gains five rows: pool sizing, owned
   caches, chained service calls, async off-path work, and payload size. There are no millisecond
   thresholds; targets come from the service's SLO.
@@ -45,7 +45,7 @@ teams. Four stories, each judged on its own.
 | Plugin | Version | Why |
 |---|---|---|
 | `coding-pipeline` | 2.7.1 → **2.8.0** | Go idioms and advisory modernize gate, latency budget, read-only fan-out width, agent-teams reference. Additive: no rule a consumer relies on is removed. |
-| `engineering` | 1.5.1 → **1.6.0** | Advisory modernize row in the gate reference and the pinned gate copy. |
+| `engineering` | 1.5.1 → **1.6.0** | Advisory modernize row in the gate reference, guarded against an unpinned fetch. |
 
 ## [2.7.1] — 2026-09-25
 
