@@ -11,6 +11,9 @@
 # messages and PROGRESS entries carry arbitrary text), then the command is split
 # on every separator, and each segment must start with an allowed word.
 # Known limit: heredoc stripping is not quote-aware, so a quoted `<<WORD` can hide a line.
+# Known limits that fail closed (a retry costs tokens, never a silent pass): separators
+# and `<`/`>` inside quoted non-heredoc arguments are split or blocked as if unquoted,
+# and an env prefix such as `FOO=1 git status` is not an allowed word, so it is blocked.
 set -uf
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./hook-lib.sh
@@ -61,9 +64,10 @@ case "$clean" in
     *'<'*) block ;;
 esac
 
-# Split on every command separator. The `||`, `&&` and `&` forms are replaced
-# before the single-character ones so `||` is not read as two pipes.
-segs=$(printf '%s' "$clean" | sed -e 's/&&/\
+# Drop fd duplications (`2>&1`) and /dev/null sinks first: their `&` is not a
+# separator. Then split on every command separator. The `||`, `&&` and `&` forms
+# are replaced before the single-character ones so `||` is not read as two pipes.
+segs=$(printf '%s' "$clean" | sed -e 's/[0-9]*>&[0-9-]//g' -e 's/[0-9]*>[[:space:]]*\/dev\/null//g' -e 's/&&/\
 /g' -e 's/||/\
 /g' -e 's/[;&|]/\
 /g')
@@ -76,15 +80,18 @@ while IFS= read -r seg; do
         continue
     fi
 
-    # Output redirects are allowed only into PROGRESS.md.
-    while IFS= read -r target; do
-        [ -n "$target" ] || continue
-        case "$target" in
-            PROGRESS.md) ;;
+    # Output redirects are allowed only as an append (>>) into PROGRESS.md; a plain
+    # `>` truncates the file and loses its history.
+    while IFS= read -r redir; do
+        [ -n "$redir" ] || continue
+        case "$redir" in
+            '>>'*) target="${redir#>>}" ;;
             *) block ;;
         esac
+        target="${target#"${target%%[![:space:]]*}"}"
+        [ "$target" = PROGRESS.md ] || block
     done <<EOF_TARGETS
-$(printf '%s' "$seg" | grep -oE '>>?[[:space:]]*[^[:space:]]*' | sed -E 's/^>>?[[:space:]]*//')
+$(printf '%s' "$seg" | grep -oE '>>?[[:space:]]*[^[:space:]]*')
 EOF_TARGETS
     # A bare `>` with no target is malformed and blocked the same way.
     if printf '%s' "$seg" | grep -qE '>[[:space:]]*($|[;&|])'; then
@@ -98,6 +105,10 @@ EOF_TARGETS
 
     case "$first" in
         git|gh|cd|test|echo) ;;
+        # head and tail are admitted only as a pipe consumer (`| tail -5`): any file
+        # argument reads a file, so it is blocked like cat and sed.
+        head|tail)
+            printf '%s' "$args" | grep -qxE -- '(-[0-9]+|-n[[:space:]]*[0-9]+)?' || block ;;
         bash)
             target="${args%%[[:space:]]*}"
             case "$target" in

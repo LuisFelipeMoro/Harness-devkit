@@ -4,7 +4,7 @@
 
 Go idioms that are checked against the module's own Go version, a latency method that starts with a
 trace, a fan-out rule that lets read-only work run wider than writes, and an opt-in stance on agent
-teams. Four stories, each judged on its own.
+teams, plus leaner dispatches. Five stories, each judged on its own.
 
 ### Added
 

@@ -272,6 +272,8 @@ orch_expect "test_orchestrator_guard_allows" 0 "$(printf 'cat >> PROGRESS.md <<'
 orch_expect "test_orchestrator_guard_allows" 0 "$(printf 'git commit -m "$(cat <<'"'"'EOF'"'"'\nsubject\n\nx && cat y\nEOF\n)"')"
 orch_expect "test_orchestrator_guard_allows" 0 'cd .worktrees/dlv-k && bash plugins/coding-pipeline/scripts/verify/checkpoint-m.sh --base b'
 orch_expect "test_orchestrator_guard_allows" 0 'bash install.sh'
+orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/verify/x.sh 2>&1 | tail -5'
+orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/verify/x.sh >/dev/null 2>&1'
 orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/delivery-state.sh --key k'
 
 orch_expect "test_orchestrator_guard_blocks" 2 'cat README.md'
@@ -288,6 +290,8 @@ orch_expect "test_orchestrator_guard_blocks" 2 'git log `cat x`'
 orch_expect "test_orchestrator_guard_blocks" 2 'git log < README.md'
 orch_expect "test_orchestrator_guard_blocks" 2 'bash ../x/scripts/verify/../../evil.sh'
 orch_expect "test_orchestrator_guard_blocks" 2 'python3 .github/scripts/../x.py'
+orch_expect "test_orchestrator_guard_blocks" 2 'echo x > PROGRESS.md'
+orch_expect "test_orchestrator_guard_blocks" 2 'bash plugins/coding-pipeline/scripts/verify/x.sh 2>&1 | cat README.md'
 
 # Fail open: an unparseable payload, and the devkit's per-hook kill switch.
 expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{not json' 0

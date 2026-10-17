@@ -91,7 +91,7 @@ If Reviewer or StressTester emits `TUNER REQUEST` → load `agents/tuner.md` (Ty
 - Any code fix — Tuner's included — goes back to M first.
 - Maximum 2 iterations; on `TUNER LIMIT REACHED` → proceed to E
 
-**E. Verdict** — `scripts/verify/verdict.sh --roster {roster} --classify-exit {n}` computes the gate, score and threshold; `agents/verdict.md` is read once per delivery and its Security Gate, narrative and Verdict Self-Check are applied **inline by the orchestrator** — no Verdict agent is dispatched per story. Under `claude --agent orchestrator` (opt-in thin main session) the orchestrator applies the Verdict Self-Check from its own prompt and does not read `agents/verdict.md`
+**E. Verdict** — `scripts/verify/verdict.sh --roster {roster} --classify-exit {n}` computes the gate, score and threshold; `agents/verdict.md` is read once per delivery and its Security Gate, narrative and Verdict Self-Check are applied **inline by the orchestrator** — no Verdict agent is dispatched per story. Under `claude --agent orchestrator` (opt-in thin main session) the orchestrator applies the Verdict Self-Check from its own prompt and does not read `agents/verdict.md`. Thin mode runs no `grep`/`sed` under the guard: reading an anchor or filling a single-row story (step A) goes to the Scrum Master or an Explore dispatch with a return cap.
 - Input: Review score + Stress score (dispatched or folded) + QA summary (when QA ran) + AC checklist
 - Security Gate section required; unmitigated CRITICAL security = automatic NOT READY
 - `--classify-exit` non-zero (the declared roster was under-scoped) is itself a NOT READY reason, independent of score

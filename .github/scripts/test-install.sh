@@ -190,11 +190,13 @@ P="$(newhome)"; H="$(newhome)"
 mkdir -p "$P/hooks" "$P/agents" "$H/.claude"
 printf '#!/bin/bash\n' > "$P/hooks/agent-only-guard.sh"
 printf '#!/bin/bash\n' > "$P/hooks/orphan-guard.sh"
+printf '#!/bin/bash\n' > "$P/hooks/comment-only-guard.sh"
 cat > "$P/agents/fake.md" <<'MD'
 ---
 name: fake
 tools: Read
 hooks:
+  # hooks/comment-only-guard.sh is only named in this comment, never wired
   PreToolUse:
     - matcher: Bash
       hooks:
@@ -205,7 +207,7 @@ Body text mentioning hooks/orphan-guard.sh does not wire it.
 MD
 printf '{}\n' > "$H/.claude/settings.json"
 out="$(verify_wiring "$P" "$H" 2>&1)"
-printf '%s' "$out" | grep -q 'orphan-guard.sh' && ! printf '%s' "$out" | grep -q 'agent-only-guard.sh'
+printf '%s' "$out" | grep -q 'orphan-guard.sh' && printf '%s' "$out" | grep -q 'comment-only-guard.sh' && ! printf '%s' "$out" | grep -q 'agent-only-guard.sh'
 check "test_install_agent_wired_hook_exempt" "agent-wired guard reported missing, or unreferenced hook not reported" $?
 rm -rf "$P" "$H"
 

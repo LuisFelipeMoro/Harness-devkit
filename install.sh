@@ -360,6 +360,8 @@ for fn in (os.listdir(agents_dir) if os.path.isdir(agents_dir) else []):
     front = lines[1:lines.index("---", 1)] if "---" in lines[1:] else []
     in_hooks = False
     for line in front:
+        if re.match(r"^\s*#", line):
+            continue
         if re.match(r"^hooks:\s*$", line):
             in_hooks = True
             continue
