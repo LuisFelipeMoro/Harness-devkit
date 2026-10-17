@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.8.0] — 2026-10-16
+
+Go idioms that are checked against the module's own Go version, a latency method that starts with a
+trace, a fan-out rule that lets read-only work run wider than writes, and an opt-in stance on agent
+teams. Four stories, each judged on its own.
+
+### Added
+
+- **Version-gated Go idioms.** `references/go-modern-idioms.md` tabulates Go 1.18–1.26 idioms. Each
+  row carries its minimum Go version and applies only when the module's `go` directive reaches it.
+- **Advisory modernize gate.** `go fix -diff` (Go ≥ 1.26) is a row in both quality-gate references.
+  QA and `/quality-gate` report it as ADVISORY or skipped; it never fails a gate. A wiring check rejects an unpinned fetch.
+- **Named contract rows.** `validate-wiring.py` gains `contract_check(name, …)`, so a failing row
+  prints `FAIL: <name>` and can be falsified with `break-run.sh`.
+- **Trace-first latency budget.** `references/latency-budget.md` traces one slow request before it
+  picks a fix by layer. `/performance-profiling` routes to it when latency is spread across services. It routes back to the characterization test step.
+- **Cross-layer fixes.** The performance-profiling fixes table gains five rows: pool sizing, owned
+  caches, chained service calls, async off-path work, and payload size. There are no millisecond
+  thresholds; targets come from the service's SLO.
+- **Architect design fields.** The Architect template gains a remote-calls-per-request field and a
+  cache-owner field, so latency is decided at design time.
+- **Agent teams, documented and off.** `references/agent-teams.md` records what the experimental
+  flag does to dispatch and the only way the devkit tolerates it: read-only lanes, with the flag
+  never set by the installer. CLAUDE.md points to it.
+
+### Changed
+
+- **Read-only fan-out has its own width.** Writers stay at three per turn. Read-only subagents (no
+  Edit or Write tools, a no-mutation prompt, no mutating shell command) get a separate width in
+  `thresholds.md`. Contracts are frozen before fan-out, read-only dispatches may run in the
+  background while the gate chain stays in the foreground, and every dispatch still counts toward
+  the session budget. The escalation ladder applies to writers only.
+- **Model aliases are named as the source of truth.** The model table pins no version: the
+  `opus`, `sonnet` and `haiku` aliases resolve to the newest model in each family, and the two skills
+  that restate the table defer to it.
+
+### Credits
+
+- Idea sources, paraphrased (no text copied): **JetBrains/go-modern-guidelines** (Apache-2.0) for the Go idiom table, and **danicat/skills** (Apache-2.0) for the read-only fan-out, contract-convergence and return-cap rules.
+
+### Versions
+
+| Plugin | Version | Why |
+|---|---|---|
+| `coding-pipeline` | 2.7.1 → **2.8.0** | Go idioms and advisory modernize gate, latency budget, read-only fan-out width, agent-teams reference. Additive: no rule a consumer relies on is removed. |
+| `engineering` | 1.5.1 → **1.6.0** | Advisory modernize row in the gate reference and the pinned gate copy. |
+
 ## [2.7.1] — 2026-09-25
 
 ### Fixed
