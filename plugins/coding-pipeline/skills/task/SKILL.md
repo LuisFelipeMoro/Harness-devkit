@@ -23,6 +23,7 @@ Dispatch the Architect on `opus`; Scrum Master, Plan Reviewer, QA, Reviewer, Str
 
 0. **Delivery setup (once)** — derive the slug + key from the task name, create `.worktrees/dlv-{key}/` on branch `release/{slug}-{key}`, and run everything inside it, per [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md). An existing worktree for the key means resume, not recreate. Never commit or merge to `main` — the terminal step is a PR from the release branch.
 1. **Planning (once)** — follow `skills/planning/SKILL.md` from **Phase 0.5 (Codebase Discovery)**, then Architecture, then the Phase 2.5 plan review — Priya must return `PLAN APPROVED` (or her leftover findings must reach the human) before any code; run the Backend-Driven Architecture tier check; produce and confirm a **Task Manifest** (sizing rules and tier check detail in [references/loop.md](references/loop.md)).
+   If the session is not the orchestrator (prompt does not open with "You are the delivery orchestrator") and the manifest has ≥ 2 sub-tasks or the codebase map shows a wide blast radius, print once, then continue (never stop): "Exit, then run: `claude --agent orchestrator`, and inside it: `/task {args}`". A narrow single-sub-task change prints nothing.
 2. **Execution options** — planning's own step 8 runs the checkpoint (`bench-context.py --manifest`):
    dispatch counts and a token range for as-planned / all-standard / legacy-full-loop. Do not enter
    the sub-task loop until the operator has picked or edited the manifest's rosters.

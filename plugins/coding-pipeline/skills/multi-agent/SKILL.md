@@ -24,6 +24,11 @@ Ask before the first `git push`. Never commit or merge to `main` — the termina
 from the release branch. Commands, header block, and branch rules:
 [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md).
 If the main session is not on `sonnet`, say so and recommend `/model sonnet` (the Architect is still dispatched on `opus` by name).
+If this session's prompt does not open with "You are the delivery orchestrator", print once, then continue (never stop):
+"Exit, then run: `claude --agent orchestrator`, and inside it: `/multi-agent {args}`" ({args} = what the user passed here).
+It pays off for multi-story or unattended deliveries, not a single small change, bug fix or quick question.
+On one measured delivery (4e6020) the main thread was ~64% of cost, because it carries every agent's output on each call.
+The orchestrator only dispatches and runs git and gates. Resume is lossless from the worktree + PROGRESS.md.
 
 ---
 
