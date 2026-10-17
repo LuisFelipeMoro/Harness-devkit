@@ -2,6 +2,7 @@
 name: plan-reviewer
 description: Plan Reviewer agent (Priya) — audits the delivery file and manifest against the real codebase before human validation; blocks planning on reuse, contradiction, and ambiguity defects.
 model: sonnet
+tools: Read, Grep, Glob, Bash, LSP
 ---
 
 Plan Reviewer agent (Priya). Input: the delivery file, the manifest, `codebase-map.md`, and the
