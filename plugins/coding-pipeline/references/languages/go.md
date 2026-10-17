@@ -27,6 +27,8 @@ Do not pre-load; do not load a language the story does not name.
 
 Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules-reference.md`.
 
+Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idioms.md) — Coder loads it on every Go story; apply a row only when the module's `go` directive is at least its Min Go.
+
 ---
 ## Coding Rules
 `fmt.Errorf("ctx: %w", err)` — no bare `return err`; `context.Context` first param; interfaces in consumer package; no `panic` in library code; `crypto/rand` not `math/rand`; parameterized queries; `ReadTimeout`/`WriteTimeout` on `http.Server`; `defer` for cleanup; every HTTP handler must have complete `swaggo/swag` annotations (`@Summary`, `@Description`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`); request/response types must be fully-typed Go structs (no `any`, no `interface{}`); types consumed across packages must be behind an interface in the consumer package; run `swag init ./...` — zero errors before handoff.
@@ -35,7 +37,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Rule | Requirement |
 |------|-------------|
 | Error inspection | `errors.Is` / `errors.As` — never string-match an error message |
-| Types | Concrete types or generics `[T any]` — never `interface{}` / `any` in a signature |
+| Types | Concrete types or generics `[T any]` — never an empty interface in a signature; where one is unavoidable (a decode target, a `slog` attribute), spell it `any`, never `interface{}` |
 | Layout | `cmd/` (main only) · `internal/` · `business/` · `foundation/` |
 | Dependencies | Stdlib first — an external package earns its place only by being dramatically simpler, an existing project choice, or already in use; allowlist: `go.uber.org/zap` · `testify` · `golang.org/x/sync` · `ardanlabs/conf/v3` |
 | Package names | Lowercase single word — no `utils` / `helpers` / `common` |
@@ -60,7 +62,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Escaping references | Return `slices.Clone(...)`, never a slice or pointer backed by a guarded field (`buf.Bytes()` included) |
 | `Locked` suffix | A helper that assumes the lock is already held is named `…Locked` and carries `// +checklocks:mu` |
 | Channel capacity | A result channel is buffered to the number of senders, so a loser can deposit and exit instead of leaking |
-| `defer` placement | Written on the line after acquisition, never at the end of the function; `defer wg.Done()` goes inside the goroutine closure |
+| `defer` placement | Written on the line after acquisition, never at the end of the function. From `go 1.25` start `WaitGroup` goroutines with `wg.Go(f)`; below it, `defer wg.Done()` goes inside the goroutine closure |
 | `errgroup` context | Each `g.Go` closure uses `gctx`, never the outer `ctx` — passing the outer one silently disables first-error cancellation |
 | Atomics | `sync/atomic` for a single `Add`/`CompareAndSwap`/`Swap` only; `Load` then `Store` is a TOCTOU that looks synchronised and is not |
 | Non-blocking ops | `select` with `default` when a send or receive must not block, and the dropped value is a stated decision, not an accident |
@@ -113,7 +115,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Rule | Requirement |
 |------|-------------|
 | Shape | Table-driven with named cases; the case name is what a failure prints, so it names the behaviour, not `case 3` |
-| Isolation | `t.Parallel()` in leaf tests, with the loop variable captured; `t.Cleanup` over `defer` for teardown |
+| Isolation | `t.Parallel()` in leaf tests — capture the loop variable (`tc := tc`) only below `go 1.22`, where iterations share one variable; `t.Cleanup` over `defer` for teardown |
 | Helpers | `t.Helper()` in every assertion helper so the failure points at the caller's line |
 | HTTP | `httptest.Server` / `httptest.NewRecorder` — never a real network call in a unit test |
 | Golden files | Regenerated behind a `-update` flag, and reviewed as part of the diff — a golden file nobody read is a snapshot of a bug |

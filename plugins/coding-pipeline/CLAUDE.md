@@ -95,8 +95,17 @@ Rules:
 
 - **1 sub-agent** — default. Good for one focused task (exploration, data fetch, implementation).
 - **2 sub-agents** — great. Use for two genuinely independent parallel tasks with no shared state.
-- **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning.
-- **Never spawn 4+** in a single turn.
+- **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning. (writers; read-only fan-out below)
+- **Never spawn 4+ writers** in a single turn; read-only subagents are capped separately, below.
+- **Read-only fan-out** — subagents whose agent type has no Edit/Write/NotebookEdit tools
+  (Explore, Plan: the checkable case). The orchestrator attests that each prompt forbids
+  mutation and that no shell command mutates state. Such subagents may fan out wider, up to the
+  read-only width in `references/thresholds.md`, each returning its capped summary or one table.
+  Freeze the shared contract (questions, return shape, scope per worker) before fanning out;
+  workers never coordinate with each other. Read-only dispatches may run in the background;
+  the gate chain stays in the foreground. Inside a pipeline the orchestrator coordinates
+  (dispatches, runs sensors, merges returns) and writes no implementation code.
+- **Agent teams** are experimental and off: nothing in the devkit enables them, and a user who does keeps them to read-only lanes — read `references/agent-teams.md` before setting the flag.
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.
@@ -118,7 +127,7 @@ Rules:
 | Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), Plan Reviewer, QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
 | Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, the codebase-discovery pass, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation against a frozen Test Case table |
 
-Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason.
+Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason. The `opus`/`sonnet`/`haiku` aliases resolve to the newest model in each family, so this table pins no version; `skills/multi-agent/SKILL.md` and `skills/task/SKILL.md` restate it and change with it.
 
 ## Tool Preferences
 - **LSP first**: Use LSP (go-to-definition, find-references, diagnostics) for code navigation — grep only when LSP not applicable

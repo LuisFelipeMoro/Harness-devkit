@@ -222,7 +222,8 @@ rather than omitting it silently.
 
 ### Performance Characteristics
 - Time complexity: O(?) · Space: O(?) · Throughput: ~N req/s
-- Caching: {strategy + TTL rationale} · Pagination: {cursor/offset, max page size}
+- Caching: {strategy · owner · TTL rationale · invalidation trigger} · Pagination: {cursor/offset, max page size}
+- Remote calls per request: {count per endpoint — each one justified, batched, or removed}
 
 ### Implementation Checklist
 1. [ ] Define types/interfaces

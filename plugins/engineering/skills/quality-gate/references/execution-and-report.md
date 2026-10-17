@@ -22,8 +22,11 @@ For common fixes per gate failure, see `references/quality-gate-reference.md`.
 | vet      | ✅ PASS | —                                     |
 | lint     | ❌ FAIL | handler.go:42 — unhandled error       |
 | coverage | ✅ PASS | 87.3% (≥ 85%)                        |
+| modernize | ADVISORY | 3 files — reported, never counts toward Overall |
 
 Overall: ❌ FAIL — 1 gate failed. Fix before handoff.
 ```
+
+Advisory rows (Go `modernize`) report `ADVISORY` or `skipped` and never count toward Overall.
 
 Full pass line: `Overall: ✅ PASS — all gates green · {X}% coverage · {N} tests`
