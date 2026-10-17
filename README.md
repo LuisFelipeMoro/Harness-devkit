@@ -930,7 +930,7 @@ failing open beats blocking every tool call because a payload shape changed.
 | `DEVKIT_HOOK_PROFILE=off` | Every guard is inert |
 | `DEVKIT_HOOK_PROFILE=standard` | Default. Guards block; `delivery-gate` warns |
 | `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
-| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `post:session-tracker`, `stop:delivery-gate` |
+| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `pre:bash:orchestrator-guard`, `post:session-tracker`, `stop:delivery-gate` |
 
 `strict` blocks a given session only once — a Stop hook that blocks forever traps the operator
 rather than the mistake.

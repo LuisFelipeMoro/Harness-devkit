@@ -33,7 +33,8 @@ teams, plus leaner dispatches. Five stories, each judged on its own.
 ### Changed
 
 - **Validators cannot edit.** qa, reviewer, stress, verdict and plan-reviewer list no Edit or Write
-  tool, and `validate-wiring.py` (`tools_check`) fails the build if one gains either.
+  tool, and `validate-wiring.py` (`tools_check`) fails the build if one gains either. They keep Bash
+  for running gates, so this is a tools-list rule, not a sandbox.
 - **Read-only fan-out has its own width.** Writers stay at three per turn. Read-only subagents (no
   Edit or Write tools, a no-mutation prompt, no mutating shell command) get a separate width in
   `thresholds.md`. Contracts are frozen before fan-out, read-only dispatches may run in the
