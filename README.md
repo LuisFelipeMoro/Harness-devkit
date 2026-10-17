@@ -46,8 +46,10 @@ keeps the session to git and gates does not run.
 **Why start here.** Measured on one delivery (4e6020), the main session was ~64% of the cost. A normal
 session reads files and carries every agent's output, so its context grows across the run and is
 re-sent on every call. The orchestrator cannot read files, so its context stays small. It defaults to
-`sonnet`. Startup context is ~37.6k, not much below a plain session; the saving comes from slower
-growth, not a smaller start. A running session cannot be converted, so launch it before the pipeline:
+`sonnet`. Startup context is ~37.6k (one in-session measurement; a plain session was 45–46k), so the
+saving comes from slower growth, not a smaller start. `/task` can only judge its blast radius after
+its manifest, so its hint arrives after planning; the relaunch is cheap because state lives in the
+worktree. A running session cannot be converted, so launch it before the pipeline:
 
 - `claude --agent orchestrator`, then `/multi-agent <task>` (or `/task <task>`). Optional alias: `alias cco='claude --agent orchestrator'`.
 - `/multi-agent` always prints these commands once when the session is not the orchestrator. `/task` prints them only when the blast radius is big. Neither blocks.
