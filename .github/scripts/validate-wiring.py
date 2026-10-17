@@ -518,6 +518,61 @@ contract_check("characterization_hooks_suite",
     ["# CLAUDE.md's Sub-agent Discipline caps writers at three per *turn*"],
     [])
 
+# 4e6020 S4: Agent teams, models, release
+contract_check("contract_agent_teams_doc",
+    "plugins/coding-pipeline/references/agent-teams.md",
+    ["Experimental and opt-in", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "named subagent",
+     "never set by the installer", "read-only lanes only", "not user consent",
+     "| Worktree isolation |", "| Implementer ≠ validator |", "| Dispatch budget |",
+     "| Plan approval |", "| Context ceiling |", "| Skills |", "## Cost",
+     "https://code.claude.com/docs/en/agent-teams"],
+    [])
+
+contract_check("contract_installers_never_enable_teams",
+    "install.sh",
+    [],
+    ["AGENT_TEAMS"])
+
+contract_check("contract_installers_never_enable_teams",
+    "plugins/coding-pipeline/scripts/install-global.sh",
+    [],
+    ["AGENT_TEAMS"])
+
+contract_check("contract_no_team_hooks",
+    "plugins/coding-pipeline/hooks/hooks.json",
+    [],
+    ["TeammateIdle", "TaskCompleted", "TaskCreated"])
+
+contract_check("contract_claude_md_teams_and_alias",
+    "plugins/coding-pipeline/CLAUDE.md",
+    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
+     "the gate chain stays in the foreground", "Freeze the shared contract",
+     "the orchestrator coordinates", "writes no implementation code",
+     "`references/agent-teams.md`", "aliases resolve to the newest model in each family"],
+    ["- **Never spawn 4+** in a single turn.", "up to 6"])
+
+contract_check("characterization_skill_model_restatements",
+    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+    ["CLAUDE.md Model assignment table"],
+    [])
+
+contract_check("characterization_skill_model_restatements",
+    "plugins/coding-pipeline/skills/task/SKILL.md",
+    ["CLAUDE.md Model assignment table"],
+    [])
+
+contract_check("contract_changelog_attribution",
+    "CHANGELOG.md",
+    ["## [2.8.0]", "**JetBrains/go-modern-guidelines** (Apache-2.0)",
+     "**danicat/skills** (Apache-2.0)", "paraphrased (no text copied)"],
+    [])
+
+contract_check("contract_readme_refresh",
+    "README.md",
+    ["`go fix -diff` (Go ≥ 1.26, reports only)", "Read-only subagents may fan out wider than writers",
+     "layer-by-layer latency budget", "Aliases resolve to the newest model in each family"],
+    ["Agent teams are enabled"])
+
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:
     checked["contract"] += 1
