@@ -23,10 +23,10 @@ Each row names a Harness rule that a team breaks, and the reason it breaks.
 
 | Conflict | Why it breaks |
 |---|---|
-| Worktree isolation | Teammates share one checkout, so the per-delivery worktree isolation is lost. |
+| Worktree isolation | The docs give teammates no worktree of their own, so assume a shared checkout and the per-delivery isolation is lost. |
 | Implementer ≠ validator | Self-claimed tasks ignore the Coder, QA and Reviewer roles. |
 | Dispatch budget | `dispatch-budget.sh` counts Agent calls only, not teammate work. |
-| Plan approval | Plan approval is auto-approved, so it is not a substitute for the Plan Reviewer. |
+| Plan approval | When the lead is in plan mode, teammate plans are auto-approved, so this is not a substitute for the Plan Reviewer. |
 | Context ceiling | `context-budget.sh` inside a teammate is unverified. |
 | Skills | A definition's `skills` is not applied to teammates. |
 
@@ -34,9 +34,3 @@ Each row names a Harness rule that a team breaks, and the reason it breaks.
 
 The docs say teams use significantly more tokens. They recommend starting with 3–5 teammates, and
 they say to shut teammates down when the work is done.
-
-## If you enable it anyway
-
-Keep teammates to the read-only lanes above, state each teammate's model in its spawn prompt, and
-shut them down when the lane finishes. Re-read the docs link above first: the feature is
-experimental and its behaviour may change.

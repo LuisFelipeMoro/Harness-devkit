@@ -11,11 +11,11 @@ teams. Four stories, each judged on its own.
 - **Version-gated Go idioms.** `references/go-modern-idioms.md` tabulates Go 1.18–1.26 idioms. Each
   row carries its minimum Go version and applies only when the module's `go` directive reaches it.
 - **Advisory modernize gate.** `go fix -diff` (Go ≥ 1.26) is a row in both quality-gate references.
-  QA and `/quality-gate` report it as ADVISORY or skipped; it never fails a gate.
+  QA and `/quality-gate` report it as ADVISORY or skipped; it never fails a gate. A wiring check rejects an unpinned fetch.
 - **Named contract rows.** `validate-wiring.py` gains `contract_check(name, …)`, so a failing row
   prints `FAIL: <name>` and can be falsified with `break-run.sh`.
 - **Trace-first latency budget.** `references/latency-budget.md` traces one slow request before it
-  picks a fix by layer. `/performance-profiling` routes to it when latency is spread across services.
+  picks a fix by layer. `/performance-profiling` routes to it when latency is spread across services. It routes back to the characterization test step.
 - **Cross-layer fixes.** The performance-profiling fixes table gains five rows: pool sizing, owned
   caches, chained service calls, async off-path work, and payload size. There are no millisecond
   thresholds; targets come from the service's SLO.
@@ -35,8 +35,6 @@ teams. Four stories, each judged on its own.
 - **Model aliases are named as the source of truth.** The model table pins no version: the
   `opus`, `sonnet` and `haiku` aliases resolve to the newest model in each family, and the two skills
   that restate the table defer to it.
-- **Latency budget routes through the characterization test step.** A fix is chosen only after a characterization test is written first (steps 4–5 of the performance-profiling skill), and that test must stay green through the change.
-- **Engineering gate copy is guarded.** A wiring check rejects an unpinned `go run golang.org/x/tools` fetch in the engineering plugin's gate reference, and QA's advisory wording is sharper.
 
 ### Credits
 
