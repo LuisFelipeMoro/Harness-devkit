@@ -23,6 +23,7 @@ Derive the delivery slug + key from the feature name, create `.worktrees/dlv-{ke
 Ask before the first `git push`. Never commit or merge to `main` — the terminal step is a PR
 from the release branch. Commands, header block, and branch rules:
 [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md).
+If the main session is not on `sonnet`, say so and recommend `/model sonnet` (the Architect is still dispatched on `opus` by name).
 
 ---
 
@@ -60,7 +61,7 @@ roster `full` (Tuner on `TUNER REQUEST`, max 2)
 → **F** Story PR + checkpoint: push `feat/{key}-{story-slug}`, open its PR into `release/*` as a
 **draft** — reviewed inline by step D's Reviewer, no story-level `/pr-review` — promote with
 `gh pr ready` once no findings remain, merge `--no-ff` when green, then write the
-`[{key}]`-prefixed `PROGRESS.md` entry at the repo root.
+`[{key}]`-prefixed `PROGRESS.md` entry at the repo root. Then print `Story {n} merged: a fresh session is cheaper. Run /clear, then /multi-agent {key}` and continue without pausing — the line is advice, so an unattended run never stalls.
 
 Read-only Explore/mapping subagents may still run in parallel. On the final epic's
 PRODUCTION READY, load `agents/devops.md`, then push the release branch (ask first) and open a

@@ -33,7 +33,16 @@ autonomous agent on the rails:
 | **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
 | **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. A mid-story checkpoint is the same discipline in one command: `checkpoint-m.sh` runs spec coverage, diff scope, stray commits, leftover break markers, duplication and roster escalation to completion and reports every failure at once, never bailing out on the first miss; `break-run.sh` is what makes a test's falsification evidence real instead of hand-typed — it mutates exactly one literal, runs the test, requires the row's own `FAIL: <row>` in the output, then restores the file on every exit path, interrupted or not. |
 | **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. Git-ignored — local session memory, never committed, and the same holds for the handoff docs `/handoff` writes. |
-| **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. Read-only subagents may fan out wider than writers (width in `thresholds.md`); writers stay ≤ 3 per turn and stories stay sequential. Agent teams are documented, opt-in, and never enabled by the installer. |
+| **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. Read-only subagents may fan out wider than writers (width in `thresholds.md`); writers stay ≤ 3 per turn and stories stay sequential. Agent teams are documented, opt-in, and never enabled by the installer. An opt-in thin orchestrator (`claude --agent orchestrator`) keeps the main session off file reads. |
+
+### Thin orchestrator (opt-in)
+
+`claude --agent orchestrator` starts the main session as a dispatcher: it runs git, `gh` and the
+gates, and sends every read, search and edit to a subagent. It is opt-in; a normal `claude` session
+is unchanged. It needs the flat install (`bash install.sh`). A plugin-manager install ignores
+subagent frontmatter hooks, so there only the `tools:` allowlist applies, and the Bash guard that
+keeps the session to git and gates does not run.
+
 
 ### Spec-first, falsification-proven
 

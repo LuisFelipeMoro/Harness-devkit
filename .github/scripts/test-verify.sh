@@ -1017,6 +1017,29 @@ MD
 out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
 check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
 
+# ── test_bench_main_session_row: 4 stories × 45 calls × 170k = 30,600,000 ───
+main_fixture="$W/manifest-4row.md"
+cat > "$main_fixture" <<'MD'
+| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
+|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
+| ST-A: does X | R1 | — | none | ~10 lines | Bash | Backend | light |
+| ST-B: does Y | R2 | — | none | ~10 lines | Bash | Backend | full |
+| ST-C: does Z | R3 | — | none | ~10 lines | Bash | Backend | standard |
+| ST-D: does W | R4 | — | none | ~10 lines | Bash | Backend | cosmetic |
+MD
+out=$(python3 "$BENCH" --manifest "$main_fixture" 2>&1); rc=$?
+main_row=$(printf '%s' "$out" | grep '^| Main session' || true)
+case "$main_row" in *"30,600,000"*"measured (n=1)"*) main_ok=0 ;; *) main_ok=1 ;; esac
+check "test_bench_main_session_row" 0 "$rc" "$out" "Main session"
+check "test_bench_main_session_row" 0 "$main_ok"
+json_main=$(python3 "$BENCH" --manifest "$main_fixture" --json 2>&1); rc=$?
+orch_tokens=$(printf '%s' "$json_main" | python3 -c "
+import json, sys
+print(json.load(sys.stdin)['orchestrator']['tokens'])
+" 2>/dev/null || echo missing)
+[ "$rc" = 0 ] && [ "$orch_tokens" = 30600000 ] && orch_ok=0 || orch_ok=1
+check "test_bench_main_session_row" 0 "$orch_ok"
+
 # ══════════════════════════════════════════════════════════════════════════
 # bench-context.py REWORK and tautology-scan.py TEST_FILE checks — synthetic
 # fixtures only, no reference to any one delivery's own numbers or file names.

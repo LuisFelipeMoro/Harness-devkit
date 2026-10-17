@@ -645,6 +645,22 @@ tools_check("contract_orchestrator_tools",
     required=("Agent(", "Bash", "SendMessage", "AskUserQuestion"),
     forbidden=("Read", "Edit", "Write", "Grep", "Glob", "WebFetch", "WebSearch"))
 
+# C27-C29: the rules the orchestrator and the planner load must say what they say.
+contract_check("contract_loop_dispatch_hygiene",
+    "plugins/coding-pipeline/skills/multi-agent/references/loop.md",
+    ["never Reads the delivery file", "replays the agent's whole history", "Never pasted conversation"],
+    [])
+
+contract_check("contract_session_model_and_boundary",
+    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
+    ["/model sonnet", "/clear, then /multi-agent"],
+    [])
+
+contract_check("contract_bundle_rule",
+    "plugins/coding-pipeline/skills/planning/references/phases.md",
+    ["≤ 120 lines", "become one row"],
+    [])
+
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:
     checked["contract"] += 1

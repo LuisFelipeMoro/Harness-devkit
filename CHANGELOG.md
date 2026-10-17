@@ -24,9 +24,16 @@ teams. Four stories, each judged on its own.
 - **Agent teams, documented and off.** `references/agent-teams.md` records what the experimental
   flag does to dispatch and the only way the devkit tolerates it: read-only lanes, with the flag
   never set by the installer. CLAUDE.md points to it.
+- **Leaner dispatches.** Pipeline agents declare a `tools:` allowlist: a measured probe fell from
+  41.5k to 14.9k tokens of inherited tool definitions. Dispatch rules forbid resuming an agent
+  except for a QA re-audit, because a resumed transcript replays in full. Small doc-only manifest
+  rows bundle into one row. An opt-in thin orchestrator (`claude --agent orchestrator`) keeps the
+  main session off file reads, and `bench-context.py --manifest` prints a main-session estimate.
 
 ### Changed
 
+- **Validators cannot edit.** qa, reviewer, stress, verdict and plan-reviewer list no Edit or Write
+  tool, and `validate-wiring.py` (`tools_check`) fails the build if one gains either.
 - **Read-only fan-out has its own width.** Writers stay at three per turn. Read-only subagents (no
   Edit or Write tools, a no-mutation prompt, no mutating shell command) get a separate width in
   `thresholds.md`. Contracts are frozen before fan-out, read-only dispatches may run in the

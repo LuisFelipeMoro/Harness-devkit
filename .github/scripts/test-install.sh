@@ -183,6 +183,32 @@ verify_wiring "$PLUGIN" "$H" >/dev/null 2>&1
 check "verify_wiring_catches_missing_hook" "passed with destructive-guard unreferenced" $?
 rm -rf "$H"
 
+# test_install_agent_wired_hook_exempt — a guard wired only by an agent's frontmatter
+# `hooks:` block is not missing from settings.json; a hook that nothing references is.
+# Synthetic plugin, so the assertion does not depend on the real hook set.
+P="$(newhome)"; H="$(newhome)"
+mkdir -p "$P/hooks" "$P/agents" "$H/.claude"
+printf '#!/bin/bash\n' > "$P/hooks/agent-only-guard.sh"
+printf '#!/bin/bash\n' > "$P/hooks/orphan-guard.sh"
+cat > "$P/agents/fake.md" <<'MD'
+---
+name: fake
+tools: Read
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: bash "$HOME/.claude/hooks/agent-only-guard.sh"
+---
+Body text mentioning hooks/orphan-guard.sh does not wire it.
+MD
+printf '{}\n' > "$H/.claude/settings.json"
+out="$(verify_wiring "$P" "$H" 2>&1)"
+printf '%s' "$out" | grep -q 'orphan-guard.sh' && ! printf '%s' "$out" | grep -q 'agent-only-guard.sh'
+check "test_install_agent_wired_hook_exempt" "agent-wired guard reported missing, or unreferenced hook not reported" $?
+rm -rf "$P" "$H"
+
 # ── install.sh end to end, against a throwaway HOME ──────────────────────────
 # cd out of the repo first: install-global.sh wires git hooks into the *current*
 # repo, and a test must not modify the tree it is testing.

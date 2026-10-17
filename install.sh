@@ -341,11 +341,32 @@ sync_source() {
 # guard on disk and none referenced by settings.json is the silent failure here.
 verify_wiring() {   # verify_wiring <plugin-dir> <home>
     python3 - "$1" "$2" <<'PYCHECK'
-import json, os, sys
+import json, os, re, sys
 plugin, home = sys.argv[1], sys.argv[2]
 hooks_dir = os.path.join(plugin, "hooks")
 shipped = {f for f in os.listdir(hooks_dir)
            if f.endswith(".sh") and f != "hook-lib.sh"}
+# A guard wired only by an agent's frontmatter `hooks:` block (orchestrator-bash-guard.sh)
+# must not be in settings.json, or it would fire in every session. Those are exempt by name.
+agent_wired = set()
+agents_dir = os.path.join(plugin, "agents")
+for fn in (os.listdir(agents_dir) if os.path.isdir(agents_dir) else []):
+    if not fn.endswith(".md"):
+        continue
+    with open(os.path.join(agents_dir, fn), encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    if not lines or lines[0].strip() != "---":
+        continue
+    front = lines[1:lines.index("---", 1)] if "---" in lines[1:] else []
+    in_hooks = False
+    for line in front:
+        if re.match(r"^hooks:\s*$", line):
+            in_hooks = True
+            continue
+        if in_hooks and line and not line[0].isspace():
+            in_hooks = False
+        if in_hooks:
+            agent_wired.update(re.findall(r"hooks/([A-Za-z0-9_.-]+\.sh)", line))
 settings_path = os.path.join(home, ".claude", "settings.json")
 try:
     with open(settings_path, encoding="utf-8") as fh:
@@ -354,7 +375,7 @@ except (OSError, json.JSONDecodeError) as exc:
     print("  ! cannot read %s: %s" % (settings_path, exc))
     sys.exit(1)
 wired = json.dumps(settings.get("hooks", {}))
-missing = sorted(n for n in shipped if n not in wired)
+missing = sorted(n for n in shipped if n not in wired and n not in agent_wired)
 if missing:
     print("  ! not referenced by settings.json: " + ", ".join(missing))
     sys.exit(1)
