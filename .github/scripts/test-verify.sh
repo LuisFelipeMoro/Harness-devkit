@@ -1719,6 +1719,42 @@ else
     fi
 fi
 
+# ── delivery-state.sh: the orchestrator's only resume read and status write ──
+DS="$ROOT/plugins/coding-pipeline/scripts/delivery-state.sh"
+dsdir="$W/ds"
+mkdir -p "$dsdir/docs/deliveries" && cd "$dsdir" || exit
+git init -q -b main
+git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+git branch release/demo-abc123
+git branch feat/abc123-s1 release/demo-abc123
+git -c user.email=t@t -c user.name=t checkout -q -b feat/abc123-s2 release/demo-abc123
+git -c user.email=t@t -c user.name=t commit -q --allow-empty -m s2
+git checkout -q main
+printf '# Delivery\n\n| Field | Value |\n|---|---|\n| Status | Planning (approved 2026-10-16) |\n| Created | 2026-10-17 |\n' \
+    > docs/deliveries/delivery-demo-abc123.md
+ds_before=$(cat docs/deliveries/delivery-demo-abc123.md)
+
+out=$(bash "$DS" --key abc123 2>&1); rc=$?
+case "$out" in *"| Status | Planning"*"path: "*"delivery-demo-abc123.md"*) ds_show=0 ;; *) ds_show=1 ;; esac
+case "$out" in *"merged into release/demo-abc123: feat/abc123-s1"*) ds_merged=0 ;; *) ds_merged=1 ;; esac
+[ "$rc" = 0 ] && [ "$ds_show" = 0 ] && ds_first=0 || ds_first=1
+check "test_delivery_state" 0 "$ds_first"
+check "test_delivery_state" 0 "$ds_merged"
+[ "$(printf '%s\n' "$out" | wc -l)" -le 20 ] && ds_cap=0 || ds_cap=1
+check "test_delivery_state" 0 "$ds_cap"
+
+bash "$DS" --key abc123 --set "In Progress" >/dev/null 2>&1; rc=$?
+ds_changed=$(diff <(printf '%s\n' "$ds_before") docs/deliveries/delivery-demo-abc123.md | grep -c '^[<>]')
+ds_row=$(grep -c '^| Status | In Progress |$' docs/deliveries/delivery-demo-abc123.md)
+[ "$rc" = 0 ] && [ "$ds_changed" = 2 ] && [ "$ds_row" = 1 ] && ds_set=0 || ds_set=1
+check "test_delivery_state" 0 "$ds_set"
+
+ds_mid=$(cat docs/deliveries/delivery-demo-abc123.md)
+bash "$DS" --key abc123 --set Bogus >/dev/null 2>&1; rc=$?
+[ "$rc" = 1 ] && [ "$(cat docs/deliveries/delivery-demo-abc123.md)" = "$ds_mid" ] && ds_bogus=0 || ds_bogus=1
+check "test_delivery_state" 0 "$ds_bogus"
+cd "$ROOT" || exit
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

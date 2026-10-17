@@ -85,6 +85,10 @@ for name, pdir in declared.items():
         continue
     hooks_json = os.path.join(hdir, "hooks.json")
     blob = read(hooks_json) if os.path.isfile(hooks_json) else ""
+    # An agent's frontmatter hooks wire a script for that agent alone (C34's orchestrator guard).
+    adir = os.path.join(pdir, "agents")
+    if os.path.isdir(adir):
+        blob += "".join(read(os.path.join(adir, a)) for a in os.listdir(adir) if a.endswith(".md"))
     for f in sorted(os.listdir(hdir)):
         if not f.endswith(".sh") or f == "hook-lib.sh":
             continue
@@ -633,6 +637,13 @@ for agent in ["qa", "reviewer", "stress", "verdict", "plan-reviewer"]:
     tools_check("contract_validators_cannot_edit",
         f"plugins/coding-pipeline/agents/{agent}.md",
         forbidden=("Edit", "Write"))
+
+# C34: the thin orchestrator dispatches and runs gates; it cannot read or search
+# files into its own context.
+tools_check("contract_orchestrator_tools",
+    "plugins/coding-pipeline/agents/orchestrator.md",
+    required=("Agent(", "Bash", "SendMessage", "AskUserQuestion"),
+    forbidden=("Read", "Edit", "Write", "Grep", "Glob", "WebFetch", "WebSearch"))
 
 # Each contract row is checked against its own file
 for path, must_contain, must_not, *name in CONTRACT:
