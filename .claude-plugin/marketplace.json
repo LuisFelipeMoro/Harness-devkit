@@ -1,29 +1,29 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-devkit",
-  "description": "Spec-first AI development harness \u2014 Go/TS/Java/PHP/Rust multi-language engineering standards, OWASP security gates, falsification-gated coding pipelines, 23 skills",
+  "description": "Spec-first AI development harness \u2014 manual skills for planning, coding, validating, reviewing and fixing, with multi-language engineering standards and OWASP security gates",
   "owner": {
     "name": "Luis Moro"
   },
   "plugins": [
     {
       "name": "coding-pipeline",
-      "description": "12-agent spec-first coding pipeline (Analyst \u2192 PM \u2192 Architect \u2192 PlanReviewer \u2192 ScrumMaster \u2192 Coder \u2192 QA \u2192 Reviewer \u2192 StressTester \u2192 Tuner \u2192 Verdict \u2192 DevOps)",
+      "description": "Manual spec-first coding skills (planning, code, validate, bugfix, map) with plan-reviewer, coder, qa, reviewer, stress and verdict agents",
       "source": "./plugins/coding-pipeline"
     },
     {
       "name": "engineering",
-      "description": "Engineering quality skills \u2014 security review, quality gates, DB migration, observability, performance profiling, release management",
+      "description": "Engineering skills \u2014 dependency audit, security review, DB migration, observability, performance profiling, release management",
       "source": "./plugins/engineering"
     },
     {
       "name": "pr-workflow",
-      "description": "PR workflow skills \u2014 full code review and PR comment listing",
+      "description": "PR skills \u2014 code review of a diff or PR, and triage-and-fix of PR comments",
       "source": "./plugins/pr-workflow"
     },
     {
       "name": "devtools",
-      "description": "Developer tools \u2014 architectural analysis, business/technical mapping, grill-me, handoff, skill authoring, rote automation",
+      "description": "Developer tools \u2014 architectural health review, business/technical mapping, grill-me, handoff, skill authoring, rote automation",
       "source": "./plugins/devtools"
     }
   ]

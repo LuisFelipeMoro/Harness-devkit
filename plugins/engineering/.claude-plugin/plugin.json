@@ -1,7 +1,7 @@
 {
   "name": "engineering",
-  "version": "1.6.0",
-  "description": "Engineering quality skills \u2014 OWASP security review, quality gates, code-review-gate (gate + reviewer for any non-pipeline code), DB migration, observability, performance profiling, release management",
+  "version": "3.0.0",
+  "description": "Engineering skills \u2014 dependency audit, security review, DB migration, observability, performance profiling, release management",
   "author": {
     "name": "Luis Moro"
   }
