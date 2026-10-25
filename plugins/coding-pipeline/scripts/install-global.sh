@@ -60,6 +60,71 @@ fi
 mkdir -p "$GLOBAL/agents" "$GLOBAL/skills" "$GLOBAL/references" \
          "$GLOBAL/hooks"  "$GLOBAL/git-hooks" "$GLOBAL/devkit"
 
+# ── Retired devkit files (2.x → 3.x upgrade) ─────────────────────────────────
+# The copy steps below only add and update same-named files, so a skill, agent or
+# hook 3.x no longer ships would stay installed — and the 2.x auto-invoked pipeline
+# with it. The retired names are generic (architect, pm, task, analysis), so a name
+# match proves nothing: a user's own file may share it. A retired-name item is the
+# devkit's only when its bytes hash to a version the devkit shipped
+# (retired-2x.sha256 — every version from the repo's history; an exact hash cannot
+# match a user's file, where a marker line could be copied or coincide). Even then it
+# is MOVED to ~/.claude/devkit/retired/<UTC timestamp>/ (same relative layout), never
+# deleted. Anything else — including a devkit file the user edited — is left in place
+# and reported "kept (not the devkit's)". Runs before the settings wiring, which then
+# drops the settings.json entry of a hook that is no longer on disk.
+RETIRED_MANIFEST="$SCRIPT_DIR/retired-2x.sha256"
+RETIRED_DIR=""
+sha256_of() { python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"; }
+is_devkit_version() {   # is_devkit_version <manifest key> <file>
+    [ -f "$2" ] || return 1
+    grep -qx "$(sha256_of "$2")  $1" "$RETIRED_MANIFEST"
+}
+retire() {   # retire <path relative to ~/.claude>
+    if [ -z "$RETIRED_DIR" ]; then
+        RETIRED_DIR="$GLOBAL/devkit/retired/$(date -u +%Y%m%dT%H%M%SZ)"
+    fi
+    if [ -e "$RETIRED_DIR/$1" ]; then
+        echo "! kept $GLOBAL/$1 — $RETIRED_DIR/$1 already exists"
+        return 0
+    fi
+    mkdir -p "$(dirname "$RETIRED_DIR/$1")"
+    mv "$GLOBAL/$1" "$RETIRED_DIR/$1"
+    echo "✓ moved retired $1 → $RETIRED_DIR/$1"
+}
+keep() { echo "• kept (not the devkit's): $GLOBAL/$1"; }
+for name in multi-agent task analysis architecture quality-gate code-review-gate pr-review checkcomments bug-fix; do
+    if [ -d "$GLOBAL/skills/$name" ]; then
+        if is_devkit_version "skills/$name" "$GLOBAL/skills/$name/SKILL.md"; then
+            retire "skills/$name"
+        else
+            keep "skills/$name"
+        fi
+    fi
+    if [ -f "$GLOBAL/skills/$name.md" ]; then
+        if is_devkit_version "skills/$name" "$GLOBAL/skills/$name.md"; then
+            retire "skills/$name.md"
+        else
+            keep "skills/$name.md"
+        fi
+    fi
+done
+for name in analyst pm scrum-master orchestrator tuner architect devops; do
+    if [ -f "$GLOBAL/agents/$name.md" ]; then
+        if is_devkit_version "agents/$name.md" "$GLOBAL/agents/$name.md"; then
+            retire "agents/$name.md"
+        else
+            keep "agents/$name.md"
+        fi
+    fi
+done
+if [ -f "$GLOBAL/hooks/orchestrator-bash-guard.sh" ]; then
+    if is_devkit_version "hooks/orchestrator-bash-guard.sh" "$GLOBAL/hooks/orchestrator-bash-guard.sh"; then
+        retire "hooks/orchestrator-bash-guard.sh"
+    else
+        keep "hooks/orchestrator-bash-guard.sh"
+    fi
+fi
+
 # ── Agents (every plugin that ships them) ────────────────────────────────────
 agent_count=0
 for agent_dir in "$PLUGINS"/*/agents; do
@@ -104,6 +169,17 @@ for ref_dir in "$PLUGINS"/*/references; do
     done
 done
 echo "✓ shared references"
+
+# ── Sensor scripts the skills and agents run (verify/*, estimate-run.py, harness-metrics.py) ─
+# Skills cite them plugin-relative (`scripts/verify/break-run.sh`); in a flat
+# install that path resolves under ~/.claude/devkit/. verify/ scripts source each
+# other by their own directory, so the subfolder is copied as one unit.
+mkdir -p "$GLOBAL/devkit/scripts/verify"
+cp "$PLUGIN/scripts/verify/"*.sh "$PLUGIN/scripts/verify/"*.py "$GLOBAL/devkit/scripts/verify/"
+# harness-metrics.py runs verify/falsification.sh from its own directory — staged as a sibling.
+cp "$PLUGIN/scripts/estimate-run.py" "$PLUGIN/scripts/harness-metrics.py" "$GLOBAL/devkit/scripts/"
+chmod +x "$GLOBAL/devkit/scripts/verify/"* "$GLOBAL/devkit/scripts/estimate-run.py" "$GLOBAL/devkit/scripts/harness-metrics.py"
+echo "✓ sensor scripts staged to ~/.claude/devkit/scripts/"
 
 # ── CLAUDE.md — never overwrite ─────────────────────────────────────────────
 # Devkit standards land in ~/.claude/devkit/CLAUDE.md. An @include line is

@@ -1,5 +1,78 @@
 # Changelog
 
+## [3.0.0] — 2026-10-24
+
+Breaking. The devkit is now used, not routed: every skill is started by you, does one job, never
+calls another skill, and ends by suggesting the next one. What the devkit enforces (spec-first and
+falsification, CD1-CD7, the principal-engineer bar, quality gates, security defaults, the language
+files) is unchanged, and no agent or reference lost content. Token savings come from manual
+invocation, no skill chaining, and on-demand loading, never from trimming rules.
+
+### Migration
+
+Upgrading from 2.x (`install.sh` / `install-global.sh`) retires the old skills, agents and
+`orchestrator-bash-guard.sh`: each is moved to `~/.claude/devkit/retired/<ts>/`, never deleted, and only when
+its bytes match a version the devkit shipped (`scripts/retired-2x.sha256`), printing each move with its
+destination, and the hook's `settings.json` entry is dropped. Your own skills, agents and hooks are never
+touched — one that shares a retired name is kept in place and reported `kept (not the devkit's)`.
+
+| Before | Now |
+|---|---|
+| `/multi-agent`, `/task` | `/planning` then `/code` |
+| `/planning`, `/analysis`, `/architecture` | `/planning` (optionally from your own notes file) |
+| `/quality-gate`, `/code-review-gate` | `/validate-code`, then `/review-code` |
+| `/pr-review` | `/review-code` |
+| `/checkcomments` | `/pr-fix --list` |
+| PR comment handling after a push | `/pr-fix` |
+| `/bug-fix` | `/bugfix` |
+| (new) | `/map`, `/deps`, `/pr`, `/retro`, `/devkit-help` |
+
+### Added
+
+- `/code`, `/validate-code`, `/review-code`, `/pr-fix`, `/bugfix`, `/map`, `/deps`; `/planning` accepts a base plan or notes file and normalises it into `references/plan-template.md`.
+- `/code` run modes: **inline**, **single coder**, **sequential coders** (one per Tasks row) and **parallel coders** (independent rows in worktrees, at most 3 writers). `scripts/estimate-run.py --plan <plan.md>` prints dispatches and a token range per mode — labelled `measured` only when every constant it uses is measured, else `partly measured` or `assumed` — plus the measured fix-round factors and the downstream `/validate-code` and `/review-code` cost, and names the parallel-safe rows; you pick a mode, or override per row. Gates and falsification run in every mode.
+- `/review-code` always prints findings first, then asks whether to post, in which language and in which style.
+- `/bugfix` asks about the symptom, repro, fix depth and branch before investigating.
+- Every agent has a "References — load on demand" table: one language file up front, every other reference read only when its trigger fires. Dispatch prompts pass paths, never contents.
+- `references/branching.md`: work on the current branch, cut `feat/{slug}` (or `fix/{slug}`) from `main`, never push or open a PR unasked.
+- Plans live at `docs/plans/{slug}/plan.md` with `codebase-map.md` and `evidence.md` beside them.
+- `install-global.sh` now stages `scripts/verify/*`, `estimate-run.py` and `harness-metrics.py` to `~/.claude/devkit/scripts/`; before this, a flat install left those paths unresolved. `CLAUDE.md` documents how plugin-relative paths resolve.
+- `/pr`: commits the branch as atomic conventional commits (repo hooks honoured; `.devkit/release-exclude` paths never staged), then pushes and opens the PR with `gh` only after you approve the commit list and the body. Body template in `skills/pr/references/pr-body.md`: Summary (smallest clear view), Evidence (before → after, plus the `/validate-code` gate line), Merge Danger (one-way / two-way door, blast radius), plan link. Asks the PR language.
+- `/retro`: a retrospective on the current (or a named) session proposing severity-ordered improvements to the agent environment — navigation pointers, deterministic checks for mechanical mistakes, reviewer rules for judgement calls, `CLAUDE.md` bloat and no-ops, tool economy against the context and dispatch budgets, information access. Applies only what you select. `/retro --metrics` runs `scripts/harness-metrics.py`, which counts the five Harness health signals of `references/harness-metrics.md` from the plans, `evidence.md`, `PROGRESS.md` and git history (rework, reverts, fix commits after a feature merge, AC edits after code started, `Gap found` lines, pre-push/CI escapes, rows without falsification evidence) and prints `n/a — needs judgement` for what is not persisted; diagnostics, never gates.
+- `/devkit-help`: lists every skill grouped by job, read live from the installed `CLAUDE.md` skills table (a skill in no group lands under Other, so the list cannot drift from the real set); `/devkit-help flows` prints the typical flows; `/devkit-help <skill>` prints that skill's usage, Input/Output/Boundary and `Next:` line. Read-only, no dispatch. Named so because `/help` is a Claude Code built-in.
+- README: a Quick start with three worked examples (small `/code` change, a feature through `/pr`, a `/bugfix`) and what each step asks you.
+- New references: `references/code-smells.md` (Fowler smell baseline), `references/grilling.md` (frontier rounds), `improve-codebase-architecture/references/deep-modules.md`, `write-a-skill/references/writing-for-agents.md`.
+- Validator checks: the skills table in `CLAUDE.md` resolves and is complete, every skill is manual, no skill invokes another, every agent says `load on demand`, no persona names or pointers to removed skills.
+
+### Changed
+
+- All skills carry `disable-model-invocation: true` and a one-sentence description plus a `Usage:` example; trigger-phrase lists are gone.
+- `CLAUDE.md`: the routing table and "always invoke the skill" rule become a manual "Skills (invoke manually)" table; Proportionality is "ceremony scales, standards do not".
+- Agents keep their full rules with persona names and pipeline plumbing removed (story, roster, orchestrator, Tuner, release branch). The old skills' references moved intact into the new skills' `references/`; the plan template now carries the old Architect content (security architecture, OWASP table, ADRs, data flow, API contracts).
+- `/validate-code` dispatches qa and stress (by depth, below); the verdict is `verdict.sh --no-review` (Stress 35% · QA 30%, renormalised) plus an inline self-check, not an agent. `/review-code` is a separate gate with its own pass/block; neither waits on the other.
+- `scripts/verify/verdict.sh` gains `--no-review` (rejects `--review` and `--roster`; Stress floor kept) and `--no-review --no-stress` (QA alone, renormalised over 30; rejects a stress score), with tests.
+- `/validate-code` sets its depth from `scripts/verify/classify-diff.sh` before the gates: cosmetic dispatches nothing (verdict `--roster cosmetic`), light dispatches `qa` only (`--no-stress`), standard and full dispatch `qa` + `stress`. Depth only escalates — an unmeasured classification is full, `--full` forces full, nothing lowers it — and the depth and its reason are printed first. Gates and sensors run at every depth.
+- `references/delivery-and-worktree.md` now describes worktrees as the parallel-coders mode, not a mandatory delivery model.
+- `pr-review-responder.sh` only reports the open-comment count and suggests `/pr-fix`; `delivery-gate.sh` suggests `/validate-code`.
+- `/bugfix` diagnosis loop: `bug-investigator` first builds a tight feedback loop (one command, already run, red on the exact symptom, deterministic, fast, agent-runnable, from an ordered menu of loop types), reproduces and minimises, then checkpoints 3–5 ranked falsifiable hypotheses that `/bugfix` shows you before testing, without blocking. Probes change one variable at a time, debug logs are tagged `[DEBUG-xxxx]` and grepped away, performance bugs get a baseline and bisection, secrets are redacted, and the regression test is written only at a seam that reproduces the real pattern — a missing seam is reported as a finding, with the loop as the RED evidence. A cleanup checklist closes the run. RED before the fix is unchanged.
+- `/review-code` reports two axes side by side, never merged or reranked: **Standards** (the repo's documented standards, the devkit rules and a Fowler code-smell baseline, each smell a labelled judgement call) and **Spec** (missing, unrequested and implemented-but-wrong requirements, each quoting its spec line). Spec source order: `--spec` path → matching plan → issue refs in commits → PR body / request → ask. `--split` runs one parallel reviewer per axis; the default stays one dispatch.
+- `/grill-me` and `/planning`'s grill step ask in rounds: the design tree's whole frontier per round, numbered, each with a recommended answer worded so "yes" accepts it; facts are looked up, never asked; done when the frontier is empty and you confirm.
+- `/planning` Tasks rows are vertical tracer-bullet slices, prefactoring first, with explicit `Depends on` edges; wide refactors run expand → migrate in batches → contract.
+- `/write-a-skill` adds guidance on context pointers, context vs cognitive load, the information hierarchy, progressive disclosure by branch, co-location, sprawl and per-step completion criteria.
+- `/improve-codebase-architecture` words findings in the deep-module vocabulary (module, interface, depth, seam, adapter, leverage, locality) and can design a chosen interface twice.
+- Plugin versions are 3.0.0.
+
+### Removed
+
+- Skills: `multi-agent`, `task`, `analysis`, `architecture`, `quality-gate`, `code-review-gate`, `pr-review`, `checkcomments`, `bug-fix`.
+- Agents: `analyst`, `pm`, `scrum-master`, `orchestrator`, `tuner`, `architect`, `devops`.
+- `orchestrator-bash-guard.sh`, `scripts/delivery-state.sh`, and the roster, release-branch-per-delivery and story-PR machinery.
+- `scripts/bench-context.py`. Its measured costs (coder, qa, stress, reviewer, subagent baseline) and rework factors moved into `estimate-run.py` constants with their provenance and `measured (n=…)` / `assumed` labels; its guide-token measurement is `estimate-run.py --guides` (with `--json` and `--baseline`); its roster and manifest model went with the pipeline it described.
+
+### Credits
+
+- Ideas adapted from mattpocock/skills (diagnosis loop, two-axis review and smell baseline, grilling rounds, tracer-bullet slicing, writing for agents, deep modules, retro, PR body), rewritten to the devkit's conventions.
+
 ## [2.8.1] — 2026-10-17
 
 ### Changed

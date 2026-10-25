@@ -1,101 +1,249 @@
 # claude-devkit
 
-Spec-first AI development harness for [Claude Code](https://claude.ai/code). Drop this into any repository under `.claude/` (or install globally in one command) to get a full agentic development kit: every piece of code is built against a frozen test specification, proven by falsification, and clears quality gates plus an independent reviewer before it's considered done.
+Spec-first development skills for [Claude Code](https://claude.ai/code). Every skill is started
+by you, does one job, and ends by *suggesting* the next one. Nothing is auto-routed, and no skill
+runs another. The engineering bar underneath is unchanged: code is built against a frozen test
+specification, proven by falsification, and cleared by gates and an independent reviewer.
 
-- **Spec-first testing** — the Architect freezes a Test Case table (expected observable result · why it matters · what break falsifies it) before any code. The Coder implements to it, writes exactly those tests, then **breaks the code to prove each test fails**. The QA agent audits that evidence instead of writing tests.
-- **Tautology is the blocking defect, not low coverage** — a green suite at 90% coverage that survives having its guards deleted fails the audit. Coverage is a floor; falsifiability is the gate.
-- **The plan is reviewed before you see it** — every delivery starts from a `codebase-map.md` (what already exists, cited `file:line`), every planned component carries a decided **Reuse Map** row, and Priya (Plan Reviewer) reads the plan *with the repository open* and blocks on components that already exist, interfaces that contradict real signatures, and ACs with two readings. `/grill-me` interrogates a plan from inside the context that wrote it; this is the reader that does neither.
-- **Duplication is measured *and attributed*** — `jscpd --threshold 3` gates pre-push, QA and the Reviewer, and `dup-attribution.py` splits the clones line-level by who wrote them: duplication this delivery introduced blocks, pre-existing debt is reported as debt. A repo-wide percentage would fail every push on day one for code the change never touched, and a gate that fails on day one gets disabled.
-- **Blast radius is counted, not guessed** — every symbol a change touches, every caller of it, one hop past for anything changing an error value or nil-ness, and the non-code callers `find-references` cannot see (wire formats, DB columns, generated clients, dashboards). It sizes the work, so the Plan Reviewer verifies the number against the code rather than reading it.
-- **Sized for review, because review is where defects are caught** — reviewer effectiveness collapses with diff size for an agent exactly as for a human. Manifest rows carry a projected diff (≤200 target · 400 soft · 800 hard), one story is one branch is one PR is one review, and `/pr-review` measures the diff first and reports an oversized one instead of absorbing it.
-- **80% context ceiling, hard** — past it, models lose mid-context recall and invent confidently. At 80% the pipeline hands off to a fresh session via `PROGRESS.md`, and never records that state as a `TODO` in your source.
-- **Reviewed at the principal-engineer bar, in any language** — *correct → legible → durable → small*, judged in the code's own idiom. Slop and overengineering are symmetric findings: a copy-pasted block and an interface with one implementation are filed equally readily. Every finding must name the future change it makes harder, which is what stops a strict reviewer from generating twenty nits that bury three real defects.
-- **Isolated per delivery** — each pipeline run gets its own git worktree (`.worktrees/dlv-{key}/`) and release branch, and writes its plan to `docs/deliveries/delivery-{slug}-{key}.md` instead of clobbering your repo's own `architecture.md`. Two deliveries never share a file or a working tree. The pipeline never commits or merges to `main` — the furthest it goes on its own is opening a PR.
-- **Harness-structured** — built on the four agentic-harness components: Guides (feed-forward context), Sensors (exit-code linters + test gates), Memory (cross-session `PROGRESS.md`), Orchestration (implementer ≠ validator, contract frozen before code).
-- **12-agent coding pipeline** — Analyst → PM → codebase discovery → Architect → grill-me plan stress → **Plan Reviewer** → ScrumMaster → Coder → QA → Reviewer → StressTester → Tuner → Verdict → DevOps → PR review
-- **Task-matched models** — `opus` for architecture design, `sonnet` for planning/validation, `haiku` for read/explore and code execution. Max reasoning goes into the plan; a tight plan means execution can be cheap. Aliases resolve to the newest model in each family.
-- **Multi-language engineering standards** — Go, TypeScript, Java, PHP, Rust, React, Next.js, Flutter, HTMX, Kotlin Android, HTML/CSS. Each file names an **authority chain** (Uber Go Style · Effective Java · Rust API Guidelines · Rules of React · Effective Dart · PER Coding Style · Kotlin Coding Conventions · WAI-ARIA APG) and the agent loads exactly the one in play — a specialist in that language for that story, targeting the current stable release unless the project pins otherwise
-- **Security-first quality gates** — OWASP Web Top 10 + OWASP LLM Top 10 2025 enforced at every stage
-- **23 skills** (slash commands) — architecture, security review, DB migrations, observability, PR review, release management, and more
-- **Git hooks** — pre-commit (format + lint), pre-push (full gates), commit-msg (Conventional Commits)
-- **Claude Code hooks** — resumes from `PROGRESS.md` at session start; blocks `.env` reads; auto-reviews PR comments after every push
-- **Integrated companion tools** — RTK (token savings), Caveman (compressed mode), Rote (adapter framework)
+## Quick start
 
----
+Install (`bash install.sh`), open Claude Code in your repo, and type `/devkit-help` to list every skill.
+Three worked examples follow. More task presets, each with what its plan should carry:
+[`references/presets.md`](plugins/coding-pipeline/references/presets.md).
 
-## How It Works — Harness + Spec-First Testing
+**1. A small change, no plan**
 
-This devkit is structured as an agentic **Harness** — four components that keep an
-autonomous agent on the rails:
+```
+/code "Reject negative quantities in AddToCart with ErrInvalidQuantity"
+/validate-code
+```
+
+`/code` writes a mini-plan (ACs, Test Case table, one Tasks row) and **asks for a one-line OK**. Then it
+**asks for a run mode**: inline, one coder, or one coder per row, each with its token range. The test is
+written, then broken and seen to fail, and the gates run. `/validate-code` prints the depth it measured
+from the diff (for a change like this, typically `light`: `qa` only) and the verdict.
+
+**2. A feature**
+
+```
+/planning notes/webhooks.md
+/code docs/plans/webhook-delivery/plan.md
+/validate-code docs/plans/webhook-delivery/plan.md
+/review-code
+/pr
+```
+
+`/planning` maps the codebase, drafts the plan, **asks whether to grill it**, has `plan-reviewer` check
+it, then **asks you each open question** and **asks you to approve**. `/code` **asks for a run mode**
+(parallel coders are offered only when rows are independent). `/validate-code` asks nothing; it reports.
+`/review-code` prints its findings, then **asks whether to post them**, in which language and style.
+`/pr` **asks you to approve the commit list and the PR body** before anything is pushed.
+
+**3. A bug**
+
+```
+/bugfix "cart total goes negative after removing a coupon"
+/validate-code
+/review-code
+/pr
+```
+
+`/bugfix` **asks for the symptom, a repro, the fix depth and the branch**. It shows the ranked hypotheses
+without waiting, then **asks you to confirm the root cause and fix** after the failing test is RED. The
+fix turns it GREEN with every gate run.
+
+## Skills
+
+Invoke by name. Each skill has `disable-model-invocation: true`, so Claude never starts one on its own.
+
+| Skill | What it does |
+|---|---|
+| `/planning [notes.md]` | Reviewed plan in `docs/plans/{slug}/plan.md`. With a base file it normalizes your notes into the template; without, it builds one. Map, draft, optional grill, `plan-reviewer`, approval. Writes no code. |
+| `/code [plan.md or task text]` | Implements. One `coder` dispatch per Tasks row: spec, implement, test, falsify, then format, lint and existing tests. No plan given: writes a mini-plan and asks for a one-line OK first. |
+| `/validate-code [--full]` | Read-only check of the current diff: all gates and sensors, then `qa` and `stress` at the depth the diff needs, then the verdict. Reports, never fixes. |
+| `/review-code [PR# or branch]` | Reviews a diff or PR with `reviewer` on two separate axes — Standards (repo standards, devkit rules, code smells) and Spec (does it do what the plan or issue asked). Prints all findings, then asks whether to post, in which language and in which style. `--split` reviews each axis in its own dispatch. |
+| `/pr [base]` | Commits the branch as atomic conventional commits, then pushes and opens a PR (Summary · Evidence · Merge Danger) — only after you approve the commits and the body. |
+| `/pr-fix` | Triages open PR comments into a table, you pick which to fix, `coder` fixes them, gates run, replies are drafted. Asks before posting or pushing. `--list` only lists. |
+| `/bugfix` | Asks symptom, repro, fix depth and branch; `bug-investigator` builds a feedback loop that goes red on the bug, minimises it, shows you ranked hypotheses, confirms the root cause and writes a RED test; `coder` makes the minimal fix. |
+| `/map [area]` | Read-only codebase map: blast radius, reusable symbols, prior art, conventions, `file:line` for each. |
+| `/deps` | Dependency audit and upgrade in batches, majors separate, gates after each batch. |
+| `/security-review` | OWASP Web and LLM Top 10 audit with severity-tagged findings. |
+| `/database-migration` | Additive, reversible migration with a falsified test. |
+| `/observability` | Structured logs, metrics and tracing with a falsified contract test. |
+| `/performance-profiling` | Trace-first latency and pprof investigation. |
+| `/release-management` | Semver bump, CHANGELOG, tag and a draft GitHub release from merged `main`. |
+| `/improve-codebase-architecture` | Architectural health review, in deep-module terms (depth, seams, leverage, locality). |
+| `/business-analysis`, `/technical-analysis` | Business-rule and technical-contract mapping of a domain. |
+| `/grill-me` | Rounds of hard questions against a plan or design — every question that can be asked now, each with a recommended answer. |
+| `/handoff` | End-of-session handoff plus `PROGRESS.md` refresh. |
+| `/retro [session] [--metrics]` | Session retrospective: severity-ordered improvements to the agent environment (pointers, checks, reviewer rules, CLAUDE.md, tool economy); applies only what you pick. `--metrics` counts the five Harness health signals (`scripts/harness-metrics.py`) — diagnostics, never gates. |
+| `/rote`, `/rote-adapter` | Run existing rote flows; build a new adapter. |
+| `/write-a-skill` | Scaffold a new skill. |
+| `/devkit-help [skill \| flows]` | Lists every skill grouped by job, read live from the installed `CLAUDE.md`; the typical flows; or one skill's usage, Input/Output/Boundary and next step. No dispatch. |
+
+### A typical flow
+
+```
+/planning notes.md  ->  /code docs/plans/cart/plan.md  ->  /validate-code  ->  /review-code  ->  /pr  ->  /pr-fix
+/bugfix                                                 ->  /validate-code  ->  /review-code  ->  /pr
+```
+
+At the end of a session, `/retro` turns what went wrong into environment fixes.
+
+You can start at any step. `/code "rename X to Y"` needs no plan, because it writes a mini-plan
+in the same template. Ceremony scales with the change; the standards do not.
+
+### How `/code` runs
+
+`/code` finds the plan (the path you pass, else an approved `docs/plans/*/plan.md`, else a mini-plan
+it writes and you OK), then runs `scripts/estimate-run.py --plan <path>` and asks you to pick a mode:
+
+| Mode | Fits | Dispatches |
+|---|---|---|
+| Inline | 1–2 small rows | none; your session codes |
+| Single coder | tightly coupled rows, shared files (warns above 4 rows) | 1 |
+| Sequential coders | most plans (default) | 1 per Tasks row, in dependency order |
+| Parallel coders | rows with no `Depends on` and disjoint `Files` | 1 per row, ≤ 3 at once in worktrees, merged in row order with gates after each merge |
+
+Each mode shows a token range labelled `measured`, `partly measured` or `assumed` by its weakest input, plus the measured fix-round factors, and you can override
+the mode per row. Gates and falsification evidence run in every mode.
+
+### Dispatches
+
+| Skill | Agents dispatched |
+|---|---|
+| `/planning` | 1 map (haiku) + 1 `plan-reviewer` per round, max 2 rounds. Drafting happens in your session. |
+| `/code` | per the mode you pick (above); `coder`, `coder-backend` or `coder-frontend` by the row's Tier |
+| `/validate-code` | By the depth `scripts/verify/classify-diff.sh` measures: cosmetic (doc/style only) none · light (≤ 2 source files, no dependency change, no Stress trigger) `qa` · standard/full `qa` + `stress`. Depth only escalates: unmeasured is full, `--full` forces full. The verdict is `scripts/verify/verdict.sh` plus an inline self-check. |
+| `/review-code` | 1 `reviewer` (2 in parallel with `--split`) |
+| `/bugfix` | `bug-investigator` + `coder` |
+
+Agents receive file paths, never pasted contents, and **load on demand**: one language file up
+front, every other reference only when its trigger fires (each agent carries the trigger table).
+`plan-reviewer`, `qa`, `reviewer`, `stress` and `bug-investigator` run on sonnet; `coder` and the
+map on haiku. The model aliases resolve to the newest model in each family.
+These agents (`reviewer`, `qa`, `coder`, …) are registered only when the devkit is installed — flat
+(`install.sh`) or as a plugin; in an uninstalled checkout a skill must dispatch a `general-purpose`
+agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) instead.
+
+## What is enforced
+
+- **Spec-first, falsification-proven.** The Test Case table is frozen before code. The coder writes
+  exactly those tests, then breaks the code (`scripts/verify/break-run.sh`) to prove each one fails.
+  Tautology is the blocking defect, not low coverage.
+- **Plans are checked against the real repo.** Every plan carries a codebase map and a Reuse Map
+  (`reuse:` / `extend:` / `new:`, cited `file:line`). `plan-reviewer` reads it with the repository open.
+- **Implementer is not the validator.** `coder` builds; `qa`, `reviewer` and `stress` cannot edit files.
+- **Duplication is measured and attributed.** `jscpd` gates at 3% *introduced*; pre-existing debt is
+  reported, never blocking (`git-hooks/dup-attribution.py`).
+- **Principal-engineer bar** in any language: correct, legible, durable, small. Every finding names
+  the future change it makes harder.
+- **Security first.** OWASP Web and LLM Top 10, secrets never read or written, parameterized queries only.
+- **80% context ceiling.** The hook measures it; at 80% the session checkpoints to `PROGRESS.md`.
+- **Language specialists.** Go, TypeScript, Java, PHP, Rust, React, Next.js, Flutter, HTMX, Kotlin and
+  HTML/CSS, one file each in `references/languages/`, loaded one at a time.
+
+Full rules: [`plugins/coding-pipeline/CLAUDE.md`](plugins/coding-pipeline/CLAUDE.md).
+Branching: work on the current branch; on `main` a `feat/{slug}` branch is cut first; nothing is
+pushed or opened as a PR unless you ask ([`references/branching.md`](plugins/coding-pipeline/references/branching.md)).
+
+## How it works — Harness + spec-first testing
+
+The devkit is an agentic **Harness**: four components that keep an agent on the rails.
 
 | Component | What it is here |
 |-----------|-----------------|
-| **Guides** (feed-forward) | `CLAUDE.md`, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), API specs, per-language standards — the right context injected before each task |
-| **Sensors** (feedback) | Linters in error-mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage ≥ 85% + vuln scan), mirrored in CI. Session-level guards run as Claude Code hooks — secrets, destructive commands, and finishing without ever running a gate. A task isn't done until they pass. A mid-story checkpoint is the same discipline in one command: `checkpoint-m.sh` runs spec coverage, diff scope, stray commits, leftover break markers, duplication and roster escalation to completion and reports every failure at once, never bailing out on the first miss; `break-run.sh` is what makes a test's falsification evidence real instead of hand-typed — it mutates exactly one literal, runs the test, requires the row's own `FAIL: <row>` in the output, then restores the file on every exit path, interrupted or not. |
-| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), every entry prefixed with its `[{delivery-key}]`. A `SessionStart` hook reads it so a new session resumes with context instead of starting blind. Git-ignored — local session memory, never committed, and the same holds for the handoff docs `/handoff` writes. |
-| **Orchestration** | An orchestrator spawns isolated subagents with a pre-agreed contract. **Implementer ≠ validator** — the Coder builds, the QA/Reviewer/Stress agents validate. ACs + Definition of Done are frozen before any code. Read-only subagents may fan out wider than writers (width in `thresholds.md`); writers stay ≤ 3 per turn and stories stay sequential. Agent teams are documented, opt-in, and never enabled by the installer. An opt-in thin orchestrator (`claude --agent orchestrator`) keeps the main session off file reads. |
-
-### Thin orchestrator (opt-in)
-
-`claude --agent orchestrator` starts the main session as a dispatcher: it runs git, `gh` and the
-gates, and sends every read, search and edit to a subagent. It is opt-in; a normal `claude` session
-is unchanged. It needs the flat install (`bash install.sh`). A plugin-manager install ignores
-subagent frontmatter hooks, so there only the `tools:` allowlist applies, and the Bash guard that
-keeps the session to git and gates does not run.
-
-**Why start here.** Measured on one delivery (4e6020), the main session was ~64% of the cost. A normal
-session reads files and carries every agent's output, so its context grows across the run and is
-re-sent on every call. The orchestrator cannot read files, so its context stays small. It defaults to
-`sonnet`. Startup context is ~37.6k (one in-session measurement; a plain session was 45–46k), so the
-saving comes from slower growth, not a smaller start. `/task` can only judge its blast radius after
-its manifest, so its hint arrives after planning; the relaunch is cheap because state lives in the
-worktree. A running session cannot be converted, so launch it before the pipeline:
-
-- `claude --agent orchestrator`, then `/multi-agent <task>` (or `/task <task>`). Optional alias: `alias cco='claude --agent orchestrator'`.
-- `/multi-agent` always prints these commands once when the session is not the orchestrator. `/task` prints them only when the blast radius is big. Neither blocks.
-- A delivery resumes losslessly from its worktree and `PROGRESS.md`.
-
-**Worth it when:**
-- multi-story `/multi-agent` deliveries, or `/task` with a wide blast radius (≥ 2 sub-tasks)
-- long or unattended runs
-- many agent round trips (the main context otherwise grows and is re-sent on every call)
-
-**Not worth it when:**
-- a single small change, a narrow `/task`, `/bug-fix` or a quick question
-- exploring or editing files yourself, or anything where you want Read/Edit in the main session
-
+| **Guides** (feed-forward) | `CLAUDE.md`, the plan (`docs/plans/{slug}/plan.md`), API specs, per-language standards, injected before each task |
+| **Sensors** (feedback) | Linters in error mode and test/coverage gates that return an exit code, not prose: `pre-commit` (format + lint), `pre-push` (tests + coverage 85%+ + vuln scan), mirrored in CI. Session guards run as Claude Code hooks: secrets, destructive commands, and finishing without ever running a gate. `checkpoint-m.sh` runs spec coverage, diff scope, stray commits, leftover break markers and duplication to completion and reports every failure at once; `break-run.sh` makes falsification evidence real: it mutates exactly one literal, runs the test, requires the row's own `FAIL: <row>` in the output, then restores the file on every exit path. |
+| **Memory** | `PROGRESS.md` at the repo root (Done / Failed / Current State / Next / Lessons), entries prefixed with the plan slug. A `SessionStart` hook reads it so a new session resumes with context. Git-ignored: local session memory, never committed, and the same holds for the handoff docs `/handoff` writes. |
+| **Separation** | **Implementer is not the validator**: `coder` builds, `qa`/`reviewer`/`stress` validate. ACs and the Test Case table are frozen before any code. Read-only subagents may fan out wider than writers (width in `thresholds.md`); writers stay at 3 or fewer per turn. `/code` offers run modes (inline, single coder, sequential, parallel in worktrees) with token estimates from `scripts/estimate-run.py`. Agent teams are documented, opt-in, and never enabled by the installer. |
 
 ### Spec-first, falsification-proven
 
 Tests are written **after** the implementation, against a specification frozen **before** it.
 The rigour moves from ordering to specification tightness plus proof that each test can fail:
 
-1. **Spec** — the Architect (Winston) freezes a Test Case table: for every AC, edge case, and
-   security control, one row giving the literal test name, the input, the **expected observable
-   result**, **why it matters**, and the **break that falsifies it**. The Scrum Master copies the
-   relevant rows verbatim into each story. A behaviour with no row does not get built.
-2. **Implement** — the Coder (Amelia) builds to that table. Anything the spec didn't decide is
-   flagged, never invented.
-3. **Test** — she writes exactly those rows, no more, no fewer, asserting observable results.
-4. **Falsify** — for each test she applies the row's break (invert the condition, delete the
-   guard, return the zero value), confirms the test **fails on its own assertion**, and restores.
-   A test never observed failing is unproven and does not ship.
+1. **Spec**: the plan's Test Case table gives, for every AC, edge case and security control, one row with the literal test name, the input, the **expected observable result**, **why it matters**, and the **break that falsifies it**. A behaviour with no row does not get built.
+2. **Implement**: `coder` builds to that table. Anything the spec didn't decide is flagged, never invented.
+3. **Test**: it writes exactly those rows, no more, no fewer, asserting observable results.
+4. **Falsify**: for each test it applies the row's break (invert the condition, delete the guard, return the zero value), confirms the test **fails on its own assertion**, and restores. A test never observed failing is unproven and does not ship.
 
-The QA agent (Quinn) does **not** write these tests — she audits them. She checks every Test
-Case row is implemented, that every test carries valid falsification evidence (and re-breaks the
-highest-risk ones herself to verify), that assertions are real rather than tautological or
-over-mocked, that corner cases are covered (boundaries, nulls, overflow, unicode, concurrency,
-time, error paths), and that no existing test was weakened to make a change pass. A tautological
-or unfalsified test is a MAJOR finding that caps the QA score at 4 — the same weight as a failing
-gate, no matter how high coverage is. Gaps route back to the Coder via `QA→CODER TEST GAP`.
+`qa` does **not** write these tests; it audits them. It checks every Test Case row is implemented, that every test carries valid falsification evidence (and re-breaks the highest-risk ones to verify), that assertions are real rather than tautological or over-mocked, that corner cases are covered (boundaries, nulls, overflow, unicode, concurrency, time, error paths), and that no existing test was weakened to make a change pass. A tautological or unfalsified test is a MAJOR finding that caps the QA score at 4, the same weight as a failing gate, no matter how high coverage is. Gaps go back to a fresh `coder` via `QA→CODER TEST GAP`.
 
-**The one exception is bug fixes**: there, a failing reproduction test is written and observed
-RED *before* the fix, because that RED is what proves the root cause was found rather than
-guessed.
+**The one exception is bug fixes**: a failing reproduction test is written and observed RED *before* the fix, because that RED proves the root cause was found rather than guessed.
 
-Plans are stress-tested with `/grill-me` **before** any code is written — gaps the
-requirements can answer get decided into the architecture; the rest are escalated to the
-human. Nothing ambiguous is deferred into the implementation.
+Plans can be stress-tested with `/grill-me` before any code is written: gaps the requirements can answer get decided into the design; the rest are escalated to the human. Nothing ambiguous is deferred into implementation.
+
+### Scoring
+
+| Result | Criteria |
+|--------|---------|
+| PRODUCTION READY | Overall 8.0 or higher, no CRITICAL security issues |
+| READY WITH CONDITIONS | 6.5–7.9, or 8.0+ with 1 CRITICAL |
+| NOT READY | below 6.5 or unmitigated CRITICAL security issue |
+
+`/validate-code` weighs Stress 35% · QA 30%, renormalised (`verdict.sh --no-review`); at light depth QA alone (`--no-stress`), at cosmetic depth gates only. `/review-code` is a
+separate gate: score ≥ 8.0 with no CRITICAL passes. The two never wait on each other. Numbers: `references/thresholds.md`.
+
+## Engineering Standards
+
+`CLAUDE.md` is injected into every Claude Code session and enforces:
+
+### Go
+- Authority: Uber Go Style → Ardan Labs/service → JetBrains Go Modern → Effective Go
+- **Zero error discards** — `_ =` or `_ :=` on errors is a hard block
+- Wrap all errors: `fmt.Errorf("doing X: %w", err)` — never bare `return err`
+- `swaggo/swag` annotations required on every HTTP handler
+- **Transaction races**, not just data races — check-and-act split across two critical sections passes `-race` and still corrupts state. Also: lock ordering by stable id, no mutex held across I/O, clone before returning guarded state, result channels buffered to sender count
+- **No `time.Sleep` in tests** — virtual time where the toolchain provides it, an injected clock otherwise. Deterministic failure stubs, never probability
+- Toolchain capabilities are **detected, not versioned**: rules name a `go doc` check and a fallback, because a version number in a rules file rots silently
+
+### TypeScript
+- `strict: true` in tsconfig; no `any` on public API or HTTP boundaries
+- zod/joi validation at every HTTP boundary before processing request data
+
+### React
+- Functional components + hooks only; `eslint-plugin-react-hooks` zero violations
+- `eslint-plugin-jsx-a11y` zero warnings; semantic HTML; no div-soup
+- No `dangerouslySetInnerHTML` with user data — sanitize via `DOMPurify`
+
+### Library API Rule
+
+> **Always use context7.** Before writing any library-specific code — framework, SDK, ORM, auth library, cloud client — Claude fetches the current documentation via context7. Never infer API shapes from training data. A method that existed in v1 may not exist in v3.
+
+This applies everywhere: coder, reviewer, QA gates, skill implementations. If context7 returns no results for a library, Claude falls back to the installed version's changelog before guessing.
+
+### Spec-Driven Development
+
+For any feature with HTTP endpoints, the devkit enforces a spec-first workflow:
+
+1. **Architect** writes `api-spec.yaml` (OpenAPI 3.1) before any code — defines all endpoints, schemas, error shapes, auth
+2. **Coder** writes failing contract tests first (status, schema, auth per `operationId`), then implements against the spec exactly; annotations must reproduce spec `operationId` + status codes
+3. **QA** audits that a contract test exists per `operationId`, then runs Spectral lint + schema validation as quality gates
+4. **Reviewer** checks for spec drift (annotation ↔ spec ↔ implementation alignment)
+
+Spec is the source of truth — code follows spec, never the reverse.
+
+### Quality Gates
+
+| Gate | Go | TypeScript | React | Flutter | Kotlin |
+|------|-----|------|-------|---------|--------|
+| Format | `gofmt` | `prettier --check` | `prettier --check` | `dart format` | `ktlint` |
+| Lint | `go vet` + `golangci-lint` (0) | `eslint --max-warnings 0` | `eslint` (react-hooks + a11y) | `flutter analyze` | `detekt` + `ktlint` |
+| Types | — | `tsc --noEmit` | `tsc --noEmit` | — | — |
+| Coverage | ≥ 85% | ≥ 85% | ≥ 85% | ≥ 80% | ≥ 85% |
+| Race | `go test -race` | — | — | — | — |
+| Vuln | `govulncheck` | `npm audit` | `npm audit` | — | — |
+| Modernize *(advisory)* | `go fix -diff` (Go ≥ 1.26, reports only) | — | — | — | — |
+| Spec lint | `spectral lint` | `spectral lint` | — | — | — |
+
+### Security
+- OWASP Web Top 10 (2025) enforced at Reviewer + Verdict stages
+- OWASP LLM Top 10 2025 (v2.0) enforced for AI/GenAI workloads
+- `.env` / `.envrc` reads blocked at Claude Code hook level; credential writes and destructive shell commands blocked the same way
+- Never log PII, secrets, tokens, or card data
+
+---
 
 ---
 
@@ -195,794 +343,131 @@ Install: `claude plugin install context7@claude-plugins-official`
 
 ---
 
-## Quick Start
+---
 
-One command per machine. Detects the OS, installs what is missing, puts the devkit in
-`~/.claude`, and wires the hooks into `settings.json` so the guards are live rather than
-merely present. Supports macOS, Linux, and WSL.
+## Install
+
+One command per machine. It detects the OS, installs what is missing, puts the devkit in
+`~/.claude`, and wires the hooks into `settings.json`. macOS, Linux and WSL.
 
 ```bash
 git clone https://github.com/LuisFelipeMoro/Harness-devkit
-cd claude-devkit
+cd Harness-devkit
 bash install.sh
 ```
 
-Re-running is the normal case: it compares the installed commit against the source commit
-and does nothing expensive when they match.
+Re-running is the normal case; it does nothing expensive when the installed commit matches.
 
 ```bash
-bash install.sh --check      # report only — never writes
-bash install.sh --yes        # no prompts (CI, provisioning)
-bash install.sh --no-deps    # skip package installation
-bash install.sh --no-claude-mem   # skip the claude-mem memory layer
-bash install.sh --dry-run    # print what would happen
+bash install.sh --check          # report only, never writes
+bash install.sh --yes            # no prompts
+bash install.sh --no-deps        # skip package installation
+bash install.sh --no-claude-mem  # skip the claude-mem memory layer
+bash install.sh --dry-run        # print what would happen
 ```
-
-**What it does, in order**
 
 | Step | Detail |
 |---|---|
-| Source | Uses the clone you ran it from; if run outside a checkout, clones to `~/.local/share/claude-devkit`. Fast-forwards when the checkout is behind its remote — never touches a dirty or diverged tree. |
-| Dependencies | Required: `git`, `python3`, `curl`. Recommended: `gh`, `shellcheck`, `ripgrep`. Installed via the detected manager — Homebrew, apt, dnf, yum, pacman, zypper, or apk. |
-| Claude Code | Installs the CLI if absent, via `npm` when available. |
-| claude-mem | Installs [claude-mem](https://github.com/thedotmack/claude-mem) via `npx claude-mem install` — cross-session context persistence. Optional: needs Node ≥ 20, skipped cleanly without it, opt out with `--no-claude-mem`. |
-| Devkit files | Agents, skills, references, and `CLAUDE.md` into `~/.claude`, plus git-hook templates. |
-| Hook wiring | Merges the hook graph into `~/.claude/settings.json`, then verifies every shipped hook is referenced. |
-| State | Records the installed commit in `~/.claude/devkit/install-state.json`. |
+| Source | The clone you ran it from, or `~/.local/share/claude-devkit`. Fast-forwards only; never touches a dirty or diverged tree. |
+| Dependencies | Required: `git`, `python3`, `curl`. Recommended: `gh`, `shellcheck`, `ripgrep`. |
+| Devkit files | Agents, skills, references and `CLAUDE.md` into `~/.claude`, plus git-hook templates. |
+| Hook wiring | Merges the hook graph into `~/.claude/settings.json` and verifies every shipped hook is referenced. |
+| claude-mem | Optional (`npx claude-mem install`, Node 20+). Never fails the run. |
 
-It never pipes a downloaded script into a shell. The devkit's own `destructive-guard`
-blocks that shape, and an installer that breaks its own rule is not worth shipping —
-anything downloaded is written to disk, its path shown, and run only after confirmation.
+It never pipes a downloaded script into a shell. Existing `~/.claude/` files are safe: your own
+files are untouched, `~/.claude/CLAUDE.md` gets one `@include` line, and `settings.json` keeps your
+`model`, `permissions`, `env` and non-devkit hooks. Invalid JSON aborts rather than being rewritten.
 
-**Safe on an existing `~/.claude/`.** Same-named files are updated; your own files are
-untouched. `~/.claude/CLAUDE.md` is never overwritten — an `@include` line is injected once.
-In `settings.json`, your `model`, `permissions`, `env`, and non-devkit hooks are preserved;
-only devkit-owned hook entries are replaced, and entries pointing at scripts the devkit no
-longer ships are dropped. A `settings.json` that is not valid JSON aborts the install rather
-than being rewritten.
+The flat install also stages the sensor scripts (`scripts/verify/*`, `estimate-run.py`, `harness-metrics.py`) to
+`~/.claude/devkit/scripts/`, where skills and agents resolve `scripts/…` paths.
 
-**On claude-mem.** It fills the same Memory role as `PROGRESS.md` from the other end:
-`PROGRESS.md` is the deliberate, reviewable record a pipeline writes at each checkpoint,
-while claude-mem compresses and replays the conversation itself. They compose — the installer
-treats claude-mem as optional and never lets it fail the run. It registers its own Claude Code
-lifecycle hooks; the devkit's settings merge preserves them, and theirs preserve the devkit's.
+Upgrading from 2.x retires the old skills, agents and hook (`multi-agent`, `task`,
+`analysis`, `architecture`, `quality-gate`, `code-review-gate`, `pr-review`, `checkcomments`, `bug-fix`;
+`analyst`, `pm`, `scrum-master`, `orchestrator`, `tuner`, `architect`, `devops`;
+the orchestrator Bash-guard hook and its `settings.json` entry): each is moved to
+`~/.claude/devkit/retired/<UTC timestamp>/` (same layout), never deleted, and only when its bytes match a version
+the devkit shipped. A file of yours that shares one of these names is left in place and reported
+`kept (not the devkit's): <path>`. Each move is printed with its destination. Nothing else in `~/.claude/` is touched.
 
-**Environment overrides**
+Overrides: `DEVKIT_HOME` (managed clone location), `DEVKIT_REPO` (clone source), `TARGET_HOME` or `--home DIR`.
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `DEVKIT_HOME` | `~/.local/share/claude-devkit` | Where a managed clone lives |
-| `DEVKIT_REPO` | this repo's HTTPS URL | Clone source (use for a private fork) |
-| `TARGET_HOME` | `$HOME` | Install target — also settable with `--home DIR` |
-
----
-
-### Installing as a Claude Code plugin instead
-
-The installer deliberately does not touch the plugin manager. If you would rather have the
-marketplace manage it, do that yourself in Claude Code:
+**As a Claude Code plugin instead:**
 
 ```
 /plugin marketplace add LuisFelipeMoro/Harness-devkit
 /plugin install coding-pipeline@claude-devkit
 ```
 
-**Two things the plugin manager cannot do**, by design of the plugin format — both easy to add:
+A plugin cannot ship a `CLAUDE.md` or write `.git/hooks/`. Add the standards with
+`cp plugins/coding-pipeline/CLAUDE.md ~/.claude/devkit/CLAUDE.md` plus an `@~/.claude/devkit/CLAUDE.md`
+line in `~/.claude/CLAUDE.md`, and the git hooks per repo with `bash ~/.claude/git-hooks/install.sh`.
 
-1. **Git hooks.** A plugin cannot write to `.git/hooks/`, so run the step below per repo.
-2. **The engineering standards file.** A plugin cannot ship a `CLAUDE.md`. The skills and agents
-   are written to stand alone — each one restates inline the rules it depends on (model
-   assignment, gate thresholds, the acceptance contract), so **the plugin route works correctly on
-   its own**. What you do not get is the repo-wide contract: Coding Discipline, Proportionality,
-   Security Defaults, and the objectives that break ties between them. To add it, put the standards
-   where your global config can see them:
+**Codex CLI:** `bash plugins/coding-pipeline/scripts/install-codex.sh` places every skill in
+`~/.agents/skills/`; `generate-codex-agents.sh` writes one `~/.codex/agents/<name>.toml` per agent.
+Skill sequencing under Codex is not yet validated live; see `plugins/coding-pipeline/codex/harness-adapter.md`.
 
-   ```bash
-   mkdir -p ~/.claude/devkit
-   cp <checkout>/plugins/coding-pipeline/CLAUDE.md ~/.claude/devkit/CLAUDE.md
-   printf '\n@~/.claude/devkit/CLAUDE.md\n' >> ~/.claude/CLAUDE.md
-   ```
-
-   Or just run `bash install.sh`, which does exactly this and keeps it current.
-
-Both routes are supported and neither is going away: use the plugin manager if you want it to
-manage versions, use `install.sh` if you want a machine configured end to end.
-
----
-
-### Adding git hooks to a repo
-
-```bash
-bash ~/.claude/git-hooks/install.sh
-```
-
----
-
-### Codex CLI / Other Harnesses
-
-Every `SKILL.md` in this devkit uses only `name:`/`description:` frontmatter — the same
-shape Codex CLI's own Skills convention expects. A dedicated installer places them where
-Codex scans for skills:
-
-```bash
-bash plugins/coding-pipeline/scripts/install-codex.sh
-```
-
-**What you get:** every skill installed to `~/.agents/skills/` (Codex's user-level skills
-path), plus the 18 `agents/*.md` persona docs copied to `~/.agents/agents-reference/` for
-manual reference. Root `AGENTS.md` documents the same engineering standards for any
-harness working in this repo directly.
-
-To also give Codex real, dispatchable subagents (not just reference docs) — one
-`~/.codex/agents/<name>.toml` per persona, reasoning effort mapped from that persona's
-Claude model tier (`opus`→`high`, `sonnet`→`medium`, `haiku`→`low`):
-
-```bash
-bash plugins/coding-pipeline/scripts/generate-codex-agents.sh
-```
-
-**Scope:** single-agent skills (`security-review`, `quality-gate`, `pr-review`, etc.) work
-identically to Claude Code. Multi-agent pipeline skills (`multi-agent`,
-`bug-fix`, etc.) now have real per-persona Codex subagents at the right reasoning effort,
-but pipeline **sequencing** — which persona runs when, reading handoff signals like
-`CODER DONE` — hasn't been exercised end-to-end in a live Codex session yet. See
-`plugins/coding-pipeline/codex/harness-adapter.md` for the vocabulary mapping and current gaps.
-
----
-
-## Plugin Structure
-
-The devkit is split into focused plugins. Each installs independently or together:
+## Plugins
 
 ```
 plugins/
-├── coding-pipeline/    # Core coding pipeline — agents, pipeline skills, hooks,
-│                       #   references (per-language rules split one file per stack)
-├── engineering/        # Quality skills — security-review, quality-gate, code-review-gate,
-│                       #   DB migration, observability, performance, release management
-├── devtools/           # Developer tools — architecture review, business/technical analysis,
-│                       #   grill-me, handoff, skill authoring, rote, rote-adapter
-└── pr-workflow/        # PR skills — pr-review, checkcomments
+├── coding-pipeline/   # planning, code, validate, bugfix, map; agents, hooks, references
+├── engineering/       # deps, security-review, database-migration, observability,
+│                      #   performance-profiling, release-management
+├── pr-workflow/       # review-code, pr, pr-fix
+└── devtools/          # improve-codebase-architecture, business/technical analysis,
+                       #   grill-me, handoff, retro, write-a-skill, rote, rote-adapter,
+                       #   devkit-help
 ```
 
----
-
-## Pipeline Overview
-
-### Full pipeline — `/multi-agent <task>`
-
-For large features and epics. Runs up to 12 agents (10 core + Tuner + DevOps):
-
-```
-DELIVERY SETUP
-  orchestrator        → slug + key from the feature name
-                        .worktrees/dlv-{key}/ on branch release/{slug}-{key}
-                        (existing worktree for the key = resume, not recreate)
-
-PLANNING  (all artifacts keyed under docs/deliveries/{key}/)
-  Mary (Analyst)      → {key}/product-brief.md
-  John (PM)           → {key}/PRD.md
-  discovery (haiku)   → {key}/codebase-map.md  (what already exists, every entry file:line)
-  Winston (Architect) → docs/deliveries/delivery-{slug}-{key}.md  (+ Reuse Map, + api-spec.yaml at repo root)
-  /grill-me           → stress the plan (mandatory)
-  Priya (PlanReviewer)→ read the plan against the real repo (mandatory, max 2 revision rounds)
-                        PLAN CHANGES REQUIRED → back to Winston · PLAN APPROVED → human
-                        ← human resolves whatever neither could settle
-  Bob (ScrumMaster)   → {key}/story-{slug}.md per task — dispatched only when the manifest has
-                        ≥ 2 manifest rows (a single-row manifest skips straight to Amelia)
-                        (ACs + Test Case table = frozen contract, carrying the story's Reuse rows
-                        and convention exemplars)
-  Execution options   → human checkpoint: bench-context.py --manifest shows dispatch counts +
-                        a first-pass token range plus a second range (with rework), rework
-                        weighted by each row's declared Roster, for as-planned / all-standard /
-                        legacy-full-loop; operator picks or edits rosters before the first
-                        Coder is dispatched
-
-IMPLEMENTATION (per story, SEQUENTIAL — stories share the delivery worktree; roster-driven: the
-                manifest's declared Roster — cosmetic · light · standard · full — decides which
-                agents below run; classify-diff verifies the roster against the real diff and
-                only ever escalates it, never de-escalates)
-  Amelia (Coder)      → impl to spec → write specified tests → falsify each (owns tests + code)  [emits CODER DONE]
-     stack-aware: shared core + backend OR frontend overlay (chosen by story Tier);
-     frontend overlay covers SSR/RSC; loads only the detected language's rules;
-     full-stack stories split BE/FE around the api-spec contract (BE producer, FE consumer)
-        ↕ QA loop (max 3 iterations; skipped for roster cosmetic)
-  Quinn (QA)          → audits spec rows + falsification evidence (spot-checks breaks), no tautologies, corner cases + runs gates  [one tier-aware auditor]
-        │ gate fail   → QA→CODER BUG REPORT  → Amelia fixes → Quinn re-runs
-        │ weak/missing test → QA→CODER TEST GAP → Amelia writes it → Quinn re-audits
-        │ coverage gap → QA→CODER COVERAGE REQUEST → Amelia refactors
-        └ all green → QA→REVIEWER APPROVAL  ← Reviewer never runs before this
-
-STORY PR + REVIEW (draft PR into release/{slug}-{key}; triggered by QA approval only)
-  orchestrator        → feat/{key}-{story} → draft PR into release/{slug}-{key}
-  Reviewer            → score X/10  (MINOR/NIT → Tyler)
-                        gets the story + Reuse Map + codebase map, not just the diff —
-                        without them CD1/CD3/CD7 are skipped silently
-                        folds in the Stress lens for roster light/standard; posts findings
-                        inline on the draft PR — no separate story-level /pr-review
-  StressTester        → dispatched separately only for roster `full`; score X/10  (optimizations → Tyler)
-
-TUNING (optional — score ≥ 7, MINOR/NIT/optimization only)
-  Tyler (Tuner)       → apply fixes → Reviewer re-scores (max 2 iterations)
-
-  Verdict             → PRODUCTION READY / READY WITH CONDITIONS / NOT READY
-                        → gh pr ready once no findings remain → merge --no-ff so each story
-                        stays legible in history
-
-POST-VERDICT (if PRODUCTION READY)
-  Ops (DevOps)        → Dockerfile + .dockerignore + docker-compose.yml + optional CI/k8s
-
-DELIVERY CLOSE (terminal — the pipeline stops here)
-  orchestrator        → push release/{slug}-{key} (asks first) → open PR to main
-  /pr-review          → review the whole delivery as ONE diff — the only pass that can see
-                        cross-story duplication — posts inline findings + a Gaps block
-                        (unimplemented ACs · spec drift · missing Test Case rows ·
-                         Reuse Map departures · duplication % · untraced changes)
-                        never commits or merges to main; a human merges
-                        then /release-management tags the merged main
-```
-
-Measured by `bench-context.py` (`plugins/coding-pipeline/scripts/bench-context.py`): a uniform
-5-story `standard` delivery is **20 dispatches** (was 40 before the roster split); a realistic
-mixed-roster delivery is **18**; guide tokens per 5-story delivery down **11.4%** (244,170 → 216,309), vs v2.6.0.
-
-### Fast Pipeline — `/task <task>`
-
-Skips Analyst + PM. Starts at codebase discovery → Architecture → grill-me plan stress → plan review → Decompose into sub-tasks → Implement per sub-task. Same agent protocol (Coder implements to the frozen Test Case table, writes those tests, falsifies each → QA audit loop → QA approval → Reviewer).
-
-### Progressive Workflow
-
-```
-Exploring requirements only
-  → /analysis <task>                   Brief + PRD only
-         ↓
-  → /planning                          Load Brief+PRD → delivery file + manifest
-         ↓
-  → /multi-agent       Full Epic Loop → Verdict
-         — or —
-  → /task              Sub-Task Loop → Verdict
-
-Fast path (one known task)
-  → /task <task>       Architect → sub-tasks → code → QA → Verdict
-
-Ad-hoc code change (spec-first, direct edit)
-  → list the test cases first, then code, then write those tests and falsify each
-         ↓ (mandatory final step)
-  → /code-review-gate                  Gates + Reviewer on changed files
-```
-
-### Scoring
-
-| Result | Criteria |
-|--------|---------|
-| PRODUCTION READY | Overall ≥ 8.0, no CRITICAL security issues |
-| READY WITH CONDITIONS | 6.5–7.9, or ≥ 8.0 with 1 CRITICAL |
-| NOT READY | < 6.5 or unmitigated CRITICAL security issue |
-
-Score weighted: Review 35% · StressTest 35% · QA 30%.
-
----
-
-## Skills Reference
-
-### Quick decision guide
-
-```
-What are you trying to do?
-│
-├─ Build something new
-│   ├─ Large feature / epic / new service  →  /multi-agent
-│   ├─ Single task / small change          →  /task
-│   ├─ Just need a plan, no code yet       →  /planning
-│   └─ Just explore requirements           →  /analysis
-│
-├─ Fix something broken
-│   └─ Bug / wrong behavior / crash        →  /bug-fix
-│
-├─ Finished coding (outside a pipeline)
-│   └─ Gate + review before pushing        →  /code-review-gate  ← mandatory
-│
-├─ Audit or investigate
-│   ├─ Security vulnerabilities            →  /security-review
-│   ├─ Architectural health / coupling     →  /improve-codebase-architecture
-│   ├─ Performance / latency / profiling   →  /performance-profiling
-│   ├─ Business rules and domain logic     →  /business-analysis
-│   └─ HTTP contracts / API surfaces       →  /technical-analysis
-│
-├─ Ship or maintain
-│   ├─ Cut a release                       →  /release-management
-│   ├─ Write a DB migration                →  /database-migration
-│   ├─ Add logging / tracing               →  /observability
-│   ├─ Run all quality gates               →  /quality-gate
-│   ├─ Review a PR                         →  /pr-review
-│   └─ Check open PR comments              →  /checkcomments
-│
-├─ Plan and design
-│   ├─ Standalone architecture design      →  /architecture
-│   └─ Stress-test a plan before coding   →  /grill-me
-│
-├─ Integrate with external APIs
-│   ├─ Run an existing integration flow    →  /rote
-│   └─ Build a new integration from scratch →  /rote-adapter
-│
-└─ Meta
-    ├─ Wrap up a session                   →  /handoff
-    └─ Add a new skill to the devkit       →  /write-a-skill
-```
-
----
-
-### Pipeline skills
-
-#### `/multi-agent <task>`
-
-**Use when:** building a large feature, epic, or new service from scratch.
-
-**What happens:** Runs all 12 agents in sequence. Mary (Analyst) writes a product brief → John (PM) writes a PRD → a read-only discovery pass maps what already exists → Winston (Architect) designs the architecture, Reuse Map, and API spec → **`/grill-me` stresses the plan → Priya (Plan Reviewer) reads it against the real codebase → human resolves what neither settled** → Bob (ScrumMaster) decomposes into stories (ACs + Test Case table = frozen contract) → Amelia (Coder) implements to the spec, writes exactly the specified tests, then falsifies each one → Quinn (QA) audits the falsification evidence and runs the gates → Reviewer + StressTester score in parallel → Tyler (Tuner) polishes minor findings → Verdict issues PRODUCTION READY / NOT READY → Ops (DevOps) generates Dockerfile + docker-compose → the PR is opened and `/pr-review` reviews the delivery as one diff, posting findings and the Gaps block.
-
-**Example:**
-```
-/multi-agent Build a cart service for our e-commerce platform.
-  It should support adding/removing items, applying discount codes, and
-  persisting carts for logged-in users. Go + PostgreSQL.
-```
-
----
-
-#### `/task <task>`
-
-**Use when:** implementing a single known task — a new endpoint, a refactor, a small feature. You already know what needs to be built.
-
-**What happens:** Skips Analyst + PM. Winston architects the solution + writes API spec → **`/grill-me` stresses the plan + human validates** → Bob writes a story with its frozen Test Case table → Amelia implements to spec → writes those tests → falsifies each → Quinn audits evidence + gates → Reviewer + StressTester → Tuner → Verdict → DevOps. Same quality bar as the full pipeline, faster start.
-
-**Example:**
-```
-/task Add rate limiting to the POST /checkout endpoint.
-  Max 5 requests per minute per user. Return 429 with Retry-After header.
-```
-
----
-
-#### `/bug-fix [description]`
-
-**Use when:** something is broken — wrong behavior, crash, regression, or a test that fails.
-
-**What happens:** Sam (Bug Investigator) explores the codebase, finds root cause, and writes a RED failing test — bug fixes are the one place a test comes first, because the RED proves the root cause was found rather than guessed. Amelia makes it GREEN with the minimum fix (and may add regression tests — never weakening Sam's RED test). Quinn verifies all gates still pass. Reviewer scores the fix. Maximum 3 fix iterations before escalation.
-
-**Example:**
-```
-/bug-fix Cart total shows wrong amount when a percentage discount is applied
-  after a fixed-amount discount. Expected: discounts stack correctly.
-  Actual: second discount applies to original price, not discounted price.
-```
-
----
-
-#### `/analysis <task>`
-
-**Use when:** exploring requirements — you want a product brief and PRD before committing to any architecture or implementation.
-
-**What happens:** Mary writes a product brief, John writes a PRD with ACs and security requirements. No architecture, no code. Stops there — you decide what to do next.
-
-**Example:**
-```
-/analysis We need a notification service that sends email and push
-  notifications based on user preferences and event types.
-```
-
----
-
-#### `/planning <task>`
-
-**Use when:** you have requirements (or run `/analysis` first) and want an execution plan — architecture + epic/task manifest — but no implementation yet.
-
-**What happens:** Runs Architect (Winston) to produce the delivery file + `api-spec.yaml` (if HTTP endpoints) → **human validates both** → ScrumMaster produces the epic or task manifest. Stops before any code. Use `/grill-me` on the spec before approving.
-
-**Example:**
-```
-/planning  (after running /analysis)
-```
-or:
-```
-/planning Design the architecture for a payments webhook handler.
-  It receives Stripe events, verifies signatures, and enqueues processing jobs.
-```
-
----
-
-#### `/architecture <domain>`
-
-**Use when:** you want a standalone architecture design for a domain or component, not tied to an active pipeline run.
-
-**What happens:** Winston produces a full delivery file (`docs/deliveries/delivery-{slug}-{key}.md`) — threat model, component design, data flow, API contracts, Test Case Specification, Mermaid diagrams, ADRs. No story decomposition, no implementation.
-
-**Example:**
-```
-/architecture Design the authentication subsystem — JWT issuance, refresh
-  rotation, session invalidation, and per-device token management.
-```
-
----
-
-### Engineering quality skills
-
-#### `/code-review-gate` ← mandatory after any non-pipeline code change
-
-**Use when:** you wrote or modified code outside a pipeline (inline spec-first session, direct edit, ad-hoc fix). This is a hard rule — never push without running this first.
-
-**What happens:** Detects changed files → runs all quality gates for your stack (format, lint, types, coverage, race, vuln, spec) → loads Reviewer on changed files only → issues APPROVED / BLOCK / APPROVE WITH CHANGES.
-
-**Example:**
-```
-/code-review-gate
-```
-*(no arguments — detects changed files automatically)*
-
----
-
-#### `/quality-gate`
-
-**Use when:** you want to run all quality gates for the current stack without the Reviewer step — CI check, pre-push sanity, or after a dependency update.
-
-**What happens:** Detects stack (go.mod / package.json / Cargo.toml / etc.) → runs format + lint + types + coverage + race + vuln + spec gates → reports PASS/FAIL per gate.
-
-**Example:**
-```
-/quality-gate
-```
-
----
-
-#### `/security-review`
-
-**Use when:** auditing a feature or service for security issues — before shipping, after adding auth, or when touching any I/O boundary.
-
-**What happens:** Full OWASP Web Top 10 (2025) audit + OWASP LLM Top 10 2025 (for AI workloads) across all code in scope. Each finding has severity (CRITICAL/MAJOR/MINOR), file + line, and a concrete fix.
-
-**Example:**
-```
-/security-review Audit the user authentication flow — login, token issuance,
-  refresh, logout, and password reset endpoints.
-```
-
----
-
-#### `/database-migration`
-
-**Use when:** making any schema change — adding columns, creating tables, dropping indexes.
-
-**What happens:** Writes an additive-only migration (never destructive in a single step). Generates the migration file with up/down, ensures backward compatibility with running app, adds index concurrently for large tables, validates the migration is rollback-safe.
-
-**Example:**
-```
-/database-migration Add a discount_code_id nullable foreign key to the orders
-  table referencing discount_codes(id). PostgreSQL, using golang-migrate.
-```
-
----
-
-#### `/observability`
-
-**Use when:** adding structured logging, metrics, or distributed tracing to a service or feature.
-
-**What happens:** Instruments the code with structured JSON logging (zap / pino / SLF4J), adds OpenTelemetry spans and attributes at service boundaries, wires metrics counters and histograms. Follows the no-PII-in-logs rule throughout.
-
-**Example:**
-```
-/observability Add tracing and structured logging to the checkout service —
-  span per external call, log errors with request_id, metric for checkout
-  success/failure rate.
-```
-
----
-
-#### `/performance-profiling`
-
-**Use when:** a service is slow, latency is high, or you need to find the bottleneck before optimizing.
-
-**What happens:** For Go: runs `pprof` CPU + memory profile, interprets the flamegraph, identifies the hot path, proposes targeted fixes. For other stacks: applies language-appropriate profiling workflow. Never optimizes without data. When latency is spread across services, it starts trace-first with a layer-by-layer latency budget before choosing a fix.
-
-**Example:**
-```
-/performance-profiling The product search endpoint is slow under load —
-  p99 latency is 800ms, target is 200ms. Go service with PostgreSQL.
-```
-
----
-
-#### `/release-management`
-
-**Use when:** cutting a release — version bump, changelog, tag, GitHub release.
-
-**What happens:** Reads git log since last tag → determines semver bump (major/minor/patch) → updates version file → generates CHANGELOG entry → commits → creates annotated tag → creates GitHub release with notes.
-
-**Example:**
-```
-/release-management Cut a minor release — we added the cart discount feature
-  and fixed the total calculation bug.
-```
-
----
-
-### Developer tools
-
-#### `/grill-me [plan or design]`
-
-**Use when:** you have a plan, architecture, or API design and want it stress-tested before committing. Use it during `/planning` Phase 2 before approving the spec.
-
-**What happens:** Acts as an adversarial reviewer — pokes holes in assumptions, finds missing error cases, identifies scaling risks, surfaces security gaps, challenges tech choices. Returns a prioritized list of concerns with suggested resolutions.
-
-**Example:**
-```
-/grill-me Here's our API spec for the checkout flow — POST /checkout creates
-  an order, charges the card, sends a confirmation email, and decrements
-  inventory. All in one request. Does this design hold up?
-```
-
----
-
-#### `/improve-codebase-architecture`
-
-**Use when:** you want a health check on the codebase — coupling, boundary violations, over-large files, domain logic leaking into transport layers.
-
-**What happens:** Explores the full codebase, builds a dependency map, identifies Critical/High/Medium/Low findings (domain leakage, circular imports, 3+ callers duplicating logic, files >500 lines, etc.), writes an HTML report to `/tmp/arch-report-{date}.html`.
-
-**Example:**
-```
-/improve-codebase-architecture
-```
-or with focus area:
-```
-/improve-codebase-architecture Focus on the payment and order domains —
-  we've been moving fast and suspect boundary violations.
-```
-
----
-
-#### `/business-analysis <domain>`
-
-**Use when:** you need to map the business rules and constraints for a domain before designing or refactoring it. Answers "what does the business actually require here?"
-
-**What happens:** Explores code, comments, tests, and any available docs. Produces a structured map: entities, rules, constraints, invariants, edge cases, and open questions.
-
-**Example:**
-```
-/business-analysis Map the discount and pricing rules for the cart —
-  what combinations are allowed, how stacking works, what the current
-  invariants are.
-```
-
----
-
-#### `/technical-analysis <domain>`
-
-**Use when:** you need to map the HTTP contracts, interface boundaries, and integration points for a domain — before refactoring, before writing a spec, or when onboarding.
-
-**What happens:** Reads handlers, routes, request/response types, middleware, and external calls. Produces a contract map: endpoints, request/response schemas, auth requirements, downstream dependencies.
-
-**Example:**
-```
-/technical-analysis Map all HTTP endpoints and external integrations
-  in the order service — what it exposes and what it calls.
-```
-
----
-
-#### `/rote [intent]`
-
-**Use when:** you want to run an existing integration flow (list open PRs, fetch Linear tickets, get calendar events) via an installed adapter.
-
-**What happens:** Phase 0 always runs first — lists installed adapters and all crystallized flows. If a matching flow exists, replays it. If not, discovers the right adapter tool and invokes it. After any new adapter call, crystallizes it as a reusable CLI flow automatically.
-
-**Example:**
-```
-/rote list my open Linear tickets assigned to me
-```
-```
-/rote show all open PRs in this repo
-```
-
----
-
-#### `/rote-adapter [target]`
-
-**Use when:** connecting to an API or service for the first time — building a brand-new integration.
-
-**What happens:** Runs an 8-phase autonomous process: discover the API spec in the catalog → analyze spec structure → research auth scheme → scope what tools to expose → create the adapter → verify it works. At the end you have a working adapter and a crystallized flow.
-
-**Example:**
-```
-/rote-adapter Connect to the Datadog API so I can query metrics and create monitors
-```
-```
-/rote-adapter Build an integration with our internal inventory service at https://inventory.internal/openapi.json
-```
-
----
-
-#### `/handoff`
-
-**Use when:** ending a session and wanting to preserve context for the next one — what was done, what's pending, decisions made, open questions.
-
-**What happens:** Compacts the session into a structured handoff document: summary of changes, current state, pending tasks, open decisions, and what to do next. Saves it to a file.
-
-**Example:**
-```
-/handoff
-```
-*(run at end of session — no arguments needed)*
-
----
-
-#### `/write-a-skill [name]`
-
-**Use when:** adding a new slash command to the devkit.
-
-**What happens:** Scaffolds the skill file with correct frontmatter, phase structure, input/output/boundary definitions, and mirrors it to `~/.claude/skills/`. Follows the same structure as existing skills. Before declaring the skill done, it runs the new skill through [SkillSpec](https://github.com/modiqo/skillspec) `doctor` and adapts the `SKILL.md` for any actionable finding (frontmatter, implicit dependencies, dense activation body, late obligations). When `skillspec` is not installed **or cannot execute** on the host, it says so and falls back to `.github/scripts/validate-wiring.py` — a shallower check that verifies wiring and trigger-phrase presence, not behavior contracts.
-
-**Example:**
-```
-/write-a-skill dependency-update — a skill that checks for outdated
-  dependencies, runs security audit, and updates safely with test verification
-```
-
----
-
-### PR workflow
-
-#### `/pr-review [PR# or URL]`
-
-**Use when:** reviewing a pull request — your own before merge, or a teammate's.
-
-**What happens:** Fetches the PR diff, runs a structured code review (security, correctness, performance, reliability, maintainability), posts findings as PR comments via `gh`, and optionally requests changes or approves.
-
-**Example:**
-```
-/pr-review 142
-```
-```
-/pr-review   (reviews the PR for current branch automatically)
-```
-
----
-
-#### `/checkcomments`
-
-**Use when:** checking what comments are open on your current branch's PR — read-only, no changes.
-
-**What happens:** Lists all open PR review comments for the current branch, grouped by file and severity. Read-only — does not post or resolve anything.
-
-**Example:**
-```
-/checkcomments
-```
-
----
-
-> Claude routes to the correct skill automatically when your message matches one of its trigger phrases. You can also invoke any skill explicitly by name. Each skill's own `description` is the single source of truth for its trigger phrases; `CLAUDE.md` carries the task-to-skill routing table.
-
----
-
-## Engineering Standards
-
-`CLAUDE.md` is injected into every Claude Code session and enforces:
-
-### Go
-- Authority: Uber Go Style → Ardan Labs/service → JetBrains Go Modern → Effective Go
-- **Zero error discards** — `_ =` or `_ :=` on errors is a hard block
-- Wrap all errors: `fmt.Errorf("doing X: %w", err)` — never bare `return err`
-- `swaggo/swag` annotations required on every HTTP handler
-- **Transaction races**, not just data races — check-and-act split across two critical sections passes `-race` and still corrupts state. Also: lock ordering by stable id, no mutex held across I/O, clone before returning guarded state, result channels buffered to sender count
-- **No `time.Sleep` in tests** — virtual time where the toolchain provides it, an injected clock otherwise. Deterministic failure stubs, never probability
-- Toolchain capabilities are **detected, not versioned**: rules name a `go doc` check and a fallback, because a version number in a rules file rots silently
-
-### TypeScript
-- `strict: true` in tsconfig; no `any` on public API or HTTP boundaries
-- zod/joi validation at every HTTP boundary before processing request data
-
-### React
-- Functional components + hooks only; `eslint-plugin-react-hooks` zero violations
-- `eslint-plugin-jsx-a11y` zero warnings; semantic HTML; no div-soup
-- No `dangerouslySetInnerHTML` with user data — sanitize via `DOMPurify`
-
-### Library API Rule
-
-> **Always use context7.** Before writing any library-specific code — framework, SDK, ORM, auth library, cloud client — Claude fetches the current documentation via context7. Never infer API shapes from training data. A method that existed in v1 may not exist in v3.
-
-This applies everywhere: coder, reviewer, QA gates, skill implementations. If context7 returns no results for a library, Claude falls back to the installed version's changelog before guessing.
-
-### Spec-Driven Development
-
-For any feature with HTTP endpoints, the pipeline enforces a spec-first workflow:
-
-1. **Architect** writes `api-spec.yaml` (OpenAPI 3.1) before any code — defines all endpoints, schemas, error shapes, auth
-2. **Coder** writes failing contract tests first (status, schema, auth per `operationId`), then implements against the spec exactly; annotations must reproduce spec `operationId` + status codes
-3. **QA** audits that a contract test exists per `operationId`, then runs Spectral lint + schema validation as quality gates
-4. **Reviewer** checks for spec drift (annotation ↔ spec ↔ implementation alignment)
-
-Spec is the source of truth — code follows spec, never the reverse.
-
-### Quality Gates
-
-| Gate | Go | TypeScript | React | Flutter | Kotlin |
-|------|-----|------|-------|---------|--------|
-| Format | `gofmt` | `prettier --check` | `prettier --check` | `dart format` | `ktlint` |
-| Lint | `go vet` + `golangci-lint` (0) | `eslint --max-warnings 0` | `eslint` (react-hooks + a11y) | `flutter analyze` | `detekt` + `ktlint` |
-| Types | — | `tsc --noEmit` | `tsc --noEmit` | — | — |
-| Coverage | ≥ 85% | ≥ 85% | ≥ 85% | ≥ 80% | ≥ 85% |
-| Race | `go test -race` | — | — | — | — |
-| Vuln | `govulncheck` | `npm audit` | `npm audit` | — | — |
-| Modernize *(advisory)* | `go fix -diff` (Go ≥ 1.26, reports only) | — | — | — | — |
-| Spec lint | `spectral lint` | `spectral lint` | — | — | — |
-
-### Security
-- OWASP Web Top 10 (2025) enforced at Reviewer + Verdict stages
-- OWASP LLM Top 10 2025 (v2.0) enforced for AI/GenAI workloads
-- `.env` / `.envrc` reads blocked at Claude Code hook level; credential writes and destructive shell commands blocked the same way
-- Never log PII, secrets, tokens, or card data
-
----
-
-## Claude Code Hooks
+## Hooks
 
 | Hook | Trigger | Behaviour |
 |------|---------|-----------|
-| `session-bootstrap.sh` | SessionStart | Harness memory — prints `PROGRESS.md` so a new session resumes with done/failed/current state |
-| `env-guard.sh` | PreToolUse → Read/Bash/Grep/Glob | Blocks reads of `.env`, `.envrc`, `.env.*` — hard exit, including `cat`/`grep` via Bash |
-| `destructive-guard.sh` | PreToolUse → Bash | Blocks force-push, remote branch deletion, `reset --hard`/`clean -fd` on a checked-out mainline, recursive deletes aimed at `/` or `$HOME`, `curl \| sh`, `chmod 777`, and destructive DDL executed through a database client |
-| `secret-write-guard.sh` | PreToolUse → Write/Edit | Blocks writing a recognisable live credential into the tree (AWS keys, private-key blocks, Anthropic/OpenAI/GitHub/GitLab/Slack/Google tokens) |
-| `session-tracker.sh` | PostToolUse | Records which source files changed and whether any gate command ran — the evidence `delivery-gate` reads |
-| `delivery-gate.sh` | Stop | Refuses to call a session done when source files changed and no test, lint, or type-check ever ran |
-| `pr-review-responder.sh` | PostToolUse → Bash | After `git push`: surfaces PR comments; Claude fixes valid issues and replies |
-| `dispatch-budget.sh` | PreToolUse → Agent/Task | Warns once a session passes its subagent-dispatch budget (default 14, tunable via `DEVKIT_DISPATCH_BUDGET`); also flags a single oversized dispatch prompt (too many characters or too many distinct file paths named) before it's sent, so a stalled dispatch gets split instead of retried blind |
-| RTK hook | PreToolUse → Bash | Every Bash command routed through RTK for compact output |
-| Caveman activate | SessionStart | Loads compressed mode; persists across turns |
-| Caveman tracker | UserPromptSubmit | Prevents caveman mode from drifting off mid-session |
+| `session-bootstrap.sh` | SessionStart | Prints `PROGRESS.md` so a new session resumes with done/failed/current state |
+| `env-guard.sh` | PreToolUse | Blocks reads of `.env`, `.envrc`, `.env.*`, including via `cat`/`grep` |
+| `destructive-guard.sh` | PreToolUse(Bash) | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL |
+| `secret-write-guard.sh` | PreToolUse(Write/Edit) | Blocks writing a recognisable live credential |
+| `dispatch-budget.sh` | PreToolUse(Agent) | Warns once past the session dispatch budget (default 14, `DEVKIT_DISPATCH_BUDGET`); flags an oversized dispatch prompt |
+| `session-tracker.sh` | PostToolUse | Records changed source files and whether a gate command ran |
+| `context-budget.sh` | PostToolUse | Warns at 60% context, calls the 80% ceiling |
+| `pr-review-responder.sh` | PostToolUse(Bash) | After `git push`, says how many PR comments are open and suggests `/pr-fix` |
+| `precompact-snapshot.sh` | PreCompact | Records branch, dirty files and recent commits before compaction |
+| `delivery-gate.sh` | Stop | Refuses to call a session done when source changed and no test, lint or type-check ran; suggests `/validate-code` |
 
-The guards are deterministic — regex and exit codes, no model in the loop — and every one of
-them is covered by `.github/scripts/test-hooks.sh`, which asserts both that it blocks what it
-must and that it stays out of the way otherwise. A guard that cannot parse its input exits 0:
-failing open beats blocking every tool call because a payload shape changed.
+The guards are deterministic (regex and exit codes, no model in the loop), each covered by `.github/scripts/test-hooks.sh`, and fail open on a payload they cannot parse.
 
-**Tuning them**
-
-| Variable | Effect |
 |---|---|
 | `DEVKIT_HOOK_PROFILE=off` | Every guard is inert |
 | `DEVKIT_HOOK_PROFILE=standard` | Default. Guards block; `delivery-gate` warns |
 | `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
-| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `pre:bash:orchestrator-guard`, `post:session-tracker`, `stop:delivery-gate` |
+| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `post:session-tracker`, `stop:delivery-gate` |
 
 `strict` blocks a given session only once — a Stop hook that blocks forever traps the operator
 rather than the mistake.
 
 ---
 
-## Git Hooks
+
+
+## Git hooks
 
 | Hook | Runs | Checks |
 |------|------|--------|
-| `pre-commit` | Every commit (fast, < 5s) | Go: `gofmt` + `go vet` + `golangci-lint --fast` · TS: `tsc --noEmit` + `eslint` |
-| `pre-push` | Before push (full gates) | Go: `go test -race` + coverage ≥ 85% + `govulncheck` · TS: `jest --coverage` + `npm audit` |
-| `commit-msg` | Every commit | Conventional Commits: `type(scope): description` |
+| `pre-commit` | Every commit | Go: `gofmt`, `go vet`, `golangci-lint --fast` · TS: `tsc --noEmit`, `eslint` |
+| `pre-push` | Before push | Go: `go test -race`, coverage 85%+, `govulncheck` · TS: `jest --coverage`, `npm audit` · duplication |
+| `commit-msg` | Every commit | Conventional Commits |
 
-Valid types: `feat` · `fix` · `docs` · `style` · `refactor` · `perf` · `test` · `chore` · `build` · `ci` · `revert`
-
-Both `pre-commit` and `pre-push` also run `release-content-guard.sh` — path-only, so it never
-inspects content: `PROGRESS.md`, generated handoff snapshots, and non-static test output
-(coverage reports, `*.devkit-break` markers left by an interrupted `break-run.sh`) are rejected
-before they can enter a commit or a push. Patterns come from the repo's own committed
-`.devkit/release-exclude` (one glob per line, `#` comments and blank lines ignored) — the guard
-ships with no default list of its own, so a repo extends the set without editing the script.
-
----
+Both also run `release-content-guard.sh`: `PROGRESS.md`, handoff snapshots and generated test output
+are rejected before they can enter a commit or push. Patterns come from the repo's own
+`.devkit/release-exclude` (one glob per line). `PROGRESS.md` is local session state, git-ignored,
+and stays out of releases.
 
 ## Required Tools
 
 ### Core (devkit needs these)
 | Tool | Install | Used by |
 |------|---------|---------|
-| `gh` (GitHub CLI) | `brew install gh` / `apt install gh` | PR review hook, release management |
+| `gh` (GitHub CLI) | `brew install gh` / `apt install gh` | PR hook, `/review-code`, `/pr-fix`, release management |
 | `golangci-lint` | `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest` | Go quality gates |
 | `govulncheck` | `go install golang.org/x/vuln/cmd/govulncheck@latest` | Go vulnerability scan |
 | `staticcheck` | `go install honnef.co/go/tools/cmd/staticcheck@latest` | Go static analysis |
@@ -1002,23 +487,20 @@ ships with no default list of its own, so a repo extends the set without editing
 
 ---
 
+
 ## Developing the devkit
 
-The devkit holds itself to its own Sensor bar — CI fails on an exit code, never on prose.
-Run the same checks locally before pushing:
+CI fails on an exit code, never on prose. Run the same checks locally:
 
 ```bash
-bash .github/scripts/test-hooks.sh        # 37 assertions across the session guards
-bash .github/scripts/test-git-hooks.sh    # 19 assertions across pre-commit / pre-push
-bash .github/scripts/test-install.sh      # 20 assertions across the bootstrap
-python3 .github/scripts/validate-wiring.py  # manifests, hooks, and every cross-reference
+bash .github/scripts/test-hooks.sh
+bash .github/scripts/test-git-hooks.sh
+bash .github/scripts/test-install.sh
+bash .github/scripts/test-verify.sh
+bash .github/scripts/test-dup-attribution.sh
+python3 .github/scripts/validate-wiring.py   # manifests, hooks, links, skills table, 60-line skills
 ```
 
-`validate-wiring.py` exists because nearly every capability here is one file pointing at
-another — a marketplace entry at a plugin directory, a hook entry at a shell script, a skill at
-a reference, an agent name in a dispatch instruction. Nothing executes those links at authoring
-time, so a rename breaks them silently and the failure only surfaces mid-delivery.
-
-Both test suites were accepted only after every assertion was falsified: the logic under test
-was removed, the suite was observed to fail on its own assertion, and the code was restored. A
-test never observed failing is unproven, and that rule applies to the devkit's own tests first.
+`validate-wiring.py` exists because nearly every capability is one file pointing at another, and
+nothing executes those links at authoring time. It also enforces that every skill is manual, at most
+60 lines, and never invokes another skill.

@@ -32,14 +32,14 @@ SKILLSPEC-REPORT.md
 /target/
 **/*.rs.bk
 
-# Pipeline delivery worktrees (per-delivery isolated checkouts — never committed)
+# Leftover local worktrees from the retired delivery flow — never committed
 /.worktrees/
 
 # Python bytecode from local validator/test runs
 __pycache__/
 *.pyc
 
-# Delivery planning docs (local working artifacts — not shipped)
+# Plans and codebase maps (docs/plans) — local working artifacts, not shipped
 /docs/
 
 # Session memory and run artifacts stay local — a release carries code, docs and static tests only.

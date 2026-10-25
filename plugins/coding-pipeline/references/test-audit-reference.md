@@ -1,10 +1,10 @@
 # Test audit reference — mock patterns + security test cases
 
 Lookup material for `agents/qa.md`. It lived inline, which meant every QA dispatch paid for the
-security test table even on a story with no external I/O, and for the mock patterns whether or not
-the suite used a mock. Load it when the story's audit actually needs it.
+security test table even on a task with no external I/O, and for the mock patterns whether or not
+the suite used a mock. Load it when the task's audit actually needs it.
 
-## Mock Patterns *(audit reference — the patterns Amelia's tests must follow)*
+## Mock Patterns *(audit reference — the patterns the coder's tests must follow)*
 
 > Use context7 to verify current mock/test framework API when auditing tests — mock interfaces, assertion methods, and test runner configuration change across versions.
 
@@ -39,12 +39,12 @@ the suite used a mock. Load it when the story's audit actually needs it.
 | Kotlin secret | Hardcoded credential in `strings.xml` or Kotlin source | Keys via BuildConfig/CI only; `EncryptedSharedPreferences` for storage |
 
 **Spec contract tests (if `api-spec.yaml` exists — audit the integration suite):**
-For each `operationId` in scope, verify Amelia's suite includes at least one test that sends a valid request and asserts the response matches the spec schema (status code, required fields, types), and that it was falsified by dropping a required field or changing the status; if missing → `QA→CODER TEST GAP`. Patterns:
+For each `operationId` in scope, verify the coder's suite includes at least one test that sends a valid request and asserts the response matches the spec schema (status code, required fields, types), and that it was falsified by dropping a required field or changing the status; if missing → `QA→CODER TEST GAP`. Patterns:
 - Go: validate response body against spec schema with `santhosh-tekuri/jsonschema/v5`
 - TS: use `ajv` to validate response against schema from spec
 - Java: use `io.rest-assured` + `com.atlassian.oai:swagger-request-validator-restassured`
 
-Audit rejects (emit `QA→CODER TEST GAP` if Amelia's tests do any of these):
+Audit rejects (emit `QA→CODER TEST GAP` if the coder's tests do any of these):
 - Real network calls instead of mocked I/O
 - Order-dependent tests
 - `it.todo()` / placeholders
@@ -52,7 +52,7 @@ Audit rejects (emit `QA→CODER TEST GAP` if Amelia's tests do any of these):
 - Expected values derived by re-running the implementation's own logic rather than taken as literals from the spec
 - Any test with no falsification evidence, or evidence whose "failure" was a compile error rather than an assertion
 
-Expected test-file shape (what a compliant suite from Amelia looks like):
+Expected test-file shape (what a compliant suite from the coder looks like):
 - Go: table-driven (CLAUDE.md pattern) · `testify/assert`+`require` · `//go:build integration`
 - Java: JUnit 5 `@DisplayName` · Mockito · AssertJ
 - PHP: PHPUnit 10+ · Mockery · `@dataProvider` for table-driven

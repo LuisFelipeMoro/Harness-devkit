@@ -25,29 +25,39 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 | Gate | Value |
 |---|---|
 | Verdict weighting | Review 35% · Stress 35% · QA 30% |
+| `/validate-code` weighting (`verdict.sh --no-review`) | Stress 35% · QA 30%, renormalised over 65% — the review is `/review-code`'s own gate (≥ 8.0, no CRITICAL) |
+| `/validate-code` light depth (`verdict.sh --no-review --no-stress`) | QA 30%, renormalised over 30% — stress not dispatched (classify-diff `light`); no stress score accepted, so no Stress floor |
 | PRODUCTION READY | all hard gates PASS · overall ≥ 8.0 · 0 CRITICAL |
 | READY WITH CONDITIONS | all hard gates PASS · 6.5–7.9, or ≥ 8.0 with ≤ 1 non-security CRITICAL |
 | NOT READY | any hard gate FAIL · overall < 6.5 · any unmitigated CRITICAL security issue |
-| Story floor | Reviewer ≥ 7/10 · Stress ≥ 7/10 |
+| Per-lens floor | Reviewer ≥ 7/10 · Stress ≥ 7/10 |
 | Reviewer BLOCK | caps overall at 5.0 |
 | Tautological test | MAJOR — caps QA score at 4 |
 | Review/Stress score gap | > 3 → WARNING note, verdict unchanged |
 
 ## Roster
 
-`scripts/verify/verdict.sh --roster R --classify-exit N` applies these lenses and floors on top of
-the Scores table above, which still governs `standard`/`full`/the roster-absent legacy path.
+Optional `--roster` mode of `scripts/verify/verdict.sh` (`--roster R --classify-exit N`). It applies these lenses and floors on top of
+the Scores table above, which still governs `standard`/`full`/the roster-absent default path.
+
+**What v3 skills actually call.** `/validate-code` is the only skill that runs `verdict.sh`, in exactly
+three modes: `--roster cosmetic --classify-exit N` (cosmetic depth), `--no-review --no-stress --qa Q` (light),
+and `--no-review --stress S --qa Q` (standard/full) — the last two are in the Scores table. The roster-absent
+default and the `light`/`standard`/`full` rosters below are **legacy modes of `verdict.sh --roster`, kept for
+compatibility** with 2.x callers and still covered by tests; no v3 skill invokes them. Their "Review" lens and
+the `[folded]` label are 2.x concepts (the Reviewer agent once scored Stress as a folded lens) — in v3 the
+review is `/review-code`'s own gate.
 
 | Roster | Lenses required | Score | Floors | Extra hard gates |
 |---|---|---|---|---|
-| (absent) | Review · Stress · QA | 35/35/30 (legacy) | Review ≥ 7 · Stress ≥ 7 | — |
+| (absent, legacy) | Review · Stress · QA | 35/35/30 (legacy) | Review ≥ 7 · Stress ≥ 7 | — |
 | `cosmetic` | none — any score flag given = exit 2 | n/a — gates only | — | `--hard-gate-fail`, `--critical-security > 0`, or `--classify-exit ≠ 0` → NOT READY |
-| `light` | Review · Stress; `--qa` given = exit 2 | (R·0.35 + S·0.35) / 0.70 | Review ≥ 7 · Stress ≥ 7 | orchestrator passes any non-zero spec-coverage/falsification/tautology-scan result as `--hard-gate-fail` |
-| `standard` | Review · Stress · QA — Stress is the Reviewer's folded lens | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
-| `full` | Review · Stress · QA — Stress is a dispatched agent | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+| `light` (legacy) | Review · Stress; `--qa` given = exit 2 | (R·0.35 + S·0.35) / 0.70 | Review ≥ 7 · Stress ≥ 7 | the caller passes any non-zero spec-coverage/falsification/tautology-scan result as `--hard-gate-fail` |
+| `standard` (legacy) | Review · Stress · QA — legacy: Stress was the 2.x Reviewer's folded lens | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+| `full` (legacy) | Review · Stress · QA — Stress is a dispatched agent | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
 
 `--classify-exit` is mandatory whenever `--roster` is given; a non-zero value is always NOT READY
-(`roster not verified (classify-diff exit N)`) regardless of score — an escalation the orchestrator
+(`roster not verified (classify-diff exit N)`) regardless of score — an escalation the caller
 has not resolved must never ship. `standard` never changes the outcome a legacy run would give for
 the same three scores; only the Stress label differs (`[folded]` vs `[dispatched]`).
 
@@ -56,11 +66,10 @@ the same three scores; only the Stress label differs (`[folded]` vs `[dispatched
 | Thing | Limit |
 |---|---|
 | Context ceiling | 80% of window (warn at 60%) — sensor: `hooks/context-budget.sh` |
-| Subagent dispatches | 14 per session, advisory — 3 per story (Coder · QA · Reviewer) × 3 stories + 3 planning (one mapper; a Phase 0.5 vector fan-out (planning `phases.md`) adds one dispatch per extra area) + 2 delivery. Sensor: `hooks/dispatch-budget.sh` |
+| Subagent dispatches | 14 per session, advisory — `/planning` (1 map + 1 `plan-reviewer` per round, max 2) + `/code` (1 `coder` per Tasks row) + `/validate-code` (0–2, by depth) + `/review-code` (1). Sensor: `hooks/dispatch-budget.sh` |
 | Writer subagents per turn | 3 (never 4+); read-only subagents are counted separately in the next row |
 | Read-only subagents per turn | 6 — each returns ≤ 150 words or one table; every one counts toward the session dispatch budget |
-| Tuner iterations | 2 per pipeline run |
-| Bug-Fix Loop iterations | 3, then `QA ESCALATION` |
+| Fix Loop iterations | 3, then `QA ESCALATION` |
 | Plan-review rounds | 2 |
-| Sub-task size | ~200 lines of production code |
+| Task size (one Tasks row) | ~200 lines of production code |
 | Graceful shutdown drain | ≤ 30s |

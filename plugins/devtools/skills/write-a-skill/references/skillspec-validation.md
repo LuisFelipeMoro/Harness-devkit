@@ -21,7 +21,7 @@ If `skillspec` is not installed or cannot execute, say so explicitly and skip �
 | Frontmatter missing or malformed (CRITICAL) | Valid YAML between `---` fences; `name:` + one specific `description:` whose first clause names the main use case. |
 | No machine-checkable behavior contract (HIGH) | Add explicit, enumerated **Inputs / Outputs / Steps** near the top — obligations a reader can check, not vague prose. |
 | Dependencies are implicit (HIGH) | Name the tools/commands/agents the skill uses in the body (a short Dependencies list). |
-| Most text loads at activation / dense prose (HIGH) | Move tables, templates, and long detail into `references/*`; keep the activation body lean (≤100 lines). |
+| Most text loads at activation / dense prose (HIGH) | Move tables, templates, and long detail into `references/*`; keep the activation body lean (≤60 lines). |
 | Code mixed into body / ambiguous fences (MEDIUM) | Label every ``` fence with a language; move large code/examples to `references/`. |
 | Late load-bearing instructions (MEDIUM) | Lift critical rules toward the top of the body. |
 | Runtime success unproven (MEDIUM) | State a clear completion/proof criterion for any action the skill performs. |

@@ -246,56 +246,5 @@ case "$out" in *split*) echo "FAIL: dispatch-budget: normal prompt is silent —
     *) pass=$((pass + 1)) ;; esac
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspp1" "${TMPDIR:-/tmp}/claude-devkit/dspp2" "${TMPDIR:-/tmp}/claude-devkit/dspp3"
 
-# ── orchestrator-bash-guard: the thin main session runs gates and git only ───
-# orch_expect <row-name> <want-exit> <command> — one case of a spec row. The row
-# name is the literal first argument, so a failure reads as that row; a block
-# must also print the BLOCKED line, not merely exit 2.
-orch_expect() {
-    local row="$1" want="$2" cmd="$3" out got msg=no
-    out=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]}}))' "$cmd" \
-        | bash "$HOOKS/orchestrator-bash-guard.sh" 2>&1); got=$?
-    case "$out" in "BLOCKED: orchestrator"*) msg=yes ;; esac
-    if [ "$got" = "$want" ] && { [ "$want" != 2 ] || [ "$msg" = yes ]; }; then
-        pass=$((pass + 1))
-    else
-        echo "FAIL: $row — exit $got (want $want), BLOCKED line=$msg, for: $cmd"
-        fail=1
-    fi
-}
-
-orch_expect "test_orchestrator_guard_allows" 0 'git status'
-orch_expect "test_orchestrator_guard_allows" 0 'gh pr view 26'
-orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/verify/verdict.sh --roster light'
-orch_expect "test_orchestrator_guard_allows" 0 'python3 .github/scripts/validate-wiring.py'
-orch_expect "test_orchestrator_guard_allows" 0 'git add -A && git commit -m x'
-orch_expect "test_orchestrator_guard_allows" 0 "$(printf 'cat >> PROGRESS.md <<'"'"'EOF'"'"'\n- Done: a; b | c\nEOF')"
-orch_expect "test_orchestrator_guard_allows" 0 "$(printf 'git commit -m "$(cat <<'"'"'EOF'"'"'\nsubject\n\nx && cat y\nEOF\n)"')"
-orch_expect "test_orchestrator_guard_allows" 0 'cd .worktrees/dlv-k && bash plugins/coding-pipeline/scripts/verify/checkpoint-m.sh --base b'
-orch_expect "test_orchestrator_guard_allows" 0 'bash install.sh'
-orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/verify/x.sh 2>&1 | tail -5'
-orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/verify/x.sh >/dev/null 2>&1'
-orch_expect "test_orchestrator_guard_allows" 0 'bash plugins/coding-pipeline/scripts/delivery-state.sh --key k'
-
-orch_expect "test_orchestrator_guard_blocks" 2 'cat README.md'
-orch_expect "test_orchestrator_guard_blocks" 2 'sed -n 1,9p x'
-orch_expect "test_orchestrator_guard_blocks" 2 "python3 -c 'print(1)'"
-orch_expect "test_orchestrator_guard_blocks" 2 'git status && cat x'
-orch_expect "test_orchestrator_guard_blocks" 2 "$(printf 'git status\ncat x')"
-orch_expect "test_orchestrator_guard_blocks" 2 'cat x > PROGRESS.md.bak'
-orch_expect "test_orchestrator_guard_blocks" 2 'grep -rn foo .'
-orch_expect "test_orchestrator_guard_blocks" 2 'echo x > src/a.go'
-orch_expect "test_orchestrator_guard_blocks" 2 'bash scripts/other.sh'
-orch_expect "test_orchestrator_guard_blocks" 2 'git status $(cat x)'
-orch_expect "test_orchestrator_guard_blocks" 2 'git log `cat x`'
-orch_expect "test_orchestrator_guard_blocks" 2 'git log < README.md'
-orch_expect "test_orchestrator_guard_blocks" 2 'bash ../x/scripts/verify/../../evil.sh'
-orch_expect "test_orchestrator_guard_blocks" 2 'python3 .github/scripts/../x.py'
-orch_expect "test_orchestrator_guard_blocks" 2 'echo x > PROGRESS.md'
-orch_expect "test_orchestrator_guard_blocks" 2 'bash plugins/coding-pipeline/scripts/verify/x.sh 2>&1 | cat README.md'
-
-# Fail open: an unparseable payload, and the devkit's per-hook kill switch.
-expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{not json' 0
-expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{"tool_input":{"command":"cat x"}}' 0 DEVKIT_DISABLED_HOOKS=pre:bash:orchestrator-guard
-
 echo "hook tests: $pass passed, exit=$fail"
 exit $fail

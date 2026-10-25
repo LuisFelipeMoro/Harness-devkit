@@ -5,7 +5,7 @@ Do not pre-load; do not load a language the story does not name.
 
 > **Test rule**: implement to the story's frozen Test Case table, then write exactly the tests it
 > specifies, then falsify each one (apply the row's break, confirm the assertion fails, restore).
-> Amelia owns both test and implementation files; Quinn (QA) audits the tests but authors none.
+> The coder owns both test and implementation files; qa audits the tests but authors none.
 > Coverage thresholds below are a floor, not a target — a tautological or unfalsified test is a
 > blocking defect no matter what the percentage says.
 

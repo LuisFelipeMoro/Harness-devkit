@@ -1,8 +1,7 @@
 # Security review checklist — single source
 
-The eight sections the Reviewer and `/pr-review` both evaluate. They used to be restated in
-`agents/reviewer.md` and `pr-workflow/.../review-checklist.md` in different words, which is how
-two reviewers of the same diff came to apply two checklists.
+The eight sections the `reviewer` agent evaluates for both `/validate-code` and `/review-code`. They used to be restated in
+different words in two places, which is how two reviewers of the same diff came to apply two checklists.
 
 **Run `scripts/verify/security-scan.sh <changed-paths>` first.** It greps the literal shapes —
 injection, XSS, SSRF, weak crypto, hardcoded secrets, unsafe deserialization, secrets in logs,

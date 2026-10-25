@@ -1,7 +1,7 @@
 # Frontend hardening — enforcement integrity reference
 
 Load when writing, reviewing, or gating frontend code (JS/TS · React · Next.js · HTMX ·
-HTML/CSS), and whenever a story touches a lint config, a test config, or a CI file.
+HTML/CSS), and whenever a task touches a lint config, a test config, or a CI file.
 
 Distilled from a post-merge review cycle on a production checkout frontend. Every pattern
 below is a defect that **passed a green pipeline**: the lint ran, the tests were green, the
@@ -109,7 +109,7 @@ actually produce* was not.
 
 **Rule**: every validation, parsing, masking, or detection function that touches user input
 gets a **format matrix**, not a golden-path test. The Test Case table must carry one row per
-line below; a validator row set without them is a spec defect (Architect fixes the table —
+line below; a validator row set without them is a spec defect (the plan author fixes the table —
 Coder does not invent the cases).
 
 | Category | Rows required |

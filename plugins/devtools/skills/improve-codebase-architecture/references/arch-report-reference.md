@@ -14,6 +14,8 @@ Agent(
   3. Domain logic found in transport/DB/cache layers (file:line)
   4. 3+ callers of identical logic with no shared abstraction
   5. Circular or unexpected cross-feature imports
+  6. Shallow modules: functions/types that mostly forward to one other call, or whose
+     parameters and error modes are nearly as complex as their body (file:line)
   Keep each list under 20 entries. Raw observations only — no analysis."
 )
 ```
@@ -23,7 +25,8 @@ Agent(
 Write the report to `/tmp/arch-report-<YYYY-MM-DD>.html`. Use a self-contained
 HTML5 document with embedded CSS. Group findings by severity (Critical, High,
 Medium, Low); each finding shows severity, `file:line` location, and a concrete
-recommendation.
+recommendation, worded in the deep-module vocabulary of `references/deep-modules.md`
+(module · interface · depth · seam · adapter · leverage · locality).
 
 ```html
 <!doctype html>

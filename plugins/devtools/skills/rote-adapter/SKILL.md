@@ -1,6 +1,7 @@
 ---
 name: rote-adapter
-description: 'Use when creating a NEW integration adapter from scratch — discovers the API, negotiates auth, scopes endpoints, builds, and verifies the adapter in 8 autonomous phases. Use /rote for running existing adapters/flows. Trigger phrases: "build adapter", "create integration", "new connector", "connect to X for the first time", "create rote adapter", "add new integration", "integrate with X".'
+description: 'Build a new rote integration adapter from scratch (discover, auth, scope, build, verify). Usage: /rote-adapter [args], e.g. "/rote-adapter github".'
+disable-model-invocation: true
 ---
 
 Dispatch the autonomous rote-adapter agent to build a new integration connector from scratch.

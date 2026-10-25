@@ -1,6 +1,6 @@
 # Latency Budget — Trace First, Fix by Layer
 
-Use when latency is spread across layers or services rather than one hot function (that case is pprof — SKILL.md steps 1-3). This file sets no millisecond thresholds: the target comes from the service's SLO or the PRD.
+Use when latency is spread across layers or services rather than one hot function (that case is pprof — SKILL.md steps 2-3). This file sets no millisecond thresholds: the target comes from the service's SLO or the PRD.
 
 ## Trace first
 

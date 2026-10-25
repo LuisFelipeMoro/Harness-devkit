@@ -2,7 +2,7 @@
 # QA lens 1, mechanically: every test carries falsification evidence, and the
 # quoted failure is an assertion failure rather than a build break.
 #
-# Whether the break *corresponds to the behaviour* stays with Quinn — that is
+# Whether the break *corresponds to the behaviour* stays with QA — that is
 # real judgment. Whether an evidence line exists at all, and whether the thing
 # quoted is an assertion rather than a compile error, is pattern matching, and
 # it is the half that catches the common miss.
@@ -67,5 +67,5 @@ if [ "$fails" -gt 0 ]; then
 fi
 
 echo "FALSIFICATION: PASS — $total/$total tests have valid evidence"
-echo "NOTE: Quinn still spot-checks that each break matches the behaviour under test (every security test + 2-3 core-logic tests)."
+echo "NOTE: QA still spot-checks that each break matches the behaviour under test (every security test + 2-3 core-logic tests)."
 exit 0
