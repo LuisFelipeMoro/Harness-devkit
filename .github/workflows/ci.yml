@@ -94,6 +94,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # full history: the retired-file tests use the 2.x files from git as fixtures.
+          fetch-depth: 0
       - name: installer behaviour tests
         # The settings merge edits a file holding the operator's permissions and
         # model config; a bad merge destroys work that is not recoverable from git.
