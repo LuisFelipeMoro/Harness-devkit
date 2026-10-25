@@ -29,11 +29,12 @@
 #
 #   verdict.sh --roster {cosmetic|light|standard|full} --classify-exit N \
 #              [--review N] [--stress N] [--qa N] [...]
-#     Per-roster lens rules (references/thresholds.md — Roster):
+#     Per-roster lens rules (references/thresholds.md — Roster). v3 calls only
+#     cosmetic; light/standard/full are legacy 2.x modes kept for compatibility:
 #       cosmetic  no score flags — gates only
-#       light     --review --stress; --qa forbidden; weight renormalised
-#       standard  --review --stress --qa; Stress is the Reviewer's folded lens
-#       full      --review --stress --qa; Stress is a dispatched agent
+#       light     --review --stress; --qa forbidden; weight renormalised (legacy)
+#       standard  --review --stress --qa; Stress was the 2.x Reviewer's folded lens (legacy)
+#       full      --review --stress --qa; Stress is a dispatched agent (legacy)
 #     --classify-exit is mandatory with --roster; non-zero is always NOT READY.
 set -u
 
@@ -124,7 +125,7 @@ import sys
 
 
 def classify_verdict(score, crit_other, reasons):
-    """Shared by the legacy and roster paths — thresholds.md — Scores."""
+    """Shared by the legacy, --no-review and roster paths — thresholds.md — Scores."""
     if reasons:
         return "NOT READY"
     if score >= 8.0 and crit_other == 0:
@@ -134,6 +135,39 @@ def classify_verdict(score, crit_other, reasons):
         return "READY WITH CONDITIONS"
     reasons.append(f"{crit_other} non-security CRITICAL issues")
     return "NOT READY"
+
+
+def hard_reasons(gate_fail, crit_sec):
+    """Blocking regardless of score — shared by every path. thresholds.md — Hard gates."""
+    reasons = []
+    if gate_fail:
+        reasons.append("hard gate FAIL: " + ", ".join(g.strip() for g in gate_fail))
+    if crit_sec > 0:
+        reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
+    return reasons
+
+
+def floor_reasons(lenses):
+    """Story floor: the average can hide one failing lens. lenses = [(name, score or None)]."""
+    return [f"{name} {v} below story floor 7" for name, v in lenses if v is not None and v < 7]
+
+
+def scored_verdict(score, lenses, gate_fail, crit_sec, crit_other):
+    """Legacy and --no-review: hard reasons, overall floor, lens floors, then classify."""
+    reasons = hard_reasons(gate_fail, crit_sec)
+    if score < 6.5:
+        reasons.append(f"overall {score:.2f} < 6.5")
+    reasons += floor_reasons(lenses)
+    return classify_verdict(score, crit_other, reasons), reasons
+
+
+def finish(verdict, reasons):
+    for r in reasons:
+        print(f"  - {r}")
+    print()
+    print("Computed from thresholds.md. The agent still owes the Verdict Self-Check:")
+    print("  Evidence · Traceability · Independence · Residual risk · Actionability (1-5 each).")
+    sys.exit(0 if verdict == "PRODUCTION READY" else 1)
 
 
 review_s, stress_s, qa_s = sys.argv[1:4]
@@ -155,28 +189,14 @@ if no_review:
     score = qa if no_stress else (stress * 0.35 + qa * 0.30) / 0.65
     if blocked:
         score = min(score, 5.0)
-    reasons = []
-    if gate_fail:
-        reasons.append("hard gate FAIL: " + ", ".join(g.strip() for g in gate_fail))
-    if crit_sec > 0:
-        reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
-    if score < 6.5:
-        reasons.append(f"overall {score:.2f} < 6.5")
-    if stress is not None and stress < 7:
-        reasons.append(f"Stress {stress} below story floor 7")
-    verdict = classify_verdict(score, crit_other, reasons)
+    verdict, reasons = scored_verdict(score, [("Stress", stress)], gate_fail, crit_sec, crit_other)
     print(f"VERDICT: {verdict}")
     if verdict != "NOT READY" or not gate_fail:
         if stress is None:
             print(f"Overall Score: {score:.2f}/10  (QA {qa} x30%, renormalised — no review or stress lens)")
         else:
             print(f"Overall Score: {score:.2f}/10  (Stress {stress} x35% · QA {qa} x30%, renormalised — no review lens)")
-    for r in reasons:
-        print(f"  - {r}")
-    print()
-    print("Computed from thresholds.md. The agent still owes the Verdict Self-Check:")
-    print("  Evidence · Traceability · Independence · Residual risk · Actionability (1-5 each).")
-    sys.exit(0 if verdict == "PRODUCTION READY" else 1)
+    finish(verdict, reasons)
 
 if not roster:
     # references/thresholds.md — Scores. Legacy path: byte-identical output.
@@ -185,19 +205,8 @@ if not roster:
     if blocked:
         score = min(score, 5.0)
 
-    reasons = []
-    if gate_fail:
-        reasons.append("hard gate FAIL: " + ", ".join(g.strip() for g in gate_fail))
-    if crit_sec > 0:
-        reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
-    if score < 6.5:
-        reasons.append(f"overall {score:.2f} < 6.5")
-    if review < 7:
-        reasons.append(f"Reviewer {review} below story floor 7")
-    if stress < 7:
-        reasons.append(f"Stress {stress} below story floor 7")
-
-    verdict = classify_verdict(score, crit_other, reasons)
+    verdict, reasons = scored_verdict(score, [("Reviewer", review), ("Stress", stress)],
+                                      gate_fail, crit_sec, crit_other)
 
     print(f"VERDICT: {verdict}")
     if verdict != "NOT READY" or not gate_fail:
@@ -206,22 +215,14 @@ if not roster:
         print("NOTE: Reviewer BLOCK — score capped at 5.0")
     if abs(review - stress) > 3:
         print(f"WARNING: Review/Stress gap {abs(review - stress):.1f} > 3 — manual inspection recommended before shipping")
-    for r in reasons:
-        print(f"  - {r}")
-    print()
-    print("Computed from thresholds.md. The agent still owes the Verdict Self-Check:")
-    print("  Evidence · Traceability · Independence · Residual risk · Actionability (1-5 each).")
-    sys.exit(0 if verdict == "PRODUCTION READY" else 1)
+    finish(verdict, reasons)
 
 # ── roster path — references/thresholds.md — Roster ───────────────────────
 classify_exit = int(classify_exit_s)
 reasons = []
 if classify_exit != 0:
     reasons.append(f"roster not verified (classify-diff exit {classify_exit})")
-if gate_fail:
-    reasons.append("hard gate FAIL: " + ", ".join(g.strip() for g in gate_fail))
-if crit_sec > 0:
-    reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
+reasons += hard_reasons(gate_fail, crit_sec)
 
 if roster == "cosmetic":
     # No lens exists to average — a gate failure or an unverified roster is
@@ -239,10 +240,7 @@ qa = float(qa_s) if qa_s else None
 
 # Story floor. The average can hide one failing lens — checked before the
 # roster-specific formula so it applies identically to light/standard/full.
-if review < 7:
-    reasons.append(f"Reviewer {review} below story floor 7")
-if stress < 7:
-    reasons.append(f"Stress {stress} below story floor 7")
+reasons += floor_reasons([("Reviewer", review), ("Stress", stress)])
 
 if roster == "light":
     # QA is mechanical sensors only for this roster; renormalise the two
@@ -276,10 +274,5 @@ if roster in ("light", "standard"):
     print("NOTE: Review and Stress from one agent")
 elif abs(review - stress) > 3:
     print(f"WARNING: Review/Stress gap {abs(review - stress):.1f} > 3 — manual inspection recommended before shipping")
-for r in reasons:
-    print(f"  - {r}")
-print()
-print("Computed from thresholds.md. The agent still owes the Verdict Self-Check:")
-print("  Evidence · Traceability · Independence · Residual risk · Actionability (1-5 each).")
-sys.exit(0 if verdict == "PRODUCTION READY" else 1)
+finish(verdict, reasons)
 PY

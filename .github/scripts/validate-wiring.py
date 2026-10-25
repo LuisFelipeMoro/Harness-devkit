@@ -97,7 +97,11 @@ for name, pdir in declared.items():
 
 # ── 3. in-repo markdown links resolve ────────────────────────────────────────
 MD_LINK = re.compile(r"\[[^\]]*\]\((?!https?://|#|mailto:)([^)\s]+)\)")
-BACKTICK_PATH = re.compile(r"`((?:\.\./)*(?:references|agents|skills|hooks|scripts|git-hooks|codex)/[A-Za-z0-9._/-]+\.(?:md|sh|json|yml|yaml|toml))`")
+# A path may be written cross-plugin (`coding-pipeline/scripts/x.py`): it resolves against that
+# plugin's root, the same as a plugin-rooted path does against the file's own plugin.
+# A command span (`python3 scripts/x.py --flag`, `scripts/verify/y.sh --diff $BASE`) names its
+# script first: the path is checked whether the span ends there or runs on into arguments.
+BACKTICK_PATH = re.compile(r"`(?:(?:python3|bash|sh) )?((?:\.\./)*(?:[a-z0-9-]+/)?(?:references|agents|skills|hooks|scripts|git-hooks|codex)/[A-Za-z0-9._/<>-]+\.(?:md|sh|py|json|yml|yaml|toml))(?=`| )")
 
 for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
     dirnames[:] = [d for d in dirnames if d != ".git"]
@@ -115,6 +119,13 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
         if plugin_dir:
             for raw in set(BACKTICK_PATH.findall(text)):
                 checked["link"] += 1
+                if "<" in raw or ">" in raw:   # placeholder such as languages/<language>.md
+                    continue
+                head = raw.split("/", 1)[0]
+                if head in declared:   # cross-plugin: `coding-pipeline/scripts/…`
+                    if not os.path.exists(os.path.join(declared[head], raw.split("/", 1)[1])):
+                        err("link", rel(path), f"cross-plugin path reference does not resolve -> {raw}")
+                    continue
                 # a plugin-rooted path like `references/x.md`, or one relative to this file
                 if os.path.exists(os.path.normpath(os.path.join(plugin_dir, raw))):
                     continue
@@ -126,8 +137,6 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
                     skill_root = os.sep.join(parts[: parts.index("skills") + 2])
                     if os.path.exists(os.path.normpath(os.path.join(skill_root, raw))):
                         continue
-                if "<" in raw or ">" in raw:   # placeholder such as languages/<language>.md
-                    continue
                 err("link", rel(path), f"path reference does not resolve -> {raw}")
 
 # ── 4. namespaced agent and skill references exist ───────────────────────────

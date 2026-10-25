@@ -37,16 +37,24 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 
 ## Roster
 
-Optional `--roster` mode of `scripts/verify/verdict.sh` (`--roster R --classify-exit N`; `/validate-code` uses only `--roster cosmetic`, at cosmetic depth). It applies these lenses and floors on top of
+Optional `--roster` mode of `scripts/verify/verdict.sh` (`--roster R --classify-exit N`). It applies these lenses and floors on top of
 the Scores table above, which still governs `standard`/`full`/the roster-absent default path.
+
+**What v3 skills actually call.** `/validate-code` is the only skill that runs `verdict.sh`, in exactly
+three modes: `--roster cosmetic --classify-exit N` (cosmetic depth), `--no-review --no-stress --qa Q` (light),
+and `--no-review --stress S --qa Q` (standard/full) — the last two are in the Scores table. The roster-absent
+default and the `light`/`standard`/`full` rosters below are **legacy modes of `verdict.sh --roster`, kept for
+compatibility** with 2.x callers and still covered by tests; no v3 skill invokes them. Their "Review" lens and
+the `[folded]` label are 2.x concepts (the Reviewer agent once scored Stress as a folded lens) — in v3 the
+review is `/review-code`'s own gate.
 
 | Roster | Lenses required | Score | Floors | Extra hard gates |
 |---|---|---|---|---|
-| (absent) | Review · Stress · QA | 35/35/30 (legacy) | Review ≥ 7 · Stress ≥ 7 | — |
+| (absent, legacy) | Review · Stress · QA | 35/35/30 (legacy) | Review ≥ 7 · Stress ≥ 7 | — |
 | `cosmetic` | none — any score flag given = exit 2 | n/a — gates only | — | `--hard-gate-fail`, `--critical-security > 0`, or `--classify-exit ≠ 0` → NOT READY |
-| `light` | Review · Stress; `--qa` given = exit 2 | (R·0.35 + S·0.35) / 0.70 | Review ≥ 7 · Stress ≥ 7 | the caller passes any non-zero spec-coverage/falsification/tautology-scan result as `--hard-gate-fail` |
-| `standard` | Review · Stress · QA — Stress is the Reviewer's folded lens | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
-| `full` | Review · Stress · QA — Stress is a dispatched agent | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+| `light` (legacy) | Review · Stress; `--qa` given = exit 2 | (R·0.35 + S·0.35) / 0.70 | Review ≥ 7 · Stress ≥ 7 | the caller passes any non-zero spec-coverage/falsification/tautology-scan result as `--hard-gate-fail` |
+| `standard` (legacy) | Review · Stress · QA — legacy: Stress was the 2.x Reviewer's folded lens | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
+| `full` (legacy) | Review · Stress · QA — Stress is a dispatched agent | 35/35/30 | Review ≥ 7 · Stress ≥ 7 | — |
 
 `--classify-exit` is mandatory whenever `--roster` is given; a non-zero value is always NOT READY
 (`roster not verified (classify-diff exit N)`) regardless of score — an escalation the caller

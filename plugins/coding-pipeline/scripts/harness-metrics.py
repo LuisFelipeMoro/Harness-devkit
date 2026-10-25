@@ -77,9 +77,12 @@ def rework(base, since):
         fixes = set()
         for m in merges:
             merged = set(lines(git("diff", "--name-only", f"{m}^1", m)))
-            for row in lines(git("log", "--no-merges", "--format=%H%x00%s", f"{m}..HEAD")):
-                sha, _, subject = row.partition("\x00")
-                if FIX_SUBJECT.match(subject) and merged & set(lines(git("show", "--format=", "--name-only", sha))):
+            # One log pass per merge range: each commit is a \x01-led header (sha \x00 subject)
+            # followed by the files it touched — not one `git show` per commit.
+            for chunk in git("log", "--no-merges", "--name-only", "--format=%x01%H%x00%s", f"{m}..HEAD").split("\x01")[1:]:
+                header, _, body = chunk.partition("\n")
+                sha, _, subject = header.partition("\x00")
+                if FIX_SUBJECT.match(subject) and merged & set(lines(body)):
                     fixes.add(sha)
         parts.append(f"{len(fixes)} fix commit(s) after a feature merge")
     parts.append(f"{len(reverts)} revert(s)")

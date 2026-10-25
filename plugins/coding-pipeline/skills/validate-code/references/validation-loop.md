@@ -1,7 +1,7 @@
 # /validate-code — audit, stress and verdict detail
 
 Carried from the old pipeline loop (steps C–F). Read each section at the `/validate-code` step that names it.
-Diff scope everywhere: `git diff --name-only $BASE` plus untracked files, `BASE=$(git merge-base HEAD main)`.
+Diff scope everywhere: `git diff --name-only $BASE` plus untracked files, `BASE=$(git merge-base HEAD main)` (fall back to `master`).
 
 ## Dispatch prompt contract (qa and stress)
 

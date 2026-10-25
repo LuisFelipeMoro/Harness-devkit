@@ -11,7 +11,7 @@ Agent(
 Symptom vs expected: [the user's answer, verbatim]
 Reproduction: [the user's answer, verbatim]
 Fix depth: [Minimal patch | Root-cause fix | Not sure — investigate first]
-Base: [git merge-base HEAD main]
+Base: [git merge-base HEAD main — fall back to master]
 Working directory: [cwd]
 
 Run Phase 0 → Phase 3 (load references on demand only): build and run the feedback loop,

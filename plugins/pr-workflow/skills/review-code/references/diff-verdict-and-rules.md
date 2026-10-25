@@ -3,7 +3,7 @@
 ## Collect changed files (`/review-code` step 1)
 
 ```bash
-rtk git diff --name-only $(git merge-base HEAD main)   # everything on the branch + uncommitted
+rtk git diff --name-only $(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master)   # everything on the branch + uncommitted
 rtk git diff --name-only HEAD    # unstaged + staged only
 # or for staged only:
 rtk git diff --name-only --cached

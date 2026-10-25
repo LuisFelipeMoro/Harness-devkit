@@ -15,4 +15,4 @@ Next steps:
 This skill does not start implementation.
 ```
 
-Use `references/output-format.md` section headers for agent output.
+Print the plan-reviewer's result under `## 🔎 plan-reviewer — Plan Review  [Score: X/10]`.

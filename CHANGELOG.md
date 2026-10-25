@@ -10,9 +10,11 @@ invocation, no skill chaining, and on-demand loading, never from trimming rules.
 
 ### Migration
 
-Upgrading from 2.x (`install.sh` / `install-global.sh`) removes the retired skills, agents and
-`orchestrator-bash-guard.sh` from `~/.claude/` by exact name, printing each removal, and drops the hook's
-`settings.json` entry; your own skills, agents and hooks are never touched.
+Upgrading from 2.x (`install.sh` / `install-global.sh`) retires the old skills, agents and
+`orchestrator-bash-guard.sh`: each is moved to `~/.claude/devkit/retired/<ts>/`, never deleted, and only when
+its bytes match a version the devkit shipped (`scripts/retired-2x.sha256`), printing each move with its
+destination, and the hook's `settings.json` entry is dropped. Your own skills, agents and hooks are never
+touched — one that shares a retired name is kept in place and reported `kept (not the devkit's)`.
 
 | Before | Now |
 |---|---|

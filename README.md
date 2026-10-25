@@ -122,6 +122,9 @@ Agents receive file paths, never pasted contents, and **load on demand**: one la
 front, every other reference only when its trigger fires (each agent carries the trigger table).
 `plan-reviewer`, `qa`, `reviewer`, `stress` and `bug-investigator` run on sonnet; `coder` and the
 map on haiku. The model aliases resolve to the newest model in each family.
+These agents (`reviewer`, `qa`, `coder`, …) are registered only when the devkit is installed — flat
+(`install.sh`) or as a plugin; in an uninstalled checkout a skill must dispatch a `general-purpose`
+agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) instead.
 
 ## What is enforced
 
@@ -378,11 +381,13 @@ files are untouched, `~/.claude/CLAUDE.md` gets one `@include` line, and `settin
 The flat install also stages the sensor scripts (`scripts/verify/*`, `estimate-run.py`, `harness-metrics.py`) to
 `~/.claude/devkit/scripts/`, where skills and agents resolve `scripts/…` paths.
 
-Upgrading from 2.x removes the retired skills, agents and hook by exact name (`multi-agent`, `task`,
+Upgrading from 2.x retires the old skills, agents and hook (`multi-agent`, `task`,
 `analysis`, `architecture`, `quality-gate`, `code-review-gate`, `pr-review`, `checkcomments`, `bug-fix`;
 `analyst`, `pm`, `scrum-master`, `orchestrator`, `tuner`, `architect`, `devops`;
-the retired orchestrator Bash-guard hook and its `settings.json` entry), printing each one. Nothing else in
-`~/.claude/` is touched.
+the orchestrator Bash-guard hook and its `settings.json` entry): each is moved to
+`~/.claude/devkit/retired/<UTC timestamp>/` (same layout), never deleted, and only when its bytes match a version
+the devkit shipped. A file of yours that shares one of these names is left in place and reported
+`kept (not the devkit's): <path>`. Each move is printed with its destination. Nothing else in `~/.claude/` is touched.
 
 Overrides: `DEVKIT_HOME` (managed clone location), `DEVKIT_REPO` (clone source), `TARGET_HOME` or `--home DIR`.
 

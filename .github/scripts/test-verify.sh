@@ -1656,6 +1656,27 @@ cat > "$W/est-dep.md" <<'MD'
 MD
 out=$(python3 "$ER" --plan "$W/est-dep.md" 2>&1); rc=$?
 check "estimate-run: unknown dependency is UNMEASURED" 2 "$rc" "$out" "unknown task 'T9'"
+# Two coders on a directory and a file inside it, or on a glob and a file it matches, edit the
+# same file in parallel; an exact string compare of the Files cells calls them disjoint.
+cat > "$W/est-overlap.md" <<'MD'
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | pkg | `src/` | TestA | Go | Backend | — |
+| T2 | file | `./src/a.go` | TestB | Go | Backend | — |
+| T3 | glob | `lib/*.go` | TestC | Go | Backend | — |
+| T4 | inglob | `lib/b.go` | TestD | Go | Backend | — |
+| T5 | sibling | `srcx/c.go` | TestE | Go | Backend | — |
+| T6 | dirnoslash | `docs` | TestF | Go | Backend | — |
+| T7 | indir | `docs/x.md` | TestG | Go | Backend | — |
+| T8 | filefirst | `pkg/x.go` | TestH | Go | Backend | — |
+| T9 | dirlater | `pkg/` | TestI | Go | Backend | — |
+MD
+out=$(python3 "$ER" --plan "$W/est-overlap.md" 2>&1); rc=$?
+check "estimate-run: a file inside a claimed directory clashes (./ and trailing slash normalised)" 0 "$rc" "$out" "T2 — shares ./src/a.go with T1"
+check "estimate-run: a file matched by a claimed glob clashes" 0 "$rc" "$out" "T4 — shares lib/b.go with T3"
+check "estimate-run: a directory without trailing slash still contains its files" 0 "$rc" "$out" "T7 — shares docs/x.md with T6"
+check "estimate-run: a directory claimed after a file inside it clashes" 0 "$rc" "$out" "T9 — shares pkg/ with T8"
+check "estimate-run: a name-prefix sibling (src/ vs srcx/) stays parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T3, T5, T6, T8"
 
 # ── estimate-run.py --guides: guide token cost, measured from the files ──────
 # The devkit's guide-cost measurement. A fixture tree with files of a

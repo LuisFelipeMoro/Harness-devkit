@@ -20,12 +20,21 @@ Code Reviewer agent. Input from the dispatch prompt (`/review-code`, or `/bugfix
 plus the working tree — never the whole tree. The dispatch prompt attaches `scripts/verify/security-scan.sh --diff
 <base>` output already run by the skill. **Do not re-run** it, or any other
 gate (format, lint, build, existing tests, dup-gate, vuln, tautology-scan) — read the attached
-output instead.
+output instead. A sensors line `<sensor>: UNMEASURED — script not found` means that sensor never
+ran: list it in Hard Gates as `UNMEASURED` (never PASS, never a clean scan) and say so in the
+summary — an unrun security scan is not evidence of no finding.
 
-If any is missing, **say so on the first line and ask for it** before scoring. Reviewing a diff
-with no spec produces a security-and-style review that scores 8/10 on code that builds the wrong
-thing — the failure this table exists to prevent. Only if the skill cannot supply them do
-you proceed, stating explicitly which checks are disabled (see Change Discipline below).
+**When `Plan:` is a path** and that file, or an input this table needs from it (ACs, Test Case
+table, Reuse Map, codebase map), is missing, **say so on the first line and ask for it** before
+scoring. Reviewing a diff with no spec produces a security-and-style review that scores 8/10 on
+code that builds the wrong thing — the failure this table exists to prevent. Only if the skill
+cannot supply them do you proceed, stating explicitly which checks are disabled (see Change
+Discipline below).
+
+**`Plan: none` is not a missing input** — the skill already looked and found no plan, so proceed
+without asking. Judge the Spec axis against the `Request` (quote its sentences); the Reuse Map
+and codebase-map checks are skipped and the summary says so. CD1/CD3/CD7 intent checks are
+skipped only when `Request: none` too (→ `Spec: no spec available`, below).
 
 ## Two axes — Standards and Spec (reported side by side, never merged)
 

@@ -39,9 +39,11 @@ There is no Verdict agent dispatch: `/validate-code` reads this file and applies
 (Step 2) and the Verdict Self-Check below inline, itself — `verdict.sh` is what actually computes the
 verdict. `--no-review` renormalises Stress and QA, so no review score is needed or invented.
 
-Collect the hard-gate results first — from the Reviewer (OWASP, secrets, auth bypass, injection,
-coverage, spec-first evidence), the Stress Tester (authz under degradation, cross-request leakage,
-crash under load, headers under error rate) and the skill's own git check (nothing committed to `main`).
+Collect the hard-gate results first — from `qa` (coverage floor, spec-first evidence, tautological
+tests), `stress` (authz under degradation, cross-request leakage, crash under load, headers under error
+rate), the sensors in the gates file (every gate result, `security-scan` — OWASP, secrets, injection —
+`tautology-scan`, `spec-coverage`, `falsification`) and the skill's own git check (nothing committed to
+`main`). The Reviewer is not a source: the review is `/review-code`'s separate gate.
 Pass every FAIL to `--hard-gate-fail`. Any hard-gate FAIL is NOT READY; the script enforces it.
 
 ## Step 2 — Security Gate *(mandatory — fill even when every gate passes)*
@@ -70,7 +72,7 @@ pipeline for an unproven claim to become a fact. Score the verdict itself, not t
 |---|---|---|
 | **Evidence** | Is every hard gate PASS backed by a named artifact — gate output, falsification log, commit sha — rather than an agent's assertion? | A gate marked PASS because a report said so |
 | **Traceability** | Is every plan AC (or request requirement) and every Test Case row accounted for as met, waived, or failed? | A silently dropped AC or spec row |
-| **Independence** | Did QA/Reviewer/Stress findings come from agents other than the one that wrote the code? | Implementer grading their own work |
+| **Independence** | Did the qa/stress findings come from agents other than the one that wrote the code? | Implementer grading their own work |
 | **Residual risk** | Is what was *not* covered stated explicitly — untested paths, load levels not reached, mocked boundaries? | Absence of findings read as absence of risk |
 | **Actionability** | Can each Must-Fix be started immediately, with a file, a symptom, and a check that proves it fixed? | "Improve error handling" |
 

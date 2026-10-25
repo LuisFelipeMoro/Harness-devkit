@@ -123,7 +123,7 @@ Rules:
   arithmetic; grep answers "where is X" and "does this pattern exist" for the price of a tool call.
   A subagent is for judgment, not for lookup.
 - **Load on demand.** Agents and skills load a reference only when its trigger fires, one file at a time; exactly one language file up front; dispatch prompts pass paths, never contents. Each agent's "load on demand" table says when.
-- **Path resolution.** Devkit paths are written plugin-relative. In a plugin install they resolve against the plugin root; in a flat install (`install-global.sh`) `references/…` → `~/.claude/references/…`, `agents/…` → `~/.claude/agents/…`, `scripts/…` → `~/.claude/devkit/scripts/…`, `git-hooks/…` → `~/.claude/git-hooks/…`.
+- **Path resolution.** Devkit paths are written plugin-relative. In a plugin install they resolve against the plugin root; in a flat install (`install-global.sh`) `references/…` → `~/.claude/references/…`, `agents/…` → `~/.claude/agents/…`, `scripts/…` → `~/.claude/devkit/scripts/…`, `git-hooks/…` → `~/.claude/git-hooks/…`. A **cross-plugin** path (`coding-pipeline/scripts/…`, written by a skill in another plugin) drops its `coding-pipeline/` prefix and resolves, first existing wins: the `coding-pipeline` plugin root when it is determinable (a sibling of `${CLAUDE_PLUGIN_ROOT}`) → the flat mapping above → `plugins/coding-pipeline/…` in a devkit checkout. None exists → the step reports `<name>: UNMEASURED — script not found` and says so; it never skips silently or reports the check as run.
 
 ### Model assignment (match the model to the task — token & cost efficiency)
 

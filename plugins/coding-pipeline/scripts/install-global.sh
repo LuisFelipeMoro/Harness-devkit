@@ -63,29 +63,66 @@ mkdir -p "$GLOBAL/agents" "$GLOBAL/skills" "$GLOBAL/references" \
 # ── Retired devkit files (2.x → 3.x upgrade) ─────────────────────────────────
 # The copy steps below only add and update same-named files, so a skill, agent or
 # hook 3.x no longer ships would stay installed — and the 2.x auto-invoked pipeline
-# with it. Removed by exact name only: these are names the devkit itself shipped in
-# 2.x and dropped in 3.0 (git show v2:plugins/*/{skills,agents,hooks}). Never a glob,
-# never anything else, so a user's own skill, agent or hook is never touched. Runs
-# before the settings wiring, which then drops the retired hook's settings.json entry.
+# with it. The retired names are generic (architect, pm, task, analysis), so a name
+# match proves nothing: a user's own file may share it. A retired-name item is the
+# devkit's only when its bytes hash to a version the devkit shipped
+# (retired-2x.sha256 — every version from the repo's history; an exact hash cannot
+# match a user's file, where a marker line could be copied or coincide). Even then it
+# is MOVED to ~/.claude/devkit/retired/<UTC timestamp>/ (same relative layout), never
+# deleted. Anything else — including a devkit file the user edited — is left in place
+# and reported "kept (not the devkit's)". Runs before the settings wiring, which then
+# drops the settings.json entry of a hook that is no longer on disk.
+RETIRED_MANIFEST="$SCRIPT_DIR/retired-2x.sha256"
+RETIRED_DIR=""
+sha256_of() { python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"; }
+is_devkit_version() {   # is_devkit_version <manifest key> <file>
+    [ -f "$2" ] || return 1
+    grep -qx "$(sha256_of "$2")  $1" "$RETIRED_MANIFEST"
+}
+retire() {   # retire <path relative to ~/.claude>
+    if [ -z "$RETIRED_DIR" ]; then
+        RETIRED_DIR="$GLOBAL/devkit/retired/$(date -u +%Y%m%dT%H%M%SZ)"
+    fi
+    if [ -e "$RETIRED_DIR/$1" ]; then
+        echo "! kept $GLOBAL/$1 — $RETIRED_DIR/$1 already exists"
+        return 0
+    fi
+    mkdir -p "$(dirname "$RETIRED_DIR/$1")"
+    mv "$GLOBAL/$1" "$RETIRED_DIR/$1"
+    echo "✓ moved retired $1 → $RETIRED_DIR/$1"
+}
+keep() { echo "• kept (not the devkit's): $GLOBAL/$1"; }
 for name in multi-agent task analysis architecture quality-gate code-review-gate pr-review checkcomments bug-fix; do
     if [ -d "$GLOBAL/skills/$name" ]; then
-        rm -rf "${GLOBAL:?}/skills/$name"
-        echo "✓ removed retired skills/$name/"
+        if is_devkit_version "skills/$name" "$GLOBAL/skills/$name/SKILL.md"; then
+            retire "skills/$name"
+        else
+            keep "skills/$name"
+        fi
     fi
     if [ -f "$GLOBAL/skills/$name.md" ]; then
-        rm -f "$GLOBAL/skills/$name.md"
-        echo "✓ removed retired skills/$name.md"
+        if is_devkit_version "skills/$name" "$GLOBAL/skills/$name.md"; then
+            retire "skills/$name.md"
+        else
+            keep "skills/$name.md"
+        fi
     fi
 done
 for name in analyst pm scrum-master orchestrator tuner architect devops; do
     if [ -f "$GLOBAL/agents/$name.md" ]; then
-        rm -f "$GLOBAL/agents/$name.md"
-        echo "✓ removed retired agents/$name.md"
+        if is_devkit_version "agents/$name.md" "$GLOBAL/agents/$name.md"; then
+            retire "agents/$name.md"
+        else
+            keep "agents/$name.md"
+        fi
     fi
 done
 if [ -f "$GLOBAL/hooks/orchestrator-bash-guard.sh" ]; then
-    rm -f "$GLOBAL/hooks/orchestrator-bash-guard.sh"
-    echo "✓ removed retired hooks/orchestrator-bash-guard.sh"
+    if is_devkit_version "hooks/orchestrator-bash-guard.sh" "$GLOBAL/hooks/orchestrator-bash-guard.sh"; then
+        retire "hooks/orchestrator-bash-guard.sh"
+    else
+        keep "hooks/orchestrator-bash-guard.sh"
+    fi
 fi
 
 # ── Agents (every plugin that ships them) ────────────────────────────────────

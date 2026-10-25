@@ -102,7 +102,10 @@ def cells(line):
 
 
 def split_list(cell):
-    items = [re.sub(r"[`*]", "", x).strip() for x in re.split(r"[,;]| and ", cell)]
+    # A `code span` is taken verbatim (a glob's `*` is part of the path); outside one, `*` is
+    # markdown emphasis and dropped.
+    items = [(m.group(1) if (m := re.search(r"`([^`]*)`", x)) else re.sub(r"[`*]", "", x)).strip()
+             for x in re.split(r"[,;]| and ", cell)]
     return [x for x in items if x.lower() not in NONE_TOKENS]
 
 
@@ -165,21 +168,39 @@ def basis(consts):
     return "assumed"
 
 
+def claim(path):
+    """The repo path a Files entry claims: `./` and trailing `/` dropped; a glob claims its directory."""
+    p = path.strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    if any(ch in p for ch in "*?["):
+        head = re.split(r"[*?\[]", p, maxsplit=1)[0]
+        p = head.rsplit("/", 1)[0] if "/" in head else ""
+    return re.sub(r"/+", "/", p).strip("/")
+
+
+def overlaps(a, b):
+    """Same path, or one contains the other (a directory and a file inside it); "" is the repo root."""
+    return a == b or a == "" or b == "" or a.startswith(b + "/") or b.startswith(a + "/")
+
+
 def parallel_plan(rows):
-    """First wave: rows with no dependency whose Files are disjoint from every earlier pick."""
-    safe, reasons, taken = [], {}, {}
+    """First wave: rows with no dependency whose Files are disjoint from every earlier pick.
+
+    Disjoint means no path overlap, not just unequal strings: `src/` and `src/a.go` are
+    the same file to two coders, and so are `lib/*.go` (its directory) and `lib/b.go`."""
+    safe, reasons, taken = [], {}, []
     for r in rows:
         if r["deps"]:
             reasons[r["id"]] = "depends on " + ", ".join(r["deps"])
             continue
-        clash = [(f, taken[f]) for f in r["files"] if f in taken]
+        clash = [(f, owner) for f in r["files"] for c, owner in taken if overlaps(claim(f), c)]
         if clash:
             f, other = clash[0]
             reasons[r["id"]] = f"shares {f} with {other}"
             continue
         safe.append(r["id"])
-        for f in r["files"]:
-            taken[f] = r["id"]
+        taken.extend((claim(f), r["id"]) for f in r["files"])
     return safe, reasons
 
 
@@ -349,7 +370,7 @@ def guides(argv):
     if as_json:
         print(json.dumps(r, indent=2))
         return 0
-    n = f"{{:,}}".format
+    n = "{:,}".format
     print(f"# Guide tokens — {root} (≈ chars / {CHARS_PER_TOKEN}, ±10%; compare runs, not absolutes)")
     print()
     print("| Loaded | Tokens per load |")
