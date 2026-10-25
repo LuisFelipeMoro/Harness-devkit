@@ -346,7 +346,7 @@ plugin, home = sys.argv[1], sys.argv[2]
 hooks_dir = os.path.join(plugin, "hooks")
 shipped = {f for f in os.listdir(hooks_dir)
            if f.endswith(".sh") and f != "hook-lib.sh"}
-# A guard wired only by an agent's frontmatter `hooks:` block (orchestrator-bash-guard.sh)
+# A guard wired only by an agent's frontmatter `hooks:` block
 # must not be in settings.json, or it would fire in every session. Those are exempt by name.
 agent_wired = set()
 agents_dir = os.path.join(plugin, "agents")

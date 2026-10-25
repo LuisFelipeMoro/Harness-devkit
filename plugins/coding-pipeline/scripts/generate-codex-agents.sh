@@ -112,9 +112,9 @@ $(body_of "$extra_file")"
 
 echo "Generating Codex subagent definitions to $TARGET ..."
 
-for persona in analyst architect bug-investigator devops plan-reviewer pm qa reviewer \
+for persona in bug-investigator plan-reviewer qa reviewer \
                rote-adapter rote-analytics rote-datadog rote-github \
-               scrum-master stress tuner verdict; do
+               stress verdict; do
   write_agent "$persona" "$AGENTS_DIR/$persona.md"
 done
 
@@ -139,12 +139,8 @@ echo "Per-persona reasoning effort is already baked into each <name>.toml above 
 echo "global default only applies to subagents Codex spawns without a matching"
 echo "generated file (e.g. ad-hoc proactive delegation)."
 echo ""
-echo "Orchestration note: this closes the model-tiering half of the multi-agent-"
-echo "pipeline gap (see plugins/coding-pipeline/codex/harness-adapter.md) — each pipeline"
-echo "persona now has a real Codex subagent definition at the right reasoning"
-echo "effort. Sequencing (which persona runs when, reading handoff signals like"
-echo "'CODER DONE') still happens the same way it does for a human reading the"
-echo "pipeline SKILL.md: the Codex session driving the pipeline reads the skill's"
-echo "phases and delegates to each named persona in turn. This has not been"
-echo "exercised in a live Codex session by this script's author — validate before"
+echo "Sequencing note: each agent now has a real Codex subagent definition at the"
+echo "right reasoning effort (see plugins/coding-pipeline/codex/harness-adapter.md)."
+echo "The Codex session reads a skill's SKILL.md and delegates to each named agent in"
+echo "turn. This has not been exercised in a live Codex session — validate before"
 echo "relying on it in production."

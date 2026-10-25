@@ -1,43 +1,32 @@
 ---
 name: improve-codebase-architecture
-description: 'Use when deepening architectural quality of a codebase. Finds coupling, boundary violations, missed abstractions, and SRP failures. Produces HTML report in /tmp. Offers ADRs and grilling loop. Trigger phrases: "improve architecture", "architectural review", "find coupling", "refactor architecture", "codebase health", "zoom out", "architectural debt", "tech debt audit".'
+description: Find the architectural debt in a codebase (coupling, boundary violations, shallow modules and deepening opportunities, SRP failures) and write a severity-ranked HTML report, with optional ADRs. Usage: /improve-codebase-architecture [focus-path], e.g. "/improve-codebase-architecture internal/billing".
+disable-model-invocation: true
 ---
 
-Report findings only — never fix in this skill. Each finding includes severity, location, and a concrete recommendation.
+**Input**: the working directory, optionally a focus path.
+**Output**: `/tmp/arch-report-<YYYY-MM-DD>.html` grouped by severity; optionally `docs/adr/ADR-NNN-<title>.md` for findings you choose.
+**Boundary**: reports only — never refactors. One Explore dispatch (`haiku`).
 
-> **Refactor guard**: this skill only reports. Any refactor that follows must be protected by a characterization test first — pin the current observable behaviour with a passing test (it goes RED the moment the refactor changes behaviour), then refactor under green. Never restructure code that has no test covering it; add the test first.
+Any refactor that follows is protected by a characterization test first: pin today's observable behaviour with a passing test, then refactor under green.
 
-## Phase 1 — Map (1 Explore sub-agent, model: haiku)
+## Steps
 
-Input: Working directory. Optionally: focus area.
-Output: Raw observations list.
-Boundary: no analysis, no recommendations.
+1. **Map.** At this step, read `references/arch-report-reference.md` § Phase 1 — Map sub-agent call: and dispatch the read-only Explore agent with its prompt (`subagent_type: "Explore"`, `model: "haiku"`). It returns raw observations only.
+2. **Verify before scoring.** Open each observation's `file:line`; drop any that the code does not bear out. Every kept finding names the future change it makes harder — no cost, no finding. When you name a finding or apply the deletion test to a suspected shallow module, read `references/deep-modules.md` (once) and use its vocabulary — module, interface, depth, seam, adapter, leverage, locality — in every finding from here on.
+3. **Score.**
 
-Dispatch one read-only Explore sub-agent using the call template in `references/arch-report-reference.md`.
+   | Severity | Examples |
+   |---|---|
+   | Critical | domain logic in HTTP/DB layer · circular imports · unhandled errors on a mutation path |
+   | High | 3+ callers duplicating logic · file > 500 lines · cross-feature deep imports |
+   | Medium | file 300–500 lines · inconsistent patterns in one layer · magic values |
+   | Low | naming inconsistency · minor duplication · dead code |
 
-## Phase 2 — Score
+   A shallow module or leaking seam on frequently changed code ranks by the leverage and locality a deepening buys (`references/deep-modules.md` § Writing the finding). Rank, don't enumerate: more than ~5 in a severity → the 3 that matter plus one line naming the pattern behind the rest.
+4. **Report.** At this step, use the scaffold in `references/arch-report-reference.md`; each finding shows severity, `file:line`, cost and a concrete recommendation — for a deepening: what moves behind which seam, the leverage and locality gained, and the new test surface. Print: `Architecture report: /tmp/arch-report-<date>.html — N critical, N high, N medium, N low.`
+5. **ADRs (optional).** AskUserQuestion (`multiSelect: true`) over the Critical/High findings: which deserve an ADR? Write each with the template in `references/arch-report-reference.md`, `Status: Proposed`.
 
-Input: Phase 1 observations.
-Output: Findings grouped by severity.
+If the user picks a finding to explore, design its interface twice per `references/deep-modules.md` § Design it twice, inline — no extra dispatch.
 
-| Severity | Examples |
-|----------|---------|
-| Critical | Domain logic in HTTP/DB layer; circular imports; unhandled errors on mutation path |
-| High | 3+ callers duplicating logic; file >500 lines; cross-feature deep imports |
-| Medium | File 300–500 lines; inconsistent patterns; magic values |
-| Low | Naming inconsistency; minor duplication; dead code |
-
-## Phase 3 — Report
-
-Write HTML report to `/tmp/arch-report-<YYYY-MM-DD>.html`.
-See `references/arch-report-reference.md` for HTML scaffold.
-Print: `Architecture report: /tmp/arch-report-<date>.html — N critical, N high, N medium, N low findings.`
-
-## Phase 4 — Grill (optional)
-
-Offer: "Want to stress-test any finding? Type `/grill-me` with the finding."
-
-## Phase 5 — ADR (optional)
-
-For each Critical/High finding the user wants to address: offer `docs/adr/ADR-NNN-title.md`.
-See `references/arch-report-reference.md` for the ADR template.
+Next: `/grill-me` on a finding to stress it, or `/planning` to plan the refactor.

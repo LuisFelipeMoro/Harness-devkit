@@ -1,7 +1,7 @@
 #!/bin/bash
 # Duplication gate — the one place the jscpd flags and the baseline rule live.
 #
-# pre-push runs it on the commits being pushed. /quality-gate runs it with
+# pre-push runs it on the commits being pushed. /validate-code runs it with
 # --worktree, which measures the uncommitted tree too, so the verdict an agent sees
 # before committing is the verdict pre-push will give — not a hand-rolled jscpd
 # call with different flags that disagrees with it (which is how a repo-wide 5.5%

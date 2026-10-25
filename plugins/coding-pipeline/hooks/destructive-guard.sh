@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse(Bash) — block irreversible commands the pipeline never needs.
 #
-# The devkit's own rule is that a delivery ends in a PR from a release branch,
+# The devkit's own rule is that work ends in a PR from a feature branch,
 # never a force-push or a reset on the mainline. That rule lived only in prose;
 # this is the sensor for it. Exit 2 blocks the call.
 #
@@ -34,11 +34,11 @@ push_seg="$(printf '%s' "$cmd" | grep -oE 'git[[:space:]]+push[^;&|]*' | head -1
 if [ -n "$push_seg" ]; then
     # --force, --force-with-lease, or a bundled short flag such as -f / -fu.
     if printf '%s' "$push_seg" | grep -qE '(^|[[:space:]])(--force([a-z-]*)?|-[a-zA-Z]*f[a-zA-Z]*)([[:space:]]|=|$)'; then
-        block "force-push. A delivery ends in a PR, never a rewritten remote branch."
+        block "force-push. Work ends in a PR, never a rewritten remote branch."
     fi
     # A leading + on a refspec is a force push in disguise: git push origin +main
     if printf '%s' "$push_seg" | grep -qE '[[:space:]]\+[A-Za-z0-9_./-]+'; then
-        block "force-push via a + refspec. A delivery ends in a PR, never a rewritten remote branch."
+        block "force-push via a + refspec. Work ends in a PR, never a rewritten remote branch."
     fi
     if printf '%s' "$push_seg" | grep -qE '(^|[[:space:]])(--delete|-d)([[:space:]]|$)|[[:space:]]:[A-Za-z0-9_./-]+'; then
         # Tag deletion is its own case. A deleted remote branch can take unmerged

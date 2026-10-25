@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stop — refuse to call a coding session finished with no gate evidence.
 #
-# CLAUDE.md already says every coding task ends in /engineering:code-review-gate.
+# The devkit's standards say every coding task is validated (/validate-code).
 # That was a Guide with no Sensor behind it, so it held only when the model
 # remembered it. This checks the recorded facts: source files were written, and
 # no test/lint/typecheck command was ever observed in the session.
@@ -22,7 +22,7 @@ state="$(devkit_state_dir "$input")" || exit 0
 [ -s "$state/gates" ] && exit 0     # a gate command ran — evidence exists
 
 count=$(sort -u "$state/edits" | wc -l | tr -d ' ')
-msg="devkit delivery-gate: $count source file(s) changed this session, but no test, lint, or type-check command was observed. Run /engineering:code-review-gate before treating this as done."
+msg="devkit delivery-gate: $count source file(s) changed this session, but no test, lint, or type-check command was observed. Run /validate-code before treating this as done."
 
 if [ "$(devkit_profile)" = "strict" ] && [ ! -f "$state/gate-blocked" ]; then
     : > "$state/gate-blocked"

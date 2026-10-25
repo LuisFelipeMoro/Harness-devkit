@@ -1,6 +1,7 @@
 ---
 name: observability
-description: Add structured logging, metrics, or distributed tracing to a service, covering Go (zap + OpenTelemetry) and TypeScript (pino + OpenTelemetry) with enforced log-field standards and trace-context propagation. Trigger phrases — "logging", "metrics", "tracing", "observability", "add logs", "instrument", "spans", "OpenTelemetry", "structured logs", "monitoring".
+description: 'Add structured logging, metrics or tracing to a Go or TypeScript service, with a falsified contract test. Usage: /observability [args], e.g. "/observability add tracing to the checkout handler".'
+disable-model-invocation: true
 ---
 
 Instrumentation is behaviour: write the field/span contract down first, instrument, then assert that contract in a test and falsify it by removing the field. Every error log must carry `request_id` + `trace_id`, and PII, secrets, and tokens must never appear in any field.

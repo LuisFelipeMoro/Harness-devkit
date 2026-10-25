@@ -60,6 +60,34 @@ fi
 mkdir -p "$GLOBAL/agents" "$GLOBAL/skills" "$GLOBAL/references" \
          "$GLOBAL/hooks"  "$GLOBAL/git-hooks" "$GLOBAL/devkit"
 
+# ── Retired devkit files (2.x → 3.x upgrade) ─────────────────────────────────
+# The copy steps below only add and update same-named files, so a skill, agent or
+# hook 3.x no longer ships would stay installed — and the 2.x auto-invoked pipeline
+# with it. Removed by exact name only: these are names the devkit itself shipped in
+# 2.x and dropped in 3.0 (git show v2:plugins/*/{skills,agents,hooks}). Never a glob,
+# never anything else, so a user's own skill, agent or hook is never touched. Runs
+# before the settings wiring, which then drops the retired hook's settings.json entry.
+for name in multi-agent task analysis architecture quality-gate code-review-gate pr-review checkcomments bug-fix; do
+    if [ -d "$GLOBAL/skills/$name" ]; then
+        rm -rf "${GLOBAL:?}/skills/$name"
+        echo "✓ removed retired skills/$name/"
+    fi
+    if [ -f "$GLOBAL/skills/$name.md" ]; then
+        rm -f "$GLOBAL/skills/$name.md"
+        echo "✓ removed retired skills/$name.md"
+    fi
+done
+for name in analyst pm scrum-master orchestrator tuner architect devops; do
+    if [ -f "$GLOBAL/agents/$name.md" ]; then
+        rm -f "$GLOBAL/agents/$name.md"
+        echo "✓ removed retired agents/$name.md"
+    fi
+done
+if [ -f "$GLOBAL/hooks/orchestrator-bash-guard.sh" ]; then
+    rm -f "$GLOBAL/hooks/orchestrator-bash-guard.sh"
+    echo "✓ removed retired hooks/orchestrator-bash-guard.sh"
+fi
+
 # ── Agents (every plugin that ships them) ────────────────────────────────────
 agent_count=0
 for agent_dir in "$PLUGINS"/*/agents; do
@@ -104,6 +132,17 @@ for ref_dir in "$PLUGINS"/*/references; do
     done
 done
 echo "✓ shared references"
+
+# ── Sensor scripts the skills and agents run (verify/*, estimate-run.py, harness-metrics.py) ─
+# Skills cite them plugin-relative (`scripts/verify/break-run.sh`); in a flat
+# install that path resolves under ~/.claude/devkit/. verify/ scripts source each
+# other by their own directory, so the subfolder is copied as one unit.
+mkdir -p "$GLOBAL/devkit/scripts/verify"
+cp "$PLUGIN/scripts/verify/"*.sh "$PLUGIN/scripts/verify/"*.py "$GLOBAL/devkit/scripts/verify/"
+# harness-metrics.py runs verify/falsification.sh from its own directory — staged as a sibling.
+cp "$PLUGIN/scripts/estimate-run.py" "$PLUGIN/scripts/harness-metrics.py" "$GLOBAL/devkit/scripts/"
+chmod +x "$GLOBAL/devkit/scripts/verify/"* "$GLOBAL/devkit/scripts/estimate-run.py" "$GLOBAL/devkit/scripts/harness-metrics.py"
+echo "✓ sensor scripts staged to ~/.claude/devkit/scripts/"
 
 # ── CLAUDE.md — never overwrite ─────────────────────────────────────────────
 # Devkit standards land in ~/.claude/devkit/CLAUDE.md. An @include line is

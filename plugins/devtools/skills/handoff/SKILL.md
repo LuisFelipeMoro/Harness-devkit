@@ -1,26 +1,21 @@
 ---
 name: handoff
-description: 'Use when ending a long session or switching context. Compacts the conversation into a structured handoff document saved to /tmp. Trigger phrases: "handoff", "wrap up", "end session", "save context", "create handoff", "compact this session", "summarize for next session", "update progress", "done for today".'
+description: Compact the session into a standalone handoff document and refresh PROGRESS.md so the next session resumes exactly where this one stopped. Usage: /handoff [next-session objective], e.g. "/handoff finish T3 of the checkout-retry plan".
+disable-model-invocation: true
 ---
 
-Compact the conversation into a single, standalone handoff document. Save to `/tmp/handoff-<YYYY-MM-DD-HHMMSS>.md`. Print the path and a 3-line summary.
+**Input**: this conversation; optionally the next session's objective.
+**Output**: `/tmp/handoff-<YYYY-MM-DD-HHMMSS>.md` and a refreshed `PROGRESS.md` at the repo root; the path plus a 3-line summary printed.
+**Boundary**: writes those two files only — no code, no commit. `PROGRESS.md` is **git-ignored**, local session memory the SessionStart hook reads next session; it is never committed.
 
-Also update the Harness memory file: write/refresh `PROGRESS.md` at the repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons` — schema in `references/progress-file.md`). The `/tmp` handoff is the rich narrative; `PROGRESS.md` is the durable, **git-ignored**, local session state the SessionStart bootstrap hook reads next session — it is never committed. The two must agree.
+## Steps
 
-## Rules
+1. **Collect state.** `git branch --show-current`, `git status --short`, `git log --oneline -5`, the active plan (`docs/plans/{slug}/plan.md` — its `Status` and which Tasks rows are done), and the last gate results seen this session.
+2. **Write the handoff** — at this step, read `references/handoff-template.md` and follow its structure. Point to existing artifacts (plan, codebase map, ADRs) instead of restating them; record the branch and plan slug first — without them the next session cannot resume the work. With an objective argument, tailor Next steps and Suggested skills to it.
+3. **Refresh `PROGRESS.md`** — at this step, read `references/progress-file.md`: append `Done` / `Failed`, rewrite `Current State` and `Next`, add `Lessons`. The handoff and `PROGRESS.md` must agree.
+4. **Lessons are mandatory** — every rule this session learned the hard way, each with the failure or gate output that taught it. Omit the section only when nothing was learned, and say so.
+5. **Redact** API keys, tokens, passwords and PII from both files.
+6. **Editorial pass** (not a gate): run both texts past `coding-pipeline/references/prose-standards.md`.
+7. Print the handoff path and a 3-line summary: where it stands, the next action, the blocker if any.
 
-- Point to existing artifacts (PRD, delivery file, ADR) rather than recreating them
-- **If a delivery is in flight, record its identity first**: the `Delivery-Key`, the delivery file path, the release branch, the worktree path, and which story is next. Without the key the next session cannot resume the delivery — it will derive a fresh one and fork the work. Same for a bug fix: record the `hotfix/{slug}` branch.
-- Redact API keys, passwords, and PII
-- **Record the session's `Lessons`** — every rule the session learned the hard way, each with the
-  failure or gate output that taught it. `/handoff` is the only writer of that section, and it is
-  the one part of `PROGRESS.md` meant to outlive the delivery; a handoff that skips it discards
-  the session's most durable output. Nothing learned this session is the only valid reason to omit it.
-- The Suggested skills section is mandatory — it helps the next session start with the right tool
-- If arguments provided, tailor the document toward that next-session objective
-- **Editorial pass, not a gate**: before saving, run the handoff document and the `PROGRESS.md`
-  entries it writes past `coding-pipeline/references/prose-standards.md` on demand.
-
-## Document format
-
-Follow the structure in `references/handoff-template.md` (Task, Status, Key decisions, Files changed, Next steps, Suggested skills).
+Next: in the new session, the skill named first under Suggested skills.

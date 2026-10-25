@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The mechanical half of QA's tautology hunt.
 
-Four of Quinn's tautology patterns are literal shapes in the source, not judgments:
+Four of QA's tautology patterns are literal shapes in the source, not judgments:
 an assertion whose two sides are the same expression, an expectation computed by
 calling the function under test, a loop with an empty body, and a spy nobody reads.
 Locating those by reading every test file costs a model pass over the suite. Here
@@ -23,12 +23,12 @@ mirrors `diff-lib.sh` exactly (same regex, same UNMEASURED wording, same
 interpreter with no bash to source into; `subprocess.run` is called with a list
 argv, never `shell=True`, so a crafted base ref can never reach a shell.
 
-What stays with Quinn: over-mocking, snapshot-for-behaviour, intent-encoding,
+What stays with QA: over-mocking, snapshot-for-behaviour, intent-encoding,
 canonical-only validators, timing-coupled tests. This narrows what she reads; it
 does not replace her.
 
 Usage: tautology-scan.py <test-path>... | tautology-scan.py --diff <base> [<path>...]
-Exit 0 = clean. Exit 1 = hits, each a MAJOR candidate until Quinn clears it.
+Exit 0 = clean. Exit 1 = hits, each a MAJOR candidate until QA clears it.
 Exit 2 = no test file found under the given paths (or in the diff) — unmeasured,
          never a PASS.
 """
@@ -290,12 +290,12 @@ def main(argv):
 
     if hits:
         print(f"\nTAUTOLOGY-SCAN: FAIL — {len(hits)} mechanical tautology candidate(s); "
-              "each is a MAJOR until Quinn clears it")
+              "each is a MAJOR until QA clears it")
         return 1
 
     print(f"TAUTOLOGY-SCAN: PASS — {len(seen)} test file(s), no mechanical tautology pattern")
     print("NOTE: over-mocking, snapshot-for-behaviour, intent-encoding, canonical-only "
-          "validators and timing-coupled tests are NOT covered here — Quinn still audits those.")
+          "validators and timing-coupled tests are NOT covered here — QA still audits those.")
     return 0
 
 

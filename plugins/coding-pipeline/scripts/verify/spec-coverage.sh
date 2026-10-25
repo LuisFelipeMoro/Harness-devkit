@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # QA lens 0, mechanically: every Test Cases row implemented, no unspecified extras.
 #
-# Quinn used to read the story table and the whole test suite and compare them by
+# QA used to read the story table and the whole test suite and compare them by
 # hand. That is string matching dressed as judgment: it costs a model pass over
 # every test file and it is exactly the kind of check that degrades as context
 # fills. Here it is a diff of two name lists.

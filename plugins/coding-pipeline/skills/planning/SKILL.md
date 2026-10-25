@@ -1,28 +1,25 @@
 ---
 name: planning
-description: Use when you need to break down analyzed requirements into an actionable execution plan — runs Architect to produce the delivery file and the Epic or Task Manifest. Coupled to the coding pipelines; produces plan artifacts only, never triggers implementation. Trigger phrases — "plan", "planning", "make a plan", "create execution plan", "break down into tasks", "roadmap", "how would we approach", "task breakdown", "sequence the work".
+description: Produce a reviewed, approved plan in the devkit plan template, from scratch or from your own notes, mapped and checked against the real codebase. Usage: /planning [path-to-base-plan-or-notes], e.g. "/planning docs/notes/checkout-retry.md".
+disable-model-invocation: true
 ---
 
-Create an execution plan ready for a coding pipeline to implement. If no task is provided, ask first.
-Load agent files on demand — never pre-load all at once; use `references/output-format.md` headers for all agent output.
+**Input**: a feature request, optionally a base plan/notes path (ask for the goal if neither is given).
+**Output**: `docs/plans/{slug}/plan.md` (`Status: approved`) and `docs/plans/{slug}/codebase-map.md`; `api-spec.yaml` when the change has HTTP endpoints.
+**Boundary**: plan artifacts only — writes no code and starts no implementation. Dispatches: 1 map (Explore, `haiku`) + 1 `plan-reviewer` (`sonnet`) per review round, max 2 rounds. Drafting runs here, in the main session (`sonnet`; `opus` only for a hard design call, stated).
 
-Full phase detail: [references/phases.md](references/phases.md).
-
-## Contract
-
-- **Input**: a task or requirement set (and any existing `docs/deliveries/{key}/product-brief.md` / `PRD.md` / delivery file for the same key).
-- **Output**: `docs/deliveries/{key}/codebase-map.md`, `docs/deliveries/delivery-{slug}-{key}.md` (carrying its Reuse Map), a `PLAN REVIEW` result, plus `docs/deliveries/{key}/epic-manifest.md` (or `task-manifest.md`). Paths and key derivation: [../../references/delivery-and-worktree.md](../../references/delivery-and-worktree.md).
-- **Boundary**: planning artifacts only — this skill halts after the manifest and starts no implementation. To implement: `/multi-agent` (epics) or `/task` (single task).
-- **Rules**: Phase 0.5 (codebase discovery), Phase 2 (grill-me stress), Phase 2.5 (plan review against the real codebase) and Phase 3 (human validation of open questions) gate all code — no architecture without the codebase map, and nothing reaches the human that Priya has not read; every manifest row is independently testable; `Language` comes from the Architect's tech-stack decision, never inferred.
+**Rules**: no design without the codebase map · nothing reaches the human that `plan-reviewer` has not read · every AC and SEC row lands in a Test Case row, every Test Case row in exactly one Tasks row · every Tasks row is independently testable and reviewable · `Language` comes from the Technology decisions, never inferred · questions the plan cannot answer go to the human, never into the code. Load each reference only at the step that names it.
 
 ## Steps
 
-1. **Requirements input** — reuse `product-brief.md` / `PRD.md` if present; otherwise run Analyst and/or PM inline (see [references/phases.md](references/phases.md) Phase 0).
-2. **Codebase discovery** — dispatch a read-only mapping subagent (`haiku`) → `docs/deliveries/{key}/codebase-map.md`: blast radius, reusable symbols, prior art, conventions, extension points, contracts in force, test conventions — every entry cited `file:line`. Mandatory; on a greenfield repo record the empty result rather than skipping ([references/phases.md](references/phases.md) Phase 0.5).
-3. **Architecture** — derive the delivery slug + key from the feature name, then load `agents/architect.md` with Brief + PRD + codebase map; produce `docs/deliveries/delivery-{slug}-{key}.md` with its header block, security architecture, OWASP threat table, **Reuse Map**, Test Case Specification, and Mermaid data-flow diagram(s).
-4. **Stress the plan** — run `/grill-me` against the delivery file + manifest; decide each supported gap into the delivery file, carry the rest to step 6 as open questions. Re-run until no new resolvable gaps.
-5. **Plan review** — load `agents/plan-reviewer.md` (`sonnet`) with the delivery file, codebase map, PRD, and the repository. `PLAN CHANGES REQUIRED` returns to the Architect (max 2 rounds); `PLAN APPROVED` — or the leftover findings carried as open questions — proceeds to step 6 ([references/phases.md](references/phases.md) Phase 2.5).
-6. **Human validation** — present diagram, stack, ADRs, the plan-review result, open questions, and the `api-spec.yaml` contract (if produced); update and re-confirm on any change. Step 7 begins once the delivery file and `api-spec.yaml` (if present) are approved and open questions resolved.
-7. **Manifest** — produce an **Epic Manifest** (≥ 2 epics) or **Task Manifest** (single epic) at project root; table shapes in [references/phases.md](references/phases.md) Phase 4.
-8. **Execution options** — human checkpoint, after the manifest is confirmed and before any Coder is dispatched. Run `bench-context.py --manifest <task-manifest.md|epic-manifest.md>`; it reads the manifest's `Roster` column and prints dispatch counts and a token range per option — **as planned** (the declared rosters), **all standard**, **legacy full loop** — each cost labelled `measured` or `assumed` from the script's own COST table. The range does not model fix rounds; add ~40–60% on any `full` story to account for them. Present the table and block the sub-task/epic loop until the operator picks an option or edits rosters — an edit re-runs the estimate before continuing.
-9. **Plan summary** — for a standalone run, print the summary and stop here. When a pipeline invoked this skill, this step is informational: print the summary and hand back to the orchestrator.
+1. **Frame.** Derive `{slug}` (kebab-case, ≤ 5 words). Check the branch per `references/branching.md` before writing any file. At this step, read `references/phases.md` § Phase 0 and apply it: base file → normalize it, keeping every user decision verbatim; existing plan → ask continue / start over; neither → draft requirements from the request, Security ACs mandatory for any I/O, auth or data-handling change.
+2. **Map** (mandatory, also on a greenfield repo). At this step, read § Phase 0.5, then run the procedure in `skills/map/references/map-procedure.md` (one Explore dispatch, `haiku`; one per area if the request spans independent areas). Reuse an existing map only if its base sha is an ancestor of HEAD.
+3. **Design** in the main session. At this step, read § Phase 1 and `references/plan-template.md`; fill every section, with the Design built from this skill's `references/sections.md` (Mermaid per `references/data-flow-example.md`). Every component gets a Reuse Map row; the tier check (frontend renders, BFF orchestrates, core owns domain logic) is mandatory; HTTP endpoints → `api-spec.yaml` per `references/spec-driven-reference.md`, lint-clean. `Status: draft`.
+4. **Grill (offered every time).** At this step, read § Phase 2. AskUserQuestion: "Grill the draft before review?" (recommend Yes beyond a single small row). On Yes, grill inline in rounds per `references/grilling.md` (read on Yes): each round asks the whole frontier, numbered, each with a recommended answer worded so "yes" accepts it; facts come from the map or a lookup, never from the user; decide what the request and map support, carry the rest to Open questions; repeat until the frontier is empty and the user confirms.
+5. **Review.** At this step, read § Phase 2.5. Dispatch `subagent_type: "plan-reviewer"`, `model: "sonnet"`, with only the two paths: `docs/plans/{slug}/plan.md` and `docs/plans/{slug}/codebase-map.md`.
+6. **Fix rounds (max 2).** `PLAN CHANGES REQUIRED` → fix the plan, re-dispatch for the changed sections only. `[OPEN QUESTION]` findings are never guessed. After round 2, carry what is left to Open questions verbatim. Append each round to the Review log; `Status: reviewed`.
+7. **Human validation.** At this step, read § Phase 3. Present diagrams, stack, ADRs with rejected alternatives, blast-radius total, Reuse Map verdict, review score, base-file gaps, the `api-spec.yaml` contract summary, and every Open question (AskUserQuestion, ≤ 4 per call, recommended option first). Write each answer into the plan; re-confirm on any change.
+8. **Tasks table + approve.** At this step, read § Phase 4: rows are vertical tracer-bullet slices (prefactoring first; wide refactors as expand → migrate batches → contract); check every row's `Files`, `Test rows`, `Language`, `Tier`, `Depends on`, sizing (≤ 200 target · 400 soft · 800 hard) and bundling. AskUserQuestion: Approve / Request changes. Approve → `Status: approved`.
+9. **Summary.** At this step, read `references/output-contract.md` and print its block.
+
+Next: `/code docs/plans/{slug}/plan.md`.

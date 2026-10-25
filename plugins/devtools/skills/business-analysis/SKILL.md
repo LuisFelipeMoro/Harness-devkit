@@ -1,6 +1,7 @@
 ---
 name: business-analysis
-description: 'Use when mapping business rules, constraints, and presentation logic of a domain. Produces user capability map, validation rules, presentation rules, and external integrations in Brazilian Portuguese. Trigger phrases — "business rules", "business logic", "domain rules", "what does the business require", "validation rules", "domain model", "use cases".'
+description: 'Map the business rules and presentation logic of a domain, in Brazilian Portuguese. Usage: /business-analysis [args], e.g. "/business-analysis checkout".'
+disable-model-invocation: true
 ---
 
 # Business Analysis

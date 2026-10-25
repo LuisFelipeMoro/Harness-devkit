@@ -3,7 +3,7 @@
 ## What this Harness optimises for (priority order — the tie-breaker when two rules collide)
 
 1. **Confidence in the generated code** — every claim backed by a sensor that can fail. Falsified tests, exit-code gates, cited `file:line`. An unverifiable claim is worth less than no claim.
-2. **Production-ready on delivery** — security, error handling, idempotency, graceful shutdown and observability are part of "done", never a follow-up story.
+2. **Production-ready on delivery** — security, error handling, idempotency, graceful shutdown and observability are part of "done", never a follow-up task.
 3. **Airtight plans** — ambiguity is resolved at plan time, against the real codebase, before code exists. A question answered in implementation was a planning defect.
 4. **Readable, maintainable code** — the next reader is a stranger or an agent with no context. Legibility outranks cleverness, and *durable* outranks *clever* every time.
 5. **Best practice in the language actually being written** — specialist idiom, named authority chain, current stable version unless the project pins otherwise.
@@ -14,10 +14,10 @@ When a rule in this file appears to conflict with another, the higher-numbered c
 adding to this file, the same test applies to the addition itself: it must earn its tokens against
 one of these seven, or it does not belong here.
 
-## Harness Model (Guides · Sensors · Memory · Orchestration)
+## Harness Model (Guides · Sensors · Memory · Separation)
 
 This devkit is a Harness. Four components, all mandatory:
-- **Guides** (feed-forward): this CLAUDE.md, the delivery file (`docs/deliveries/delivery-{slug}-{key}.md`), specs, conventions — inject the right context per task.
+- **Guides** (feed-forward): this CLAUDE.md, the plan (`docs/plans/{slug}/plan.md`), specs, conventions — inject the right context per task.
 - **Sensors** (feedback): linters in ERROR mode + test runners that return exit 0/1, never prose to interpret. `git-hooks/pre-commit` (format+lint), `git-hooks/pre-push` (tests+coverage+vuln), and CI mirror each other. A task is not done until the sensors pass. Session-level sensors run as hooks (`hooks/hooks.json`) and are deterministic — no model in the loop:
 
   | Hook | Event | Id (for `DEVKIT_DISABLED_HOOKS`) | Does |
@@ -30,24 +30,24 @@ This devkit is a Harness. Four components, all mandatory:
   | `dispatch-budget.sh` | PreToolUse(Agent\|Task) | `pre:agent:dispatch-budget` | Counts subagent dispatches, warns once past the session budget |
   | `precompact-snapshot.sh` | PreCompact | `pre:compact:snapshot` | Records branch, dirty files, last commits and PROGRESS.md freshness before compaction; never blocks |
   | `delivery-gate.sh` | Stop | `stop:delivery-gate` | Refuses to call a session done when source changed and no test/lint/typecheck ever ran |
-  | `pr-review-responder.sh` | PostToolUse(Bash) | — | Surfaces open PR comments after a push |
+  | `pr-review-responder.sh` | PostToolUse(Bash) | — | After a push, says how many PR comments are open and suggests `/pr-fix` |
   | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md`; after compaction also the snapshot, and re-arms the context latches |
 
   Dial them with `DEVKIT_HOOK_PROFILE` — `off`, `standard` (default), or `strict`, which makes `delivery-gate` block once instead of warn — or disable a single hook with `DEVKIT_DISABLED_HOOKS=<hook-id>,<hook-id>`. A guard that cannot parse its input exits 0 — failing open beats blocking every tool call on a payload change.
 - **Context ceiling — 80%, hard, and now measured.** `hooks/context-budget.sh` reads the real
   figure from the session transcript, so this stopped being a number the model reports about
-  itself. Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a pipeline propagates through every stage downstream. At 80%, checkpoint and continue — no human step: write the `PROGRESS.md` entries, commit and push the branch, carry on; the harness compacts, and `precompact-snapshot.sh` + `session-bootstrap.sh` restore state. Never carry on past it without that checkpoint, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
+  itself. Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a multi-step run propagates through every step downstream. At 80%, checkpoint and continue — no human step: write the `PROGRESS.md` entries, commit the branch (push only if the user has asked for pushes), carry on; the harness compacts, and `precompact-snapshot.sh` + `session-bootstrap.sh` restore state. Never carry on past it without that checkpoint, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
 - **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
-- **Orchestration**: an orchestrator spawns isolated subagents with pre-agreed contracts. **Implementer ≠ validator** — Amelia (Coder) builds; Quinn (QA), Reviewer, Stress validate. The acceptance contract (ACs + Definition of Done) is frozen BEFORE any code. **The plan is validated the same way**: Priya (Plan Reviewer) reads the delivery file against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say.
+- **Separation**: **implementer ≠ validator** — `coder` builds; `qa`, `reviewer` and `stress` validate. The acceptance contract (ACs + Test Case table) is frozen BEFORE any code. **The plan is validated the same way**: `plan-reviewer` reads the plan against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say. Skills run one at a time, started by the user; a skill may dispatch agents but never another skill.
 
 ## Is the Harness working?
 
 Five countable signals — scope creep, question timing, rework, sensor escape, test honesty — read
 quarterly by a human from `PROGRESS.md` and the delivery files, never as a gate. They are
 diagnostics and every one is trivially gamed by suppressing its own signal.
-Full table and what to do with a reading: `references/harness-metrics.md`.
+Full table and what to do with a reading: `references/harness-metrics.md`; the countable half: `scripts/harness-metrics.py` (`/retro --metrics`).
 
-Token cost of the guides themselves is measured, not asserted: `scripts/bench-context.py`.
+Token cost of the guides themselves is measured, not asserted: `scripts/estimate-run.py --guides`.
 
 ## Spec-First Test Discipline (non-negotiable — all code)
 
@@ -57,11 +57,10 @@ falsifiability. Four steps, in order, for every change:
 
 1. **Spec** — the Test Case table is frozen before any code. Every row names the test, its
    input/precondition, its expected *observable* result, the AC it proves, and **why it
-   matters** (the intent it encodes). Written by the Architect, filtered into the story by
-   the Scrum Master. A behaviour with no row does not get built.
-2. **Implement** — Coder (Amelia) builds to the frozen spec. No design decisions at code
+   matters** (the intent it encodes). Written into the plan by its author (`/planning`, or the mini-plan `/code` writes), one task's rows handed to the coder by Task ID. A behaviour with no row does not get built.
+2. **Implement** — `coder` builds to the frozen spec. No design decisions at code
    time: anything the spec did not decide is flagged, not invented.
-3. **Test** — Amelia writes exactly the rows in the table, no more, no fewer. A row she
+3. **Test** — the coder writes exactly the rows in the table, no more, no fewer. A row it
    cannot write is a spec defect, reported upward — never silently dropped or reshaped.
 4. **Falsify** — the evidence step that replaces RED. For every test, break the code path it
    covers (invert the condition, return the zero value, delete the guard), run the test,
@@ -73,23 +72,23 @@ Rules:
   asserting only that a mock was called, or mocking the system-under-test away = MAJOR,
   blocks handoff. Coverage stays a hard floor (per-language, see the gate table) but is
   never the goal — a green 85% of tautologies fails the audit.
-- **Coder (Amelia) owns tests + implementation; QA (Quinn) audits** — falsification evidence,
+- **`coder` owns tests + implementation; `qa` audits** — falsification evidence,
   spec-row completeness, intent-encoding, corner cases, no over-mocking — and runs the gates.
   QA authors no primary tests.
 - **Bug fixes are the one exception**: a failing reproduction test is written and observed RED
   *before* the fix, because it is what proves the root cause was found rather than guessed.
-- Plans are stress-tested with `/grill-me` before coding; questions the plan cannot resolve go
+- Plans can be stress-tested with `/grill-me` (`/planning` offers it) before coding; questions the plan cannot resolve go
   to the human — never deferred into implementation.
 - **Nothing is designed against an imagined repository.** Every plan starts from
-  `codebase-map.md` (blast radius · reusable symbols · prior art · conventions · extension
+  `docs/plans/{slug}/codebase-map.md` (blast radius · reusable symbols · prior art · conventions · extension
   points · contracts in force, each cited `file:line`), and every planned component carries a
   decided **Reuse Map** row — `reuse:` / `extend:` / `new:` with the closest existing thing named.
   A `new` with no citation is unjustified.
-- **The plan is reviewed before the human sees it.** `agents/plan-reviewer.md` reads the delivery
-  file with the repository open and blocks on PR1–PR10 (already exists · reuse not declared ·
+- **The plan is reviewed before the human sees it.** `agents/plan-reviewer.md` reads the plan
+  with the repository open and blocks on PR1–PR10 (already exists · reuse not declared ·
   contradicts existing code · ambiguous AC · unfalsifiable row · untraced requirement · deferred
-  decision · …). grill-me interrogates the plan from inside the context that wrote it and never
-  opens the repo; this is the reader that does both.
+  decision · …). grill-me interrogates the plan from inside the context that wrote it — it looks facts
+  up, never audits the plan against the repo; this is the reader that does both.
 
 ## Sub-agent Discipline
 
@@ -98,82 +97,83 @@ Rules:
 - **3 sub-agents** — only when 3 tasks are clearly independent, time-critical, and cannot share context. Justify before spawning. (writers; read-only fan-out below)
 - **Never spawn 4+ writers** in a single turn; read-only subagents are capped separately, below.
 - **Read-only fan-out** — subagents whose agent type has no Edit/Write/NotebookEdit tools
-  (Explore, Plan: the checkable case). The orchestrator attests that each prompt forbids
+  (Explore, Plan: the checkable case). The dispatching session attests that each prompt forbids
   mutation and that no shell command mutates state. Such subagents may fan out wider, up to the
   read-only width in `references/thresholds.md`, each returning its capped summary or one table.
   Freeze the shared contract (questions, return shape, scope per worker) before fanning out;
   workers never coordinate with each other. Read-only dispatches may run in the background;
-  the gate chain stays in the foreground. Inside a pipeline the orchestrator coordinates
-  (dispatches, runs sensors, merges returns) and writes no implementation code.
+  the gate chain stays in the foreground. Inside a skill the main session coordinates
+  (dispatches, runs sensors, merges returns); `/planning` drafts in-session, and implementation
+  code is written only by `coder`.
+- **Run modes for `/code`** — the user chooses, after seeing token estimates from
+  `scripts/estimate-run.py`: inline (small change, no dispatch) · single coder · sequential (one
+  `coder` per Tasks row, default) · parallel (≤ 3 writers, each in its own worktree, only for rows with
+  no dependency and disjoint `Files`; see `references/delivery-and-worktree.md`). Never parallel writers in one tree.
 - **Agent teams** are experimental and off: nothing in the devkit enables them, and a user who does keeps them to read-only lanes — read `references/agent-teams.md` before setting the flag.
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
-  per-turn cap never bound a pipeline, which is how a delivery spent sixty dispatches without
+  per-turn cap never bound a multi-step run, which is how one spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.
 - A resumed agent replays its whole transcript: cheaper in dispatches, never in tokens — fix rounds are fresh dispatches.
-- **Three dispatches per story is the target shape for roster `standard`** — Coder, QA, Reviewer;
-  a lighter or heavier roster dispatches fewer or more (see the Roster table under Proportionality).
-  That is the agile equivalent: one implementer, one independent test auditor (earned, because
-  tests are written after the code), one reviewer of the PR diff. Story generation is a template
-  fill, the verdict is arithmetic, and a second reviewer of the same diff finds what the first one did.
+- **Dispatches per skill are the target shape**: `/planning` = 1 map (haiku) + 1 `plan-reviewer` per round (max 2); `/code` = 1 `coder` per Tasks row; `/validate-code` = by the depth it measures from the diff — cosmetic none, light `qa`, standard/full `qa` + `stress` (escalates only; `--full` forces it); `/review-code` = 1 `reviewer` (2 in parallel with `--split`, one per axis); `/bugfix` = `bug-investigator` (continued after its hypothesis checkpoint, not re-dispatched) + `coder`.
+  That keeps one implementer, one independent test auditor (earned, because tests are written
+  after the code), one reviewer of the diff. The verdict is arithmetic (`scripts/verify/verdict.sh`
+  plus an inline self-check), not a dispatch, and a second reviewer of the same diff finds what the first one did.
 - **Before dispatching, ask whether a sensor answers it.** `scripts/verify/*.sh` cover spec
   coverage, falsification evidence, mechanical tautologies, security candidates and the verdict
   arithmetic; grep answers "where is X" and "does this pattern exist" for the price of a tool call.
   A subagent is for judgment, not for lookup.
+- **Load on demand.** Agents and skills load a reference only when its trigger fires, one file at a time; exactly one language file up front; dispatch prompts pass paths, never contents. Each agent's "load on demand" table says when.
+- **Path resolution.** Devkit paths are written plugin-relative. In a plugin install they resolve against the plugin root; in a flat install (`install-global.sh`) `references/…` → `~/.claude/references/…`, `agents/…` → `~/.claude/agents/…`, `scripts/…` → `~/.claude/devkit/scripts/…`, `git-hooks/…` → `~/.claude/git-hooks/…`.
 
 ### Model assignment (match the model to the task — token & cost efficiency)
 
 | Work | Model | Examples |
 |------|-------|----------|
-| Architecture design | `opus` | Architect — system design, ADRs, tech stack, data-flow decisions the whole plan depends on |
-| Planning · reasoning · validation · long sessions | `sonnet` | Analyst, PM, Scrum Master, Bug Investigator (diagnosis), Plan Reviewer, QA audit, Reviewer, Stress, Verdict, pipeline orchestrators |
-| Read-only / quick answers / code execution | `haiku` | Explore, code mapping, "where is X", data fetch, locating callers, the codebase-discovery pass, Coder (Amelia), Tuner (Tyler), DevOps (IaC/CI), any direct implementation against a frozen Test Case table |
+| Design decisions the whole plan depends on | `opus` | Optional: a hard architecture call made in the main session while drafting a plan (ADRs, tech stack, data-flow) |
+| Planning · reasoning · validation · long sessions | `sonnet` | Plan drafting in the main session, `bug-investigator` (diagnosis), `plan-reviewer`, `qa` audit, `reviewer`, `stress` |
+| Read-only / quick answers / code execution | `haiku` | Explore, code mapping (`/map`), "where is X", data fetch, locating callers, the codebase-discovery pass, `coder`, any direct implementation against a frozen Test Case table |
 
-Front-load reasoning into planning and architecture so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for the Architect's design pass. Escalate one tier only with a stated reason. The `opus`/`sonnet`/`haiku` aliases resolve to the newest model in each family, so this table pins no version; `skills/multi-agent/SKILL.md` and `skills/task/SKILL.md` restate it and change with it.
+Front-load reasoning into planning so execution is mechanical: get the plan tight on `opus`/`sonnet` first, then `haiku` just has to follow it. Reserve `opus` for design passes. Escalate one tier only with a stated reason. The `opus`/`sonnet`/`haiku` aliases resolve to the newest model in each family, so this table pins no version; the skills' dispatch settings restate it and change with it.
 
 ## Tool Preferences
 - **LSP first**: Use LSP (go-to-definition, find-references, diagnostics) for code navigation — grep only when LSP not applicable
 - **context7 for docs**: Always fetch current docs via context7 for any library/framework/SDK/API — never rely on training data alone
 - **Notifications**: Use PushNotification when waiting >30s on external process, CI, or user input
-- **Isolation**: every pipeline run is a *delivery* with its own worktree (`.worktrees/dlv-{key}/`) and release branch. Stories run sequentially inside it. The pipeline never commits or merges to `main` — the terminal step is a PR from a `release/*` or `hotfix/*` branch. See `references/delivery-and-worktree.md`
+- **Branching**: work on the current branch; on `main`/`master` cut `feat/{slug}` (`fix/{slug}` for `/bugfix`) first. Never commit or merge to `main`; push or open a PR only when asked. See `references/branching.md`; worktrees are an execution mode for parallel `coder` rows only (`references/delivery-and-worktree.md`)
 - **Never read `.env` or `.envrc`**: May contain production secrets — never read, never echo, never log
-- **After git push**: Hook surfaces open PR comments automatically — for each: if valid issue (bug/missing test/security hole), fix the code + reply via `gh pr comment` explaining what changed; if not actionable (style preference/opinion/already done), reply explaining why. Never leave PR comments unanswered.
+- **After git push**: the hook reports how many PR comments are open. `/pr-fix` triages them: a valid issue (bug/missing test/security hole) is fixed and answered with what changed; a non-actionable one (style preference/opinion/already done) is answered with why. Never leave PR comments unanswered.
+- **Load references lazily**: a reference is read only when its trigger fires, one file at a time; exactly one language file up front (see Quality Gates); dispatch prompts pass paths, never contents.
 
-## Pipeline & Skills (always use before acting)
+## Skills (invoke manually)
 
-Before writing code, designing architecture, reviewing security, or running quality gates — invoke the matching skill. Never free-form tasks that have a defined skill.
-
-| Task | Skill |
+| Need | Skill |
 |------|-------|
-| New feature / epic / large task | `/multi-agent` |
-| Bug investigation and fix | `/bug-fix` |
-| Single task, small feature | `/task` |
-| Architecture design | `/architecture` |
-| Requirements analysis (no code, no plan) | `/analysis` |
-| Execution plan (no implementation) | `/planning` |
+| Reviewed plan, optionally from your notes | `/planning` |
+| Implement a plan or an inline task (spec-first) | `/code` |
+| Validate the diff: gates, qa, stress, verdict | `/validate-code` |
+| Review a diff or PR on two axes (Standards · Spec); optionally post | `/review-code` |
+| Commit, push and open a PR (after your OK) | `/pr` |
+| Triage and fix PR comments (`--list` is read-only) | `/pr-fix` |
+| Reproduce and fix a bug | `/bugfix` |
+| Codebase map for an area | `/map` |
+| Dependency audit and upgrade | `/deps` |
 | Security audit | `/security-review` |
-| Quality gates / CI check | `/quality-gate` |
-| PR review or post-push comments | `/pr-review` |
-| List open PR comments (read-only) | `/checkcomments` |
-| Business rules mapping | `/business-analysis` |
-| Technical contract mapping | `/technical-analysis` |
 | Cut a release | `/release-management` |
 | Write a DB migration | `/database-migration` |
 | Add logging / metrics / tracing | `/observability` |
 | Performance investigation | `/performance-profiling` |
-| Run existing integration flow | `/rote` |
+| Business rules mapping | `/business-analysis` |
+| Technical contract mapping | `/technical-analysis` |
+| Run an existing integration flow | `/rote` |
 | Create a NEW integration adapter | `/rote-adapter` |
-| Direct code change (spec-first) | inline Spec→Implement→Test→Falsify → `/code-review-gate` |
-| Gate + review after any code change | `/code-review-gate` |
 | Stress-test a plan/design | `/grill-me` |
 | Architectural health review | `/improve-codebase-architecture` |
 | End-of-session handoff doc | `/handoff` |
+| Session retrospective: improve the agent environment | `/retro` |
 | Create a new skill | `/write-a-skill` |
+| What the devkit has: skills, flows, one skill's usage | `/devkit-help` |
 
-**Rule**: If the user's message matches a row's task, or contains any trigger phrase from the matching skill's own description (each skill's description is the single source of truth for its trigger phrases), invoke the skill first. Do not start writing code or analysis until the skill has been loaded. A task that "feels simple" is not an exception.
-
-**Mandatory gate rule**: After ANY coding task that is NOT inside a pipeline (inline spec-first session, ad-hoc code change, direct implementation request), ALWAYS run `/code-review-gate` as the mandatory final step before declaring the task done. Gates without a reviewer are insufficient — logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
-
-**Agents are loaded by pipeline skills** — never load `agents/*.md` files manually unless a pipeline skill instructs it.
+Skills never run each other. Claude may suggest the next skill; only the user starts one. After any code change, `/validate-code` then `/review-code` are the recommended final steps, then `/pr` to open the pull request: gates without a reviewer are insufficient, because logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 
 ## Coding Discipline (12 rules — non-negotiable)
 
@@ -205,30 +205,18 @@ legible → durable → small, with every finding naming its cost) · never comm
 the session hooks.
 There is no "too small to test" and no "too small to gate."
 
-**Scales — pick the lightest roster that fits.** Lane and roster are one concept: the manifest's
-`Roster` column (`cosmetic · light · standard · full`) is what a story declares, and
-`classify-diff.sh` verifies it against the real diff — it only escalates, never de-escalates.
-**Mechanical gates run on every roster, with no exception** — format, lint, existing tests,
-dup-gate, vuln; what scales is which *agents* get dispatched, never whether the gates run.
+**Scales — pick the lightest depth that fits.** `/code` takes any task size: a plan is optional, and without one it writes a mini-plan (Test Case table + Tasks) in the same template and shows it for a one-line OK. **Mechanical gates run at every depth, with no exception** — format, lint, existing tests, dup-gate, vuln; what scales is the spec and artifact ceremony and which *agents* get dispatched, never whether the gates run.
 
-| Roster | = Lane | When | Dispatches |
-|------|------|------|------|
-| `cosmetic` | Trivial | doc/style/copy files only — no behaviour change | Coder (haiku) only; no spec table, no new tests, no delivery file |
-| `light` | Inline spec-first | behaviour change, ≤2 non-test source files, no dependency change, no trigger tag | Coder + Reviewer (folded Stress lens); Test Case table inline → implement → test → falsify |
-| `standard` | `/task` sub-task | default — one focused feature or a change spanning >2 files | Coder + QA + Reviewer (folded Stress lens) |
-| `full` | — | any trigger tag, or Architect-declared shared state | Coder + QA + Reviewer + StressTester |
+| Depth | When | What runs |
+|------|------|------|
+| Cosmetic | doc/style/copy files only — no behaviour change | `coder` only (or inline); no spec table, no new tests, no plan; gates only |
+| Small | behaviour change, ≤2 non-test source files, no dependency change, no trigger tag | mini-plan with an inline Test Case table → implement → test → falsify; then `/validate-code` and `/review-code` |
+| Standard | default — one focused feature or a change spanning >2 files | `/planning` → `/code` → `/validate-code` → `/review-code` |
+| Full | any trigger tag (auth, money, concurrency, shared state, migrations), or declared shared state | Standard, plus `stress` weighed at full |
 
-`/multi-agent` (epic, greenfield, or anything needing a PRD) runs the full pipeline, delivery
-file, and worktree regardless of roster — roster there is decided per manifest row, not for the
-delivery as a whole.
+**State the depth before starting** — "cosmetic: comment fix, gates only." An unstated depth defaults to the heavier one. Picking `cosmetic` for something that changes behaviour is itself a finding, so when it is arguable, take the heavier one and say why.
 
-**State the roster before starting** — "cosmetic: comment fix, gates only." An unstated roster
-defaults to the heavier one. Picking `cosmetic` for something that changes behaviour is itself a
-finding, so when the roster is arguable, take the heavier one and say why.
-
-This does not loosen skill routing: the rule above — *a task that "feels simple" is not an
-exception* — still holds. A lane sets how much spec and artifact ceremony a change carries,
-never whether a matching skill gets invoked.
+Depth sets how much spec and artifact ceremony a change carries, never whether the standards apply.
 
 ## Task Discipline (boundaries required)
 

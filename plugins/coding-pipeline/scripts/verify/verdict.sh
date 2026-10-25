@@ -18,6 +18,15 @@
 #              [--critical-security N] [--critical-other N] \
 #              [--hard-gate-fail "name,name"] [--reviewer-block]
 #
+#   verdict.sh --no-review --stress 8.0 --qa 9.0 [...]
+#     /validate-code: Stress 35% + QA 30% renormalised over 65; Stress floor
+#     applies; --review and --roster are rejected (the review is /review-code's gate).
+#
+#   verdict.sh --no-review --no-stress --qa 9.0 [...]
+#     /validate-code at light depth (classify-diff: no Stress trigger, <= 2 source
+#     files): QA 30% renormalised over 30 — stress was not dispatched, so no stress
+#     score is accepted or invented and the Stress floor has no lens to apply to.
+#
 #   verdict.sh --roster {cosmetic|light|standard|full} --classify-exit N \
 #              [--review N] [--stress N] [--qa N] [...]
 #     Per-roster lens rules (references/thresholds.md — Roster):
@@ -30,7 +39,7 @@ set -u
 
 review=""; stress=""; qa=""
 crit_sec=0; crit_other=0; gate_fail=""; blocked=0
-roster=""; classify_exit=""
+roster=""; classify_exit=""; no_review=0; no_stress=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -43,12 +52,16 @@ while [ $# -gt 0 ]; do
         --reviewer-block)    blocked=1; shift ;;
         --roster)            roster="$2"; shift 2 ;;
         --classify-exit)     classify_exit="$2"; shift 2 ;;
+        --no-review)         no_review=1; shift ;;
+        --no-stress)         no_stress=1; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
 
 usage() {
     echo "usage: verdict.sh --review N --stress N --qa N [...]" >&2
+    echo "       verdict.sh --no-review --stress N --qa N [...]" >&2
+    echo "       verdict.sh --no-review --no-stress --qa N [...]" >&2
     echo "       verdict.sh --roster {cosmetic|light|standard|full} --classify-exit N [--review N --stress N [--qa N]] [...]" >&2
     exit 2
 }
@@ -60,7 +73,19 @@ valid_score() {
     esac
 }
 
-if [ -n "$roster" ]; then
+if [ "$no_stress" = 1 ] && [ "$no_review" != 1 ]; then usage; fi
+
+if [ "$no_review" = 1 ]; then
+    # /validate-code: the review lens belongs to /review-code, a separate skill.
+    if [ -n "$roster" ] || [ -n "$review" ] || [ -z "$qa" ]; then usage; fi
+    if [ "$no_stress" = 1 ]; then
+        [ -z "$stress" ] || usage
+    else
+        [ -n "$stress" ] || usage
+        valid_score "$stress" || usage
+    fi
+    valid_score "$qa" || usage
+elif [ -n "$roster" ]; then
     case "$roster" in
         cosmetic|light|standard|full) ;;
         *) usage ;;
@@ -94,7 +119,7 @@ else
     done
 fi
 
-python3 - "$review" "$stress" "$qa" "$crit_sec" "$crit_other" "$gate_fail" "$blocked" "$roster" "$classify_exit" <<'PY'
+python3 - "$review" "$stress" "$qa" "$crit_sec" "$crit_other" "$gate_fail" "$blocked" "$roster" "$classify_exit" "$no_review" "$no_stress" <<'PY'
 import sys
 
 
@@ -117,6 +142,41 @@ gate_fail = [g for g in sys.argv[6].split(",") if g.strip()]
 blocked = sys.argv[7] == "1"
 roster = sys.argv[8]
 classify_exit_s = sys.argv[9]
+no_review = sys.argv[10] == "1"
+no_stress = sys.argv[11] == "1"
+
+if no_review:
+    # references/thresholds.md — Scores, without the Review lens: Stress 35 and QA 30
+    # renormalised over 65, so the code verdict neither waits for nor invents a review.
+    # --no-stress (light depth): QA 30 renormalised over 30 — the lens that was
+    # not dispatched contributes nothing, rather than a score nobody produced.
+    stress = None if no_stress else float(stress_s)
+    qa = float(qa_s)
+    score = qa if no_stress else (stress * 0.35 + qa * 0.30) / 0.65
+    if blocked:
+        score = min(score, 5.0)
+    reasons = []
+    if gate_fail:
+        reasons.append("hard gate FAIL: " + ", ".join(g.strip() for g in gate_fail))
+    if crit_sec > 0:
+        reasons.append(f"{crit_sec} unmitigated CRITICAL security issue(s)")
+    if score < 6.5:
+        reasons.append(f"overall {score:.2f} < 6.5")
+    if stress is not None and stress < 7:
+        reasons.append(f"Stress {stress} below story floor 7")
+    verdict = classify_verdict(score, crit_other, reasons)
+    print(f"VERDICT: {verdict}")
+    if verdict != "NOT READY" or not gate_fail:
+        if stress is None:
+            print(f"Overall Score: {score:.2f}/10  (QA {qa} x30%, renormalised — no review or stress lens)")
+        else:
+            print(f"Overall Score: {score:.2f}/10  (Stress {stress} x35% · QA {qa} x30%, renormalised — no review lens)")
+    for r in reasons:
+        print(f"  - {r}")
+    print()
+    print("Computed from thresholds.md. The agent still owes the Verdict Self-Check:")
+    print("  Evidence · Traceability · Independence · Residual risk · Actionability (1-5 each).")
+    sys.exit(0 if verdict == "PRODUCTION READY" else 1)
 
 if not roster:
     # references/thresholds.md — Scores. Legacy path: byte-identical output.

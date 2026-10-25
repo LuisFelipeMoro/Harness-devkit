@@ -32,12 +32,12 @@ Rules:
 - Append at each checkpoint; never silently rewrite history.
 - Keep entries factual and terse — one line each.
 - Redact secrets, tokens, and PII.
-- **Prefix every entry with the delivery key** — `` `[a8f3c1]` STORY-3 cart totals — … `` — so concurrent deliveries interleave readably in one root-level file and a resumed session can filter to its own. Bug fixes use their hotfix slug: `` `[hotfix/null-cart]` ``.
+- **Prefix every entry with the plan slug** — `` `[cart-totals]` T3 totals rounding — … `` — so separate pieces of work interleave readably in one root-level file and a resumed session can filter to its own. `/bugfix` uses its fix slug: `` `[null-cart]` ``.
 - **Tie each `Done` item to the sensor that proves it** — the test that was falsified (and the break that made it fail), the gate that passed.
 
-## Lessons — the section that outlives the delivery
+## Lessons — the section that outlives the work
 
-`Done` / `Failed` / `Current State` / `Next` describe *this* delivery and go stale with it.
+`Done` / `Failed` / `Current State` / `Next` describe *this* piece of work and go stale with it.
 `Lessons` is the only section meant to survive it: a rule that would have prevented a failure,
 written so a future session can apply it without re-deriving it. It is the cheapest cross-session
 memory the harness has — one line, read back automatically by the SessionStart hook — which is

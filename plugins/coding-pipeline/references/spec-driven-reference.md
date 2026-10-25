@@ -10,7 +10,7 @@ Presence signal: `api-spec.yaml` exists in project root.
 
 **Spec is the source of truth. Code follows spec — not the other way around.**
 
-- Spec written by Winston (Architect) BEFORE Amelia writes a single line
+- Spec written by the plan author BEFORE the coder writes a single line
 - Implementation must satisfy spec exactly: schemas, status codes, auth, error shapes
 - Spec changes require updating `api-spec.yaml` first → then update code
 - Annotations (swag, Springdoc, JSDoc) are verification that code matches spec — they do not define the spec
@@ -21,11 +21,11 @@ Presence signal: `api-spec.yaml` exists in project root.
 ## Workflow
 
 ```
-Architect (Winston)
+Plan author
   └─ api-spec.yaml written (OpenAPI 3.1) — ALL endpoints, schemas, errors, auth
        ↓
-Scrum Master (Bob)
-  └─ story references operationId(s) from spec
+Plan (Tasks table)
+  └─ task references operationId(s) from spec
        ↓
 Coder — Backend (producer)
   └─ Phase 0 reads api-spec.yaml → implements to spec exactly; annotations match spec (not vice versa)
@@ -37,7 +37,7 @@ Coder — Frontend (consumer)
      each by returning a different status or a missing field
   └─ the api-spec is the shared contract between the two coders — neither invents shapes
        ↓
-QA (Quinn)
+qa
   └─ Audits the contract tests exist per operationId AND carry falsification evidence (else QA→CODER TEST GAP)
   └─ Spectral lint: spec quality gate · Schema validation: response shapes match spec
        ↓
@@ -49,7 +49,7 @@ Reviewer
 
 ## api-spec.yaml format (OpenAPI 3.1)
 
-Minimal complete template — Winston fills every field:
+Minimal complete template — the plan author fills every field:
 
 ```yaml
 openapi: "3.1.0"
@@ -160,7 +160,7 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 ```
 
-**Rules for Winston:**
+**Rules for the plan author:**
 - Every endpoint gets an `operationId` (camelCase verb+noun: `createResource`, `getCart`, `deleteSession`)
 - Every `4xx`/`5xx` response typed — never bare `description: Error`
 - All request/response schemas under `components/schemas` — never inline in path
@@ -291,7 +291,7 @@ Run `rtk swag init ./...` — must compile zero errors. Stale annotation = MAJOR
 | Symptom | Root cause | Fix |
 |---------|-----------|-----|
 | Spectral finds missing operationId | Annotation incomplete | Update annotation to match spec |
-| Response field in code not in spec schema | Implementation drift | Either add field to spec first (Architect approval) or remove from code |
+| Response field in code not in spec schema | Implementation drift | Either add field to spec first (plan-author approval) or remove from code |
 | Status code in code not in spec | Missing error path in spec | Add to spec first, then implement |
 | Annotation references a type not in spec components | Code-first drift | Add schema to spec; update annotation to use $ref |
 | `schemathesis` fails on a valid request | Implementation doesn't honour schema | Fix handler validation logic |
