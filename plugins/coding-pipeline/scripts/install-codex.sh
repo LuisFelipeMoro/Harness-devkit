@@ -14,7 +14,7 @@
 # reference-only directory so their persona/procedure content is readable,
 # NOT wired into Codex's own [agents] config. See
 # plugins/coding-pipeline/codex/harness-adapter.md for the current mapping and known
-# gaps (multi-agent pipeline skills are not yet validated under Codex). This
+# gaps (skill sequencing is not yet validated under Codex). This
 # codex/ directory is a dedicated namespace that install-global.sh's glob
 # patterns (*/agents, */skills/*/, */references, */hooks) never match — Codex
 # artifacts never land in ~/.claude/, by directory-structure construction.
@@ -85,8 +85,8 @@ else
 fi
 echo ""
 echo "Notes:"
-echo "  - Pipeline skills (multi-agent, task, bug-fix,"
-echo "    analysis, planning, architecture, rote-adapter) dispatch agents by name;"
+echo "  - Skills that dispatch agents (planning, code, validate-code, review-code, bugfix,"
+echo "    rote-adapter) dispatch them by name;"
 echo "    run scripts/generate-codex-agents.sh to generate a real Codex subagent"
 echo "    (~/.codex/agents/<name>.toml) per persona at the right reasoning effort —"
 echo "    see plugins/coding-pipeline/codex/harness-adapter.md for what's still unvalidated"

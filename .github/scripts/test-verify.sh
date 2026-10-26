@@ -104,16 +104,43 @@ check "verdict: all lenses over floor is PRODUCTION READY" 0 "$rc"
 bash "$V/verdict.sh" --review 1.2.3 --stress 9 --qa 9 >/dev/null 2>&1; rc=$?
 check "verdict: malformed score is a usage error, not a traceback" 2 "$rc"
 
-# ── execution-options checkpoint and roster validation ─────────────────────────
-# Test 1: bench-context.py rejects unrecognized roster values (capital Standard, unknown huge)
-cat > "$W/manifest-bad-roster.md" <<'MANIFEST'
-| Test | Input | Expected | Roster |
-|---|---|---|---|
-| test1 | a | b | Standard |
-| test2 | c | d | huge |
-MANIFEST
-out=$(python3 "$ROOT/plugins/coding-pipeline/scripts/bench-context.py" --manifest "$W/manifest-bad-roster.md" 2>&1); rc=$?
-check "bench: unrecognized roster value is an error" 2 "$rc" "$out" "unrecognized roster"
+# ── verdict.sh --no-review: /validate-code's verdict stands without a review score ──
+# /review-pr is a separate skill with its own pass/block, so the code verdict renormalises
+# Stress and QA instead of waiting for — or inventing — a reviewer score.
+out=$(bash "$V/verdict.sh" --no-review --stress 9 --qa 9 2>&1); rc=$?
+check "verdict: no-review with qa and stress over floor is PRODUCTION READY" 0 "$rc" "$out" "Overall Score: 9.00/10"
+out=$(bash "$V/verdict.sh" --no-review --stress 10 --qa 6 2>&1); rc=$?
+check "verdict: no-review renormalises stress 35 and qa 30 over 65" 0 "$rc" "$out" "Overall Score: 8.15/10"
+out=$(bash "$V/verdict.sh" --no-review --stress 6.9 --qa 10 2>&1); rc=$?
+check "verdict: no-review keeps the stress floor" 1 "$rc" "$out" "below story floor"
+out=$(bash "$V/verdict.sh" --no-review --stress 9 --qa 9 --hard-gate-fail lint 2>&1); rc=$?
+check "verdict: no-review hard gate fail is NOT READY" 1 "$rc" "$out" "hard gate FAIL: lint"
+bash "$V/verdict.sh" --no-review --review 9 --stress 9 --qa 9 >/dev/null 2>&1; rc=$?
+check "verdict: no-review rejects a review score" 2 "$rc"
+bash "$V/verdict.sh" --no-review --stress 9 >/dev/null 2>&1; rc=$?
+check "verdict: no-review without qa is usage" 2 "$rc"
+bash "$V/verdict.sh" --no-review --qa 9 >/dev/null 2>&1; rc=$?
+check "verdict: no-review without stress or --no-stress is usage" 2 "$rc"
+
+# ── verdict.sh --no-review --no-stress: /validate-code at light depth ──────────
+# classify-diff found no Stress trigger in a ≤ 2-file change, so stress is not
+# dispatched; the score is QA alone (30 renormalised over 30), never a stress score
+# nobody produced, and the stress floor has no lens to apply to.
+out=$(bash "$V/verdict.sh" --no-review --no-stress --qa 9 2>&1); rc=$?
+check "verdict: no-stress scores qa alone" 0 "$rc" "$out" "Overall Score: 9.00/10"
+check "verdict: no-stress says which lenses are absent" 0 "$rc" "$out" "no review or stress lens"
+out=$(bash "$V/verdict.sh" --no-review --no-stress --qa 7.5 2>&1); rc=$?
+check "verdict: no-stress below 8 is READY WITH CONDITIONS" 1 "$rc" "$out" "Overall Score: 7.50/10"
+out=$(bash "$V/verdict.sh" --no-review --no-stress --qa 9 --hard-gate-fail lint 2>&1); rc=$?
+check "verdict: no-stress hard gate fail is NOT READY" 1 "$rc" "$out" "hard gate FAIL: lint"
+out=$(bash "$V/verdict.sh" --no-review --no-stress --qa 9 --critical-security 1 2>&1); rc=$?
+check "verdict: no-stress unmitigated CRITICAL security is NOT READY" 1 "$rc" "$out" "VERDICT: NOT READY"
+bash "$V/verdict.sh" --no-review --no-stress --stress 9 --qa 9 >/dev/null 2>&1; rc=$?
+check "verdict: no-stress rejects a stress score" 2 "$rc"
+bash "$V/verdict.sh" --no-stress --roster light --classify-exit 0 --review 8 --stress 8 >/dev/null 2>&1; rc=$?
+check "verdict: no-stress without no-review is usage, never silently ignored" 2 "$rc"
+bash "$V/verdict.sh" --no-review --no-stress >/dev/null 2>&1; rc=$?
+check "verdict: no-stress without qa is usage" 2 "$rc"
 
 # Test 2: verdict roster path hides score on hard-gate fail like legacy
 out=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 9 --stress 9 --qa 9 --hard-gate-fail lint 2>&1); rc=$?
@@ -850,12 +877,10 @@ out=$(bash "$stubV/classify-diff.sh" --diff release/x-abc --declared light 2>&1)
 check "classify: security-scan unmeasured propagates" 2 "$rc" "$out" "stubbed failure for classify-diff test"
 cd - >/dev/null || exit
 # ══════════════════════════════════════════════════════════════════════════
-# verdict.sh roster and bench-context.py checks.
+# verdict.sh roster checks.
 # Keep this section contiguous — a second, separate batch appends
 # classify-diff rows and a merge should not have to interleave the two.
 # ══════════════════════════════════════════════════════════════════════════
-
-BENCH="$ROOT/plugins/coding-pipeline/scripts/bench-context.py"
 
 # ── verdict.sh --roster / --classify-exit (D2) ─────────────────────────
 # TV-V0a/b/c and the "no roster label" row are Preserve rows already covered
@@ -902,179 +927,6 @@ legacy_score=$(bash "$V/verdict.sh" --review 8 --stress 7.5 --qa 8.5 2>&1 | grep
 standard_score=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 8 --stress 7.5 --qa 8.5 2>&1 | grep -o "Overall Score: [0-9.]*")
 [ -n "$legacy_score" ] && [ "$legacy_score" = "$standard_score" ] && rc=0 || rc=1
 check "verdict: standard formula equals legacy" 0 "$rc"
-
-# ── bench-context.py roster model (PROFILES uniform/mixed, --mix) ──────
-
-out=$(python3 "$BENCH" --json 2>&1); rc=$?
-check "bench: uniform 5-story delivery is 20 dispatches" 0 "$rc" "$out" '"delivery_dispatches": 20'
-
-check "bench: mixed profile is 18 dispatches" 0 "$rc" "$out" '"dispatches": 18'
-
-out2=$(python3 "$BENCH" --mix full=1 --json 2>&1)
-rc2json=$(printf '%s' "$out2" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(0 if d['profiles']['mixed']['dispatches'] == 9 else 1)
-")
-check "bench: full story adds a stress dispatch" 0 "$rc2json"
-
-rc3=$(printf '%s' "$out" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-root = '$ROOT/plugins/coding-pipeline'
-files = ['agents/reviewer.md', 'references/change-discipline.md', 'references/languages/go.md']
-base = sum(int(len(open(root + '/' + f, encoding='utf-8').read()) / 3.6) for f in files)
-p = d['paths']['story: reviewer']
-ok = p['per_load'] > base and 'story: reviewer' not in d.get('missing', [])
-print(0 if ok else 1)
-")
-check "bench: reviewer path loads stress.md" 0 "$rc3"
-
-baseline_dir="$W/baseline-c342347"
-mkdir -p "$baseline_dir"
-git -C "$ROOT" archive c342347 plugins | tar -x -C "$baseline_dir"
-python3 "$baseline_dir/plugins/coding-pipeline/scripts/bench-context.py" \
-    --root "$baseline_dir/plugins/coding-pipeline" --json > "$W/bench-before.json"
-out=$(python3 "$BENCH" --baseline "$W/bench-before.json" 2>&1); rc=$?
-check "bench: baseline JSON from c342347 still loads" 0 "$rc" "$out" "| 40 | 20 | -20 |"
-
-out=$(python3 "$BENCH" --mix 'light=x' --json 2>&1); rc=$?
-check "bench: malformed mix" 2 "$rc"
-
-# ── execution-options checkpoint (bench-context.py --manifest) ──────────────
-# The `contract: planning offers execution options` row (validate-wiring §7)
-# is a separate batch's responsibility — not added here.
-
-manifest_fixture="$W/manifest.md"
-cat > "$manifest_fixture" <<'MD'
-| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
-|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
-| ST-A: does X | R1 | — | none | ~10 lines | Bash | Backend | light |
-| ST-B: does Y | R2 | SEC-1 | none | ~10 lines | Bash | Backend | full |
-| ST-C: does Z | R3 | — | none | ~10 lines | Bash | Backend | standard |
-MD
-
-out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
-check "bench: manifest options listed" 0 "$rc" "$out" "as planned"
-case "$out" in *"all standard"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'all standard'"; fail=1 ;; esac
-case "$out" in *"legacy full loop"*) pass=$((pass + 1)) ;; *) echo "FAIL: bench: manifest options listed — missing 'legacy full loop'"; fail=1 ;; esac
-
-# test with custom fixture COST where qa has n=0 (unsampled)
-out=$(python3 -c "
-import sys
-sys.dont_write_bytecode = True
-import importlib.util
-spec = importlib.util.spec_from_file_location('bench', '$BENCH')
-bench = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bench)
-
-# Create fixture COST with qa at n=0 (unsampled) and others sampled
-fixture_cost = {
-    'map': (77000, 1),
-    'architect': (184000, 1),
-    'plan-reviewer': (165000, 1),
-    'reviewer': (106000, 9),
-    'coder': (137000, 9),
-    'qa': (99000, 0),  # unsampled
-    'stress': (85000, 3),
-    'scrum-master': (40000, 0),
-    'verdict': (20000, 0),
-    'pr-review': (90000, 0),
-    'devops': (60000, 0),
-}
-
-# Parse manifest and render with fixture COST
-rosters = bench.parse_manifest_rosters('$manifest_fixture')
-options = bench.compute_options(rosters, cost=fixture_cost)
-output = bench.render_manifest(rosters, options, cost=fixture_cost)
-print(output)
-" 2>&1); rc=$?
-check "bench: unsampled cost says assumed — fixture COST provided" 0 "$rc" "$out" "assumed"
-qa_line=$(printf '%s' "$out" | grep '| qa ' || true)
-case "$qa_line" in *measured*) echo "FAIL: bench: unsampled cost says assumed — qa row says measured instead of assumed"; fail=1 ;; *) pass=$((pass + 1)) ;; esac
-
-json_out=$(python3 "$BENCH" --manifest "$manifest_fixture" --json 2>&1); rc=$?
-rc_planned=$(printf '%s' "$json_out" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(0 if d['options']['as planned']['dispatches'] == 14 else 1)
-")
-check "bench: as-planned dispatches follow rosters" 0 "$rc_planned"
-
-rc_legacy=$(printf '%s' "$json_out" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(0 if d['options']['legacy full loop']['dispatches'] == 26 else 1)
-")
-check "bench: legacy option counts 7 per row" 0 "$rc_legacy"
-
-manifest_noroster="$W/manifest-noroster.md"
-cat > "$manifest_noroster" <<'MD'
-| Sub-Task | Tier |
-|----------|------|
-| ST-A: does X | Backend |
-MD
-out=$(python3 "$BENCH" --manifest "$manifest_noroster" 2>&1); rc=$?
-check "bench: manifest without Roster column" 2 "$rc" "$out" "no Roster column"
-
-# ── test_bench_main_session_row: 4 stories × 45 calls × 170k = 30,600,000 ───
-main_fixture="$W/manifest-4row.md"
-cat > "$main_fixture" <<'MD'
-| Sub-Task | Stories/ACs | Security ACs | Key Constraints | Projected diff | Language | Tier | Roster |
-|----------|-------------|--------------|-----------------|----------------|----------|------|--------|
-| ST-A: does X | R1 | — | none | ~10 lines | Bash | Backend | light |
-| ST-B: does Y | R2 | — | none | ~10 lines | Bash | Backend | full |
-| ST-C: does Z | R3 | — | none | ~10 lines | Bash | Backend | standard |
-| ST-D: does W | R4 | — | none | ~10 lines | Bash | Backend | cosmetic |
-MD
-out=$(python3 "$BENCH" --manifest "$main_fixture" 2>&1); rc=$?
-main_row=$(printf '%s' "$out" | grep '^| Main session' || true)
-case "$main_row" in *"30,600,000"*"measured (n=1)"*) main_ok=0 ;; *) main_ok=1 ;; esac
-check "test_bench_main_session_row" 0 "$rc" "$out" "Main session"
-check "test_bench_main_session_row" 0 "$main_ok"
-json_main=$(python3 "$BENCH" --manifest "$main_fixture" --json 2>&1); rc=$?
-orch_tokens=$(printf '%s' "$json_main" | python3 -c "
-import json, sys
-print(json.load(sys.stdin)['orchestrator']['tokens'])
-" 2>/dev/null || echo missing)
-[ "$rc" = 0 ] && [ "$orch_tokens" = 30600000 ] && orch_ok=0 || orch_ok=1
-check "test_bench_main_session_row" 0 "$orch_ok"
-
-# ══════════════════════════════════════════════════════════════════════════
-# bench-context.py REWORK and tautology-scan.py TEST_FILE checks — synthetic
-# fixtures only, no reference to any one delivery's own numbers or file names.
-# ══════════════════════════════════════════════════════════════════════════
-
-# ── bench-context.py --manifest shows a with-rework range ───────────────────
-out=$(python3 "$BENCH" --manifest "$manifest_fixture" 2>&1); rc=$?
-check "bench: manifest shows with-rework range" 0 "$rc" "$out" "with rework"
-with_rework_lines=$(printf '%s' "$out" | grep -c "with rework" || true)
-[ "$with_rework_lines" -ge 3 ] && pass=$((pass + 1)) \
-    || { echo "FAIL: bench: manifest shows with-rework range — expected 3 option rows, got $with_rework_lines"; fail=1; }
-
-out=$(python3 -c "
-import sys
-sys.dont_write_bytecode = True
-import importlib.util
-spec = importlib.util.spec_from_file_location('bench', '$BENCH')
-bench = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bench)
-
-# Fixture REWORK with 'light' unsampled (n=0) — everything else sampled.
-fixture_rework = {
-    'full': (1.5, 3),
-    'standard': (1.3, 1),
-    'light': (1.2, 0),   # unsampled
-    'cosmetic': (1.0, 2),
-}
-rosters = bench.parse_manifest_rosters('$manifest_fixture')
-options = bench.compute_options(rosters, rework=fixture_rework)
-print(bench.render_manifest(rosters, options, rework=fixture_rework))
-" 2>&1); rc=$?
-check "bench: rework factor labelled measured or assumed — fixture REWORK provided" 0 "$rc" "$out" "assumed"
-light_line=$(printf '%s' "$out" | grep '| light ' || true)
-case "$light_line" in *measured*) echo "FAIL: bench: rework factor labelled measured or assumed — light row says measured instead of assumed"; fail=1 ;;
-    *) pass=$((pass + 1)) ;; esac
 
 # ── tautology-scan.py TEST_FILE — bats, hyphenated test-*.sh, tests/ dir ────
 mkdir -p "$W/g5-shapes/tests"
@@ -1742,41 +1594,204 @@ else
     fi
 fi
 
-# ── delivery-state.sh: the orchestrator's only resume read and status write ──
-DS="$ROOT/plugins/coding-pipeline/scripts/delivery-state.sh"
-dsdir="$W/ds"
-mkdir -p "$dsdir/docs/deliveries" && cd "$dsdir" || exit
+# ── estimate-run.py: /code run options from the plan's Tasks table ──────────
+# The user picks a run mode from these numbers, so a mis-parsed table or a
+# parallel-safety call that misses a shared file is a wrong choice made on
+# the script's word. A table it cannot read must say so (exit 2), never print
+# an estimate for zero rows.
+ER="$ROOT/plugins/coding-pipeline/scripts/estimate-run.py"
+cat > "$W/est-plan.md" <<'MD'
+## Tasks
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a/money.go`, `a/money_test.go` | TestA, TestB | Go 1.26 | Backend | — |
+| T2 | coupon | `b/coupon.go` | TestC | Go 1.26 | Backend | — |
+| T3 | totals | `c/totals.go` | TestD | Go 1.26 | Backend | T1, T2 |
+| T4 | docs | `b/coupon.go`, `docs/x.md` | TestE | Go 1.26 | Backend | — |
+MD
+out=$(python3 "$ER" --plan "$W/est-plan.md" 2>&1); rc=$?
+check "estimate-run: parses the Tasks table" 0 "$rc" "$out" "4 rows · 5 files · 5 test rows"
+check "estimate-run: lists the independent disjoint rows as parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T2"
+check "estimate-run: a row with a dependency is not parallel-safe" 0 "$rc" "$out" "T3 — depends on T1, T2"
+check "estimate-run: a row sharing a file is not parallel-safe" 0 "$rc" "$out" "T4 — shares b/coupon.go with T2"
+inline_row=$(printf '%s\n' "$out" | grep '^| Inline' || true)
+seq_row=$(printf '%s\n' "$out" | grep '^| Sequential coders' || true)
+check "estimate-run: a mode with no measured constant is labelled assumed" 0 "$rc" "$inline_row" "| assumed |"
+check "estimate-run: a mode mixing measured and assumed constants is partly measured" 0 "$rc" "$seq_row" "| partly measured |"
+# 4 rows × (coder 137k measured + main 5k) = 568k, spread by the measured coder range 59k–215k.
+check "estimate-run: sequential range comes from the measured coder dispatch" 0 "$rc" "$seq_row" "245k–891k"
+check "estimate-run: fix rounds carry the measured rework factors" 0 "$rc" "$out" "full ×1.5 measured (n=3)"
+check "estimate-run: names the downstream validation cost by depth" 0 "$rc" "$out" "/validate-code — light: qa 99k · standard/full: qa + stress 184k"
+# The label rule itself: measured only when every constant a mode uses is measured.
+out=$(python3 - "$ER" "$W/est-plan.md" <<'PY' 2>&1
+import importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("er", sys.argv[1])
+er = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(er)
+er.MAIN_PER_ROW = er.Const(5_000, 2)
+er.main(["--plan", sys.argv[2]])
+print("BASIS-ALL-ASSUMED:", er.basis([er.Const(1, 0), er.Const(2, 0)]))
+print("BASIS-ALL-MEASURED:", er.basis([er.Const(1, 1), er.Const(2, 4)]))
+PY
+); rc=$?
+seq_row=$(printf '%s\n' "$out" | grep '^| Sequential coders' || true)
+check "estimate-run: a mode whose every constant is measured is labelled measured" 0 "$rc" "$seq_row" "| measured |"
+check "estimate-run: basis of all-assumed constants is assumed" 0 "$rc" "$out" "BASIS-ALL-ASSUMED: assumed"
+check "estimate-run: basis of all-measured constants is measured" 0 "$rc" "$out" "BASIS-ALL-MEASURED: measured"
+cat > "$W/est-bad.md" <<'MD'
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a.go` | TestA | Go |
+MD
+out=$(python3 "$ER" --plan "$W/est-bad.md" 2>&1); rc=$?
+check "estimate-run: malformed Tasks row is UNMEASURED" 2 "$rc" "$out" "malformed Tasks row"
+printf '# Plan\nno tasks here\n' > "$W/est-none.md"
+out=$(python3 "$ER" --plan "$W/est-none.md" 2>&1); rc=$?
+check "estimate-run: plan without a Tasks table is UNMEASURED" 2 "$rc" "$out" "no Tasks table"
+cat > "$W/est-dep.md" <<'MD'
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a.go` | TestA | Go | Backend | T9 |
+MD
+out=$(python3 "$ER" --plan "$W/est-dep.md" 2>&1); rc=$?
+check "estimate-run: unknown dependency is UNMEASURED" 2 "$rc" "$out" "unknown task 'T9'"
+# Two coders on a directory and a file inside it, or on a glob and a file it matches, edit the
+# same file in parallel; an exact string compare of the Files cells calls them disjoint.
+cat > "$W/est-overlap.md" <<'MD'
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | pkg | `src/` | TestA | Go | Backend | — |
+| T2 | file | `./src/a.go` | TestB | Go | Backend | — |
+| T3 | glob | `lib/*.go` | TestC | Go | Backend | — |
+| T4 | inglob | `lib/b.go` | TestD | Go | Backend | — |
+| T5 | sibling | `srcx/c.go` | TestE | Go | Backend | — |
+| T6 | dirnoslash | `docs` | TestF | Go | Backend | — |
+| T7 | indir | `docs/x.md` | TestG | Go | Backend | — |
+| T8 | filefirst | `pkg/x.go` | TestH | Go | Backend | — |
+| T9 | dirlater | `pkg/` | TestI | Go | Backend | — |
+MD
+out=$(python3 "$ER" --plan "$W/est-overlap.md" 2>&1); rc=$?
+check "estimate-run: a file inside a claimed directory clashes (./ and trailing slash normalised)" 0 "$rc" "$out" "T2 — shares ./src/a.go with T1"
+check "estimate-run: a file matched by a claimed glob clashes" 0 "$rc" "$out" "T4 — shares lib/b.go with T3"
+check "estimate-run: a directory without trailing slash still contains its files" 0 "$rc" "$out" "T7 — shares docs/x.md with T6"
+check "estimate-run: a directory claimed after a file inside it clashes" 0 "$rc" "$out" "T9 — shares pkg/ with T8"
+check "estimate-run: a name-prefix sibling (src/ vs srcx/) stays parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T3, T5, T6, T8"
+
+# ── estimate-run.py --guides: guide token cost, measured from the files ──────
+# The devkit's guide-cost measurement. A fixture tree with files of a
+# known size pins the arithmetic (360 chars = 100 tokens at 3.6 chars/token); the
+# real tree pins the dispatch graph to files that exist, so a renamed agent or
+# reference fails here instead of being counted as zero.
+gr="$W/guides/plugins/coding-pipeline"
+mk_guide() { mkdir -p "$(dirname "$1")"; python3 -c "import sys; open(sys.argv[1],'w').write('x' * int(sys.argv[2]))" "$1" "$2"; }
+for f in CLAUDE.md agents/coder.md agents/coder-backend.md agents/qa.md agents/stress.md agents/reviewer.md \
+         agents/plan-reviewer.md agents/bug-investigator.md references/languages/go.md \
+         skills/map/references/map-procedure.md skills/planning/SKILL.md skills/code/SKILL.md \
+         skills/validate-code/SKILL.md skills/bugfix/SKILL.md; do mk_guide "$gr/$f" 360; done
+mk_guide "$W/guides/plugins/pr-workflow/skills/review-code/SKILL.md" 360
+out=$(python3 "$ER" --guides --root "$gr" 2>&1); rc=$?
+check "estimate-run --guides: always-on CLAUDE.md is counted per session" 0 "$rc" "$out" "| CLAUDE.md (every session) | 100 |"
+check "estimate-run --guides: a skill's total is its SKILL.md plus each dispatch's guides" 0 "$rc" "$out" "| /validate-code (full depth) | 100 | 2 | 200 | 300 |"
+check "estimate-run --guides: a dispatch's guides sum every file it loads" 0 "$rc" "$out" "| coder (core + backend overlay + one language file) | 300 |"
+python3 "$ER" --guides --root "$gr" --json > "$W/guides-before.json" 2>&1
+mk_guide "$gr/CLAUDE.md" 720
+out=$(python3 "$ER" --guides --root "$gr" --baseline "$W/guides-before.json" 2>&1); rc=$?
+check "estimate-run --guides: baseline delta is printed" 0 "$rc" "$out" "| always-on / session | 100 | 200 | +100 |"
+rm -f "$gr/agents/qa.md"
+out=$(python3 "$ER" --guides --root "$gr" 2>&1); rc=$?
+check "estimate-run --guides: a missing guide is UNMEASURED, never counted as zero" 2 "$rc" "$out" "agents/qa.md"
+# Flat install: ~/.claude/devkit holds CLAUDE.md; agents, references and skills sit one level up.
+fl="$W/flat/.claude"
+mk_guide "$fl/devkit/CLAUDE.md" 360
+for f in agents/coder.md agents/coder-backend.md agents/qa.md agents/stress.md agents/reviewer.md \
+         agents/plan-reviewer.md agents/bug-investigator.md references/languages/go.md \
+         skills/map/references/map-procedure.md skills/planning/SKILL.md skills/code/SKILL.md \
+         skills/validate-code/SKILL.md skills/bugfix/SKILL.md skills/review-code/SKILL.md; do mk_guide "$fl/$f" 360; done
+out=$(python3 "$ER" --guides --root "$fl/devkit" 2>&1); rc=$?
+check "estimate-run --guides: resolves a flat install's layout" 0 "$rc" "$out" "| /review-code | 100 | 1 | 200 | 300 |"
+out=$(python3 "$ER" --guides 2>&1); rc=$?
+check "estimate-run --guides: every guide in the real dispatch graph exists" 0 "$rc" "$out" "| CLAUDE.md (every session) |"
+
+# ── harness-metrics.py: the five Harness health signals, counted where they can be ──
+# A diagnostic a human reads quarterly, never a gate. What matters here is that a count
+# is a count of the reference's own definition, and that a signal the artifacts cannot
+# answer says "needs judgement" instead of printing a number nobody measured.
+HM="$ROOT/plugins/coding-pipeline/scripts/harness-metrics.py"
+hm="$W/hm-repo"
+mkdir -p "$hm" && cd "$hm" || exit
+g() { git -c user.email=t@t -c user.name=t "$@"; }
 git init -q -b main
-git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
-git branch release/demo-abc123
-git branch feat/abc123-s1 release/demo-abc123
-git -c user.email=t@t -c user.name=t checkout -q -b feat/abc123-s2 release/demo-abc123
-git -c user.email=t@t -c user.name=t commit -q --allow-empty -m s2
+mkdir -p src docs/plans/cart
+printf 'package a\n' > src/a.go
+cat > docs/plans/cart/plan.md <<'MD'
+# Plan — cart
+## Requirements & ACs
+- AC1 — total is the sum of line prices
+- AC2 — an empty cart totals zero
+## Test Case table
+| Test Name | Input / Precondition | Expected Observable Result | AC | Why It Matters | Falsified By |
+|---|---|---|---|---|---|
+| `TestTotalSums` | two lines | 3 | AC1 | money | drop the add |
+| `TestEmptyIsZero` | no lines | 0 | AC2 | money | return 1 |
+## Review log
+- round 1: 8/10
+MD
+g add -A && g commit -q -m "chore: plan"
+hm_base=$(git rev-parse HEAD)
+git checkout -q -b feat/cart
+sed -i.bak 's/^- AC2 — an empty cart totals zero/- AC2 — an empty cart totals 0/' docs/plans/cart/plan.md && rm -f docs/plans/cart/plan.md.bak
+g commit -q -am "docs: AC2 wording before any code"
+printf 'package a\nfunc A() {}\n' > src/a.go; printf 'package a\n' > src/b.go
+g add -A && g commit -q -m "feat(cart): totals"
+printf 'package a\nfunc B() {}\n' > src/b.go
+g commit -q -am "fix(cart): b on the branch"
+sed -i.bak 's/^- AC1 — total is the sum of line prices/- AC1 — total is the sum of line prices, rounded half-even/' docs/plans/cart/plan.md && rm -f docs/plans/cart/plan.md.bak
+g commit -q -am "docs: AC1 changed after code"
+printf -- '- round 2: 9/10\n' >> docs/plans/cart/plan.md
+g commit -q -am "docs: review log only"
+cat > docs/plans/cart/evidence.md <<'MD'
+## T1
+TestTotalSums ← broke src/a.go:2 → FAILED: expected 3 got 2 → restored → GREEN
+Gap found: rounding mode was not in the table
+Gap found: none
+MD
+g add -A && g commit -q -m "docs: evidence"
 git checkout -q main
-printf '# Delivery\n\n| Field | Value |\n|---|---|\n| Status | Planning (approved 2026-10-16) |\n| Created | 2026-10-17 |\n' \
-    > docs/deliveries/delivery-demo-abc123.md
-ds_before=$(cat docs/deliveries/delivery-demo-abc123.md)
-
-out=$(bash "$DS" --key abc123 2>&1); rc=$?
-case "$out" in *"| Status | Planning"*"path: "*"delivery-demo-abc123.md"*) ds_show=0 ;; *) ds_show=1 ;; esac
-case "$out" in *"merged into release/demo-abc123: feat/abc123-s1"*) ds_merged=0 ;; *) ds_merged=1 ;; esac
-[ "$rc" = 0 ] && [ "$ds_show" = 0 ] && ds_first=0 || ds_first=1
-check "test_delivery_state" 0 "$ds_first"
-check "test_delivery_state" 0 "$ds_merged"
-[ "$(printf '%s\n' "$out" | wc -l)" -le 20 ] && ds_cap=0 || ds_cap=1
-check "test_delivery_state" 0 "$ds_cap"
-
-bash "$DS" --key abc123 --set "In Progress" >/dev/null 2>&1; rc=$?
-ds_changed=$(diff <(printf '%s\n' "$ds_before") docs/deliveries/delivery-demo-abc123.md | grep -c '^[<>]')
-ds_row=$(grep -c '^| Status | In Progress |$' docs/deliveries/delivery-demo-abc123.md)
-[ "$rc" = 0 ] && [ "$ds_changed" = 2 ] && [ "$ds_row" = 1 ] && ds_set=0 || ds_set=1
-check "test_delivery_state" 0 "$ds_set"
-
-ds_mid=$(cat docs/deliveries/delivery-demo-abc123.md)
-bash "$DS" --key abc123 --set Bogus >/dev/null 2>&1; rc=$?
-[ "$rc" = 1 ] && [ "$(cat docs/deliveries/delivery-demo-abc123.md)" = "$ds_mid" ] && ds_bogus=0 || ds_bogus=1
-check "test_delivery_state" 0 "$ds_bogus"
-cd "$ROOT" || exit
+g merge -q --no-ff -m "Merge branch 'feat/cart'" feat/cart
+printf 'package a\nfunc A() { _ = 1 }\n' > src/a.go
+g commit -q -am "fix(cart): total after the merge"
+printf 'x\n' > other.txt; g add other.txt; g commit -q -m "fix: unrelated file"
+printf 'tmp\n' > tmp.txt; g add tmp.txt; g commit -q -m "chore: tmp"
+g revert --no-edit HEAD >/dev/null
+cat > PROGRESS.md <<'MD'
+# PROGRESS
+## Done
+- [cart] T1 — CI green
+## Failed
+- [cart] pre-push coverage gate failed at 80%
+- [cart] unit test flaked locally
+- [cart] CI lint job failed on unused import
+## Next
+- [cart] nothing
+MD
+out=$(python3 "$HM" --base "$hm_base" 2>&1); rc=$?
+check "harness-metrics: rework counts files touched by 2+ commits" 0 "$rc" "$out" "4 file(s) touched by 2+ commits"
+check "harness-metrics: rework counts fix commits that touch a merged feature's files" 0 "$rc" "$out" "1 fix commit(s) after a feature merge"
+check "harness-metrics: rework counts reverts" 0 "$rc" "$out" "1 revert(s)"
+check "harness-metrics: question timing counts only AC edits after code started" 0 "$rc" "$out" "1 AC edit(s) after code started"
+check "harness-metrics: question timing counts Gap found lines that are not none" 0 "$rc" "$out" "1 Gap found"
+check "harness-metrics: sensor escape counts Failed entries caught at pre-push or CI" 0 "$rc" "$out" "2 of 3 Failed entries"
+check "harness-metrics: test honesty counts rows without valid falsification evidence" 0 "$rc" "$out" "1 of 2 Test Case rows"
+check "harness-metrics: scope creep is judgement, not a guessed number" 0 "$rc" "$out" "| Scope creep | n/a — needs judgement:"
+check "harness-metrics: says it is a diagnostic, never a gate" 0 "$rc" "$out" "diagnostics, never gates"
+rm -f PROGRESS.md
+out=$(python3 "$HM" --base "$hm_base" 2>&1); rc=$?
+check "harness-metrics: no PROGRESS.md leaves sensor escape to judgement" 0 "$rc" "$out" "| Sensor escape | n/a — needs judgement:"
+cd - >/dev/null || exit
+mkdir -p "$W/hm-not-git"
+out=$(cd "$W/hm-not-git" && GIT_CEILING_DIRECTORIES="$W" python3 "$HM" 2>&1); rc=$?
+check "harness-metrics: outside a git repository is UNMEASURED" 2 "$rc" "$out" "not a git repository"
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"

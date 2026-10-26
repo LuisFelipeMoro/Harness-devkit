@@ -1,6 +1,7 @@
 ---
 name: database-migration
-description: Write or review a database migration safely with additive-only forward changes, a mandatory reversible down migration, zero-downtime patterns for large tables, and lock-acquisition analysis. Trigger phrases — "migration", "db migration", "schema change", "add column", "alter table", "add index", "backfill", "drop column", "rename column", "DDL".
+description: 'Write or review a safe, additive, reversible database migration with a falsified test. Usage: /database-migration [args], e.g. "/database-migration add index on orders.created_at".'
+disable-model-invocation: true
 ---
 
 A migration must be additive-only in one file, must ship a down migration that fully reverses the up, and must never drop-and-replace or rename a column directly. Any DDL on a table over 1M rows must carry a lock strategy.

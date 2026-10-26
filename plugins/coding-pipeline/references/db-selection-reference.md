@@ -4,7 +4,7 @@ Load this **only** when a feature introduces a new datastore, or an existing dat
 start handling a materially different use case (new access pattern, consistency requirement,
 scale target, or global distribution need). Do not load for features that just reuse an
 already-chosen datastore unchanged — this is reference material, not part of every
-Architecture Document.
+plan.
 
 **How to use**: match the feature's actual requirement — consistency vs. availability
 trade-off under partition (PACELC), data shape, and query pattern — against the table below.

@@ -1,263 +1,92 @@
-# Delivery Files, Worktrees, and Branching
+# Worktrees and Parallel Coders
 
-Every pipeline run is a **delivery**: one named unit of work with its own plan file, its own
-git worktree, and its own release branch. Nothing a delivery produces collides with the host
-repo's own documentation, and two deliveries can run against the same repo without sharing a
-single byte of state.
+The default is simple: work on the current branch, sequentially (`references/branching.md`). A
+**git worktree** is an *execution mode*, used when `/code` runs Tasks rows in parallel and the user
+chose that mode. It is never mandatory, and nothing here applies to a sequential run.
 
-## 1. Delivery identity
+## 1. When a worktree is warranted
 
-A delivery has a **slug** and a **key**.
+Parallel mode is offered only when all of these hold; otherwise `/code` offers the sequential modes:
 
-- **Slug** — the feature name, kebab-cased, max 40 chars: `Checkout Flow Rework` → `checkout-flow-rework`.
-- **Key** — first 6 hex chars of the SHA-256 of the feature name, lowercased and trimmed:
+- two or more Tasks rows have **no `Depends on`** between them, and their `Files` sets are **disjoint**;
+- at most **3 writers** run at once (the CLAUDE.md writer cap; the `Writer subagents per turn` row in `references/thresholds.md`);
+- the user picked the mode after seeing the token estimate from `scripts/estimate-run.py`. Parallel costs more
+  than sequential: each coder carries its own prompt and transcript, and merging adds a step.
+
+Two coders editing one working tree overwrite each other, so **never dispatch parallel coders into the same tree**. Read-only
+subagents (Explore, mapping) may run in parallel anywhere — they mutate nothing. Their width is the
+`Read-only subagents per turn` row in `references/thresholds.md`; they may run in the background, but a step that consumes
+their result waits for every completion notification, never a polling loop.
+
+## 2. Identity
+
+- **Slug** — the plan's slug, kebab-cased, max 40 chars (`Checkout Flow Rework` → `checkout-flow-rework`), the same slug as `docs/plans/{slug}/`.
+- **Row id** — the Tasks table ID (`T3`), lowercased.
 
 ```sh
-DELIVERY_NAME="Checkout Flow Rework"
-DELIVERY_SLUG=$(printf '%s' "$DELIVERY_NAME" | tr '[:upper:]' '[:lower:]' \
-  | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//' | cut -c1-40)
-DELIVERY_KEY=$(printf '%s' "$DELIVERY_NAME" | tr '[:upper:]' '[:lower:]' \
-  | shasum -a 256 | cut -c1-6)
+SLUG=checkout-flow-rework; ROW=t3
+WORK=$(git branch --show-current)          # the branch /code is working on (never main/master)
 ```
 
-The key is a pure function of the feature name, so re-running a pipeline for the same feature
-resolves to the same delivery — that is the point. It makes resumption idempotent: the
-orchestrator finds the existing delivery file and continues instead of forking a duplicate.
+The names are pure functions of the plan, so a re-run resolves to the same worktree and branch — resumption is idempotent.
 
-**Consequence to state out loud**: two *different* deliveries for the same feature name are
-not representable. If the human genuinely wants a second, independent pass at the same
-feature, ask them to name it differently (`Checkout Flow Rework v2`) rather than silently
-overwriting the first.
-
-## 2. The delivery file (replaces `architecture.md`)
-
-```
-docs/deliveries/delivery-{slug}-{key}.md
-```
-
-e.g. `docs/deliveries/delivery-checkout-flow-rework-a8f3c1.md`
-
-The devkit **never writes `architecture.md`**. Many repositories already keep an
-`architecture.md` describing the system as a whole; overwriting it would destroy the host
-project's own documentation, and a single fixed filename also means two concurrent deliveries
-would fight over one file. The delivery file solves both: it is namespaced by key, it lives
-under `docs/deliveries/`, and it is additive to whatever the repo already documents.
-
-If the repo has its own `architecture.md`, the Architect **reads it as context** and never
-modifies it.
-
-### Required header
-
-Every delivery file opens with this block, verbatim:
-
-```markdown
-# Delivery: {Feature Name}
-
-| Field | Value |
-|-------|-------|
-| Delivery-Key | `{key}` |
-| Slug | `{slug}` |
-| Status | Planning \| In Progress \| Blocked \| Delivered |
-| Base commit | `{git rev-parse --short HEAD at kickoff}` |
-| Release branch | `release/{slug}-{key}` |
-| Worktree | `.worktrees/dlv-{key}/` |
-| Stories | `{STORY-1 … STORY-N, or "pending decomposition"}` |
-| Created | `{YYYY-MM-DD}` |
-```
-
-The `Delivery-Key` line is the signature: it is how the orchestrator, the Scrum Master, and a
-resumed session all confirm they are looking at the same delivery. Every artifact the delivery
-produces (manifest, stories, `PROGRESS.md` entries, branch names) carries the same key.
-
-### Body
-
-The body is the architecture document as specified in `pipeline-artifacts.md` and
-`agents/architect.md` — Overview, Tech Stack, Security Architecture, Component Design, Data
-Structures, Data Flow, API Contracts, ADRs, Edge Cases, **Test Case Specification**, NFR Notes,
-Implementation Checklist. Only the filename and the header block changed; the required
-sections did not.
-
-### Companion artifacts
-
-Manifests and stories are keyed the same way, and live beside the delivery file:
-
-```
-docs/deliveries/delivery-{slug}-{key}.md
-docs/deliveries/{key}/product-brief.md
-docs/deliveries/{key}/PRD.md
-docs/deliveries/{key}/epic-manifest.md        (or task-manifest.md)
-docs/deliveries/{key}/story-{slug}.md
-```
-
-**`api-spec.yaml` is the exception — it stays at the project root.** It is the application's
-shared, cumulative API contract, not a per-delivery document: tooling (Spectral config, CI,
-codegen) expects it at a fixed path, and a delivery *extends* it rather than owning a private
-copy. Isolation still holds, because each delivery's worktree has its own checkout of the root
-file; if two deliveries touch the same endpoints, that surfaces as a merge conflict at PR time
-— exactly as it would for the code implementing them.
-
-## 3. Worktree — one per delivery
-
-```
-.worktrees/dlv-{key}/
-```
-
-The whole delivery — every story, every QA run, every gate — executes inside this worktree, on
-the delivery's release branch. The main working tree is never touched by the pipeline, so the
-human can keep working in it while a delivery runs.
-
-### Setup (orchestrator, once, at kickoff)
+## 3. Setup (once per parallel batch)
 
 ```sh
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "not a git repo"; exit 1; }
-BASE=$(git rev-parse --short HEAD)
-git worktree add -b "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
-  ".worktrees/dlv-${DELIVERY_KEY}" HEAD
+git worktree add -b "feat/${SLUG}-${ROW}" ".worktrees/${SLUG}-${ROW}" "$WORK"
 ```
 
-If the worktree already exists, the delivery is being **resumed** — do not recreate it. Read
-the delivery file's Status and `PROGRESS.md`, and continue from the first unfinished story:
+If the worktree already exists, the batch is being **resumed** — do not recreate it:
 
 ```sh
-git worktree list | grep -q "dlv-${DELIVERY_KEY}" && echo "resuming existing delivery"
+git worktree list | grep -q "${SLUG}-${ROW}" && echo "resuming existing worktree"
 ```
 
-Add `.worktrees/` to `.gitignore` if absent. Never commit the worktree directory itself.
+Add `.worktrees/` to `.gitignore` if absent. Never commit the worktree directory itself. The coder
+receives the worktree path as its working directory plus the plan path and Task ID; it runs its gates
+inside that tree.
 
-### Stories run sequentially inside it
+`api-spec.yaml` stays at the project root. It is the application's shared, cumulative API contract that tooling
+(Spectral config, CI, codegen) expects at a fixed path; each worktree has its own checkout of it, and rows that touch
+the same endpoints surface as a merge conflict at merge time, exactly as they would for the code implementing them.
+Rows that both change it do not belong in the same parallel batch.
 
-One worktree per delivery means stories **share a working tree**, so they run **one at a
-time** — story N is merged and its gates are green before story N+1 is dispatched. This is a
-deliberate trade: it gives up parallel story execution in exchange for no cross-story
-interference and no merge choreography. Two coders editing one tree concurrently would
-overwrite each other, so never dispatch parallel Coder subagents into the same worktree.
+## 4. Merge, one row at a time
 
-Read-only subagents (Explore, code mapping) may still run in parallel — they mutate nothing.
-Their width is the `Read-only subagents per turn` row in `references/thresholds.md`. They may run in
-the background, but a step that consumes their result waits for every completion notification —
-never a polling loop. Writers stay serial for the reason above: one tree, one writer at a time.
-
-### Teardown
-
-After the delivery's final Verdict and its PR to `main`:
+Rows of a batch finish in any order; they merge **serially** into the work branch, each only after its own gates are green:
 
 ```sh
-git worktree remove ".worktrees/dlv-${DELIVERY_KEY}"     # add --force only if the human agrees to discard changes
+git checkout "$WORK"
+git merge --no-ff "feat/${SLUG}-${ROW}"      # keeps the row visible as a unit in history
+```
+
+After each merge, re-run the format, lint and existing-test gates on the work branch before the next merge — a clean textual
+merge can still break behaviour. A merge conflict is not resolved by the agent: stop, report the files, and ask.
+
+## 5. Teardown
+
+```sh
+git worktree remove ".worktrees/${SLUG}-${ROW}"     # add --force only if the user agrees to discard changes
 git worktree prune
 ```
 
-Keep the release branch until the PR merges. Never delete a branch with unmerged commits
-without asking.
+Keep the row branch until the work branch is merged to the base. Never delete a branch with unmerged commits without asking.
 
-## 4. Branching — never merge to main
+## 6. Branch rules still apply
 
-The pipeline **never commits to `main` and never merges into `main`.** The furthest it goes on
-its own is opening a pull request. A human merges.
+- Never commit or merge to `main`/`master`; the work branch is `feat/{slug}` (or `fix/{slug}`), cut as in `references/branching.md`.
+- Nothing is pushed and no PR is opened unless the user asks. Ask before the first `git push` — it is the first outward-facing action.
+- Row branches are local scaffolding. When a PR is requested it is opened from the work branch, reviewed with `/review-code`.
+- Uncommitted changes you did not make are not yours: never stash, reset or revert them.
 
-Review is where defects are actually caught, so the branch layout exists to serve it: **one story,
-one branch, one PR, one review.** A single PR carrying a whole delivery cannot be reviewed — for a
-human or an agent, a diff that large gets skimmed, and the approval it produces means nothing.
-Splitting also makes the delivery legible commit by commit: what each story actually changed is
-readable on its own, instead of being reconstructed from a 3,000-line merge.
+## 7. Resuming and PROGRESS.md
 
-```
-main
-└── release/{slug}-{key}                 delivery integration branch — PR → main at the end
-    ├── feat/{key}-{story-slug}          one per story · PR → release/* · reviewed here
-    ├── feat/{key}-{story-slug}
-    └── …
-hotfix/{slug}                            single fix, cut from main · PR → main · reviewed there
-```
-
-| Branch | Created from | Purpose | Terminal step |
-|--------|--------------|---------|---------------|
-| `release/{slug}-{key}` | `main` | The delivery's integration branch. Story branches merge in; nothing is committed to it directly except merges. | PR → `main` (the delivery review) |
-| `feat/{key}-{story-slug}` | `release/{slug}-{key}` | **Default, one per story.** The unit of review. | PR → its release branch (the story review) |
-| `hotfix/{slug}` | `main` | A single fix (`/bug-fix`). No release branch, no story branches. | PR → `main` |
-
-### Review mode: `pr` vs `local` (no GitHub remote, or `gh` unavailable)
-
-Decided **once per delivery**, at the first story's branch/commit step, and recorded in the
-delivery file header note and `PROGRESS.md`: mode is `pr` iff `git remote get-url origin` exits 0
-**and** `gh auth status` exits 0 **and** the human approved the first push below; otherwise `local`.
-A delivery never switches mode partway through — that would split the review trail across a PR
-thread and a file. In `local` mode every rule below still applies; only the *how* changes: a story
-branch is still cut and merged, it is only never pushed, and the reviewing agent writes its findings
-to `docs/deliveries/{key}/review-{story-slug}.md` (or `review-release.md`) instead of posting them
-via `gh pr review`.
-
-Rules:
-
-1. **Every delivery gets a release branch**, even a one-story delivery. It is the unit the final
-   PR is opened from and the base every story branch is cut from.
-2. **Every story gets its own branch and, in `pr` mode, its own draft PR into the release branch.**
-   This is the default, not an optimisation for large stories. The story is reviewed by the
-   Reviewer agent dispatched with the story's ACs, Test Case table, Reuse Map and Blast Radius in
-   context — the tightest spec and the smallest diff, and therefore the review most likely to catch
-   something. There is no separate story-level `/pr-review` invocation: the Reviewer *is* that
-   review, posting inline on the PR (`pr` mode) or to the review file (`local` mode). Merge with
-   `--no-ff` after the Verdict passes, so the story stays visible as a unit in the release history.
-   - The one exception is a story whose roster is `cosmetic` (doc/style/copy only, no behaviour
-     change) **and** which the manifest projected under ~50 lines. Commit those straight to the
-     release branch and say so — an exception taken silently is indistinguishable from the rule not
-     being followed.
-3. **Two reviews, different jobs, neither optional.** The story review checks the change against its
-   own spec. The release PR review checks the delivery as one diff — cross-story duplication, plan
-   drift, and the Gaps block — which no story-level review can see. A finding at the release stage
-   that a story review should have caught is worth naming as such: it says the story spec was too
-   loose. The release review is always `/pr-review` in `pr` mode, or the equivalent file-based pass
-   in `local` mode — it never moves or disappears when story-level review changes.
-4. **Bug fixes bypass the release/story structure entirely.** `/bug-fix` cuts `hotfix/{slug}` from
-   `main`, commits the fix and its RED-proven regression test, and opens a PR to `main`, reviewed
-   there. No release branch, no story branches on top of one.
-5. **A PR to `main` may only be opened from a `release/*` or `hotfix/*` branch.** Never from a story
-   branch, never from a detached worktree HEAD. Story PRs target the release branch and nothing else.
-6. **Every PR opens as a draft.** Promote with `gh pr ready` only after the reviewing agent's pass
-   on it returns no findings; opening or promoting is the last automated step of its stage either
-   way. Report the URL and stop. Do not merge, do not enable auto-merge, and never push to `main`.
-   In `local` mode there is no PR to open or promote — "no findings" in the review file is the
-   equivalent gate before the merge in step F.
-
-### Commands
-
-```sh
-# story start — cut from the release branch, inside the delivery worktree
-git checkout -b "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
-  "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
-
-# story done (Verdict passed), pr mode — its own draft PR, reviewed inline by the Reviewer agent
-git push -u origin "feat/${DELIVERY_KEY}-${STORY_SLUG}"
-gh pr create --draft --base "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
-  --head "feat/${DELIVERY_KEY}-${STORY_SLUG}" \
-  --title "${STORY_SLUG}" --body "Delivery-Key: ${DELIVERY_KEY} · Story: ${STORY_SLUG} …"
-# → Reviewer posts findings via `gh pr review`; no findings → gh pr ready, then merge into the
-#   release branch once green
-git checkout "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
-git merge --no-ff "feat/${DELIVERY_KEY}-${STORY_SLUG}"
-
-# story done, local mode — no push, no PR; the Reviewer writes the same findings to a file
-# → docs/deliveries/{key}/review-${STORY_SLUG}.md; no findings → merge as above
-
-# delivery done — the terminal step (unchanged by review mode; local mode still opens no PR
-# until a remote exists — the human takes the file-based review trail from there)
-git push -u origin "release/${DELIVERY_SLUG}-${DELIVERY_KEY}"
-gh pr create --draft --base main --head "release/${DELIVERY_SLUG}-${DELIVERY_KEY}" \
-  --title "{Feature Name}" --body "Delivery-Key: ${DELIVERY_KEY} …"
-# → run /pr-review on it; no findings → gh pr ready
-```
-
-Ask before the first `git push` of a delivery — it is the first outward-facing action, and the
-human may want the branch named differently or the work kept local.
-
-## 5. Resuming and PROGRESS.md
-
-`PROGRESS.md` stays at the **repo root** (not in the worktree) and its entries are prefixed
-with the key so multiple deliveries interleave readably:
+`PROGRESS.md` stays at the **repo root** (not in a worktree), and entries are prefixed with the plan slug and row id so parallel rows interleave readably:
 
 ```markdown
 ### Done
-- `[a8f3c1]` STORY-3 cart totals — 7/7 Test Case rows, all falsified; gates green
+- `[checkout-flow-rework]` T3 cart totals — 7/7 Test Case rows, all falsified; gates green
 ```
 
-A resumed session identifies its delivery by key, reads the delivery file's Status and the
-matching `PROGRESS.md` entries, and continues from the first unfinished story.
+A resumed session finds its batch with `git worktree list`, reads the plan's Tasks table and the matching `PROGRESS.md` entries, and continues from the first unfinished row.

@@ -8,9 +8,9 @@
 #
 # This counts, warns once at the budget, and never blocks: a pipeline legitimately
 # needs many dispatches, and a guard that stops one mid-delivery strands the work.
-# DEVKIT_DISPATCH_BUDGET tunes it (default 14). That is derived, not guessed: 3 per story
-# (Coder, QA, Reviewer) + 3 planning + 2 delivery, which is a 3-story delivery. A larger
-# delivery legitimately exceeds it, which is why this warns once and never blocks.
+# DEVKIT_DISPATCH_BUDGET tunes it (default 14). That is derived, not guessed: a plan round
+# (1 map + 2 reviews) + a 5-row /code run + /validate-code (2) + /review-code (1) + slack. A larger
+# plan legitimately exceeds it, which is why this warns once and never blocks.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./hook-lib.sh
@@ -54,5 +54,5 @@ budget="${DEVKIT_DISPATCH_BUDGET:-14}"
 echo "devkit dispatch-budget: $count subagent dispatches this session (budget $budget). \
 Each one is a separate request with its own prompt. Before the next: can a mechanical \
 check answer it — scripts/verify/*.sh, grep, or the gate output you already have? \
-Expected shape is 3 per story — Coder, QA, Reviewer — plus 3 planning and 2 delivery."
+Expected shape: 1 coder per Tasks row, 2 for /validate-code, 1 for /review-code."
 exit 0

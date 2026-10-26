@@ -104,7 +104,7 @@ fi
 if [ "$pct" -ge "$warn" ] && [ ! -f "$state/ctx-warn" ]; then
     : > "$state/ctx-warn"
     echo "devkit context-budget: ${pct}% of the window used (${used} tok). Compact now — \
-drop implementation code, test files and completed stories; keep the delivery file, the \
-manifest and every score as one-line refs. Ceiling is ${ceiling}%."
+drop implementation code, test files and finished tasks; keep the plan and \
+every score as one-line refs. Ceiling is ${ceiling}%."
 fi
 exit 0

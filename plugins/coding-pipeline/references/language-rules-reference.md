@@ -1,12 +1,12 @@
 # Reference: Language Rules — Coding Standards + Review Flags
 
-Shared reference for Coder (Amelia) and Reviewer. Load on demand. Do not pre-load.
+Shared reference for coder and Reviewer. Load on demand. Do not pre-load.
 
-> **Test rule**: Amelia implements to the story's frozen Test Case table, then writes exactly the tests it specifies, then falsifies each one (apply the row's break, confirm the assertion fails, restore). Amelia owns both test and implementation files; Quinn (QA) audits the tests but authors none. Coverage thresholds below are a floor, not a target — a tautological or unfalsified test is a blocking defect no matter what the percentage says.
+> **Test rule**: the coder implements to the task's frozen Test Case table, then writes exactly the tests it specifies, then falsifies each one (apply the row's break, confirm the assertion fails, restore). the coder owns both test and implementation files; qa (QA) audits the tests but authors none. Coverage thresholds below are a floor, not a target — a tautological or unfalsified test is a blocking defect no matter what the percentage says.
 
 > **context7 rule**: Before applying any rule that references a specific library, linter, annotation tool, or framework — fetch its current docs via context7. Rules in this file reflect known-good patterns; library APIs evolve and the current version may differ. Always verify import paths, method signatures, and config keys against live docs before writing code.
 
-> **Specialist rule**: whoever loads one of these files is, for that story, a specialist in that
+> **Specialist rule**: whoever loads one of these files is, for that task, a specialist in that
 > language — not a generalist transliterating another language's habits into it. Each file names an
 > **authority chain** (Go has Uber Go Style; Java has Effective Java; Rust has the API Guidelines;
 > and so on) and that chain is the baseline, not a suggestion. Code that runs but that the
@@ -17,12 +17,12 @@ Shared reference for Coder (Amelia) and Reviewer. Load on demand. Do not pre-loa
 > **Version rule**: target the current stable release of the language, confirmed via context7 —
 > never from memory. When the project pins an older version, code to *that* version's idiom and say
 > so at handoff; an API newer than the pin is a defect here, not an improvement. Libraries are the
-> exception: update one when the story needs it and the change is non-breaking, but a major-version
-> bump is its own story.
+> exception: update one when the task needs it and the change is non-breaking, but a major-version
+> bump is its own task.
 
 For quality gate commands, see `references/quality-gate-reference.md`.
 
-> **Frontend rule**: when the story's language is JS/TS, React, Next.js, HTMX, or HTML/CSS,
+> **Frontend rule**: when the task's language is JS/TS, React, Next.js, HTMX, or HTML/CSS,
 > load `references/frontend-hardening-reference.md` alongside that language's file. It carries the
 > enforcement-integrity checks — lint-config shadowing, security rules left at `warn`, vacuous
 > tests, validator format matrices, ReDoS regex, coverage-config filtering, dead CI files — that
@@ -34,7 +34,7 @@ For quality gate commands, see `references/quality-gate-reference.md`.
 ## Load one file, not this one
 
 Each language lives in its own file so an agent loads ~30 lines instead of ~340. Load exactly the
-row matching the story's `Language` field.
+row matching the task's `Language` field.
 
 | Language | File |
 |---|---|

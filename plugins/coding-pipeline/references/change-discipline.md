@@ -1,7 +1,7 @@
 # Change Discipline — review rows for CLAUDE.md rules 1–3, 5, 6
 
 **Single source of truth** for the change-discipline findings. `agents/reviewer.md` and
-`pr-workflow/skills/pr-review/references/review-checklist.md` both check these rows; on conflict this
+`/review-code` both check these rows; on conflict this
 file wins — change it here first, then propagate.
 
 Coding Discipline rules 2 (*Simplicity first*), 3 (*Surgical changes*), and 1/6
@@ -9,7 +9,7 @@ Coding Discipline rules 2 (*Simplicity first*), 3 (*Surgical changes*), and 1/6
 review path ever failed a diff for scope creep. These rows make them checkable.
 
 **The operational test**: every changed line must trace to the request. Read the diff with
-the story / AC / issue text open and ask of each hunk — *which sentence asked for this?*
+the task / AC / issue text open and ask of each hunk — *which sentence asked for this?*
 
 **When the request text is unavailable**, CD1, CD3, and CD7 cannot be judged. Say so
 explicitly and skip them. Never infer intent from the diff itself — the diff is the thing
@@ -93,4 +93,4 @@ Request: *"make the export respect the user's timezone."*
 records'* owner timezone — is never mentioned. Both are plausible; one is wrong.
 
 ✅ Both readings stated before implementing, one recommended, and the answer recorded in
-the story's AC so a reviewer can check the code against it.
+the task's AC so a reviewer can check the code against it.

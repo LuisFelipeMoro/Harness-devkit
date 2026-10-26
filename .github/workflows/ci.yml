@@ -73,8 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # test-verify.sh benchmarks against a historical commit; a shallow
-          # clone does not have it.
+          # full history: the git-hook and verify tests build refs against it.
           fetch-depth: 0
       - name: session hook behaviour tests
         run: bash .github/scripts/test-hooks.sh
@@ -83,7 +82,7 @@ jobs:
         run: bash .github/scripts/test-git-hooks.sh
       - name: duplication attribution tests
         # The gate's value is entirely in the split it makes between what this
-        # delivery wrote and what was already there; nothing else checks it.
+        # change wrote and what was already there; nothing else checks it.
         run: bash .github/scripts/test-dup-attribution.sh
       - name: verify script behaviour tests
         # Each script replaced a model pass, so it is now the only thing checking
@@ -95,6 +94,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # full history: the retired-file tests use the 2.x files from git as fixtures.
+          fetch-depth: 0
       - name: installer behaviour tests
         # The settings merge edits a file holding the operator's permissions and
         # model config; a bad merge destroys work that is not recoverable from git.

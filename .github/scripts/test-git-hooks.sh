@@ -241,7 +241,7 @@ d="$(fixture dup-missing)"
 expect_exit "missing jscpd does not block"  pre-push "$d" 0
 expect_says "missing jscpd says UNENFORCED" pre-push "$d" yes "duplication UNENFORCED"
 
-# ── dup-gate.sh --worktree (what /quality-gate runs before anything is committed) ──
+# ── dup-gate.sh --worktree (what /validate-code runs before anything is committed) ──
 # gate_check <name> <0|1 result> — for cases that need arguments or post-conditions
 # run_hook cannot express.
 gate_check() {
@@ -295,7 +295,7 @@ dup_stub "$d" sub/wip.txt 1 30
 if [ "$rc" = "1" ]; then ok=0; else ok=1; fi
 gate_check "worktree mode from a subdirectory snapshots files at their repo path" "$ok"
 
-# Called explicitly, a missing tool is exit 2, never 0: /quality-gate must be able
+# Called explicitly, a missing tool is exit 2, never 0: /validate-code must be able
 # to tell "clean" from "never measured".
 d="$(fixture dup-gate-missing)"
 run_gate "$d" --worktree; rc=$?

@@ -1,6 +1,6 @@
 # Go — Modern Idioms by Minimum Version
 
-Loaded by the Coder on every Go story, alongside `languages/go.md`. **Apply a row only when the module's `go` directive is at least its Min Go.** Below it the newer API is a defect (go.md *Version policy*). A file-level `//go:build go1.N` constraint raises the version for that file only.
+Loaded by the Coder on every Go task, alongside `languages/go.md`. **Apply a row only when the module's `go` directive is at least its Min Go.** Below it the newer API is a defect (go.md *Version policy*). A file-level `//go:build go1.N` constraint raises the version for that file only.
 
 | Idiom | Min Go | Prefer | Over |
 |---|---|---|---|

@@ -85,7 +85,7 @@ for name, pdir in declared.items():
         continue
     hooks_json = os.path.join(hdir, "hooks.json")
     blob = read(hooks_json) if os.path.isfile(hooks_json) else ""
-    # An agent's frontmatter hooks wire a script for that agent alone (C34's orchestrator guard).
+    # An agent's frontmatter hooks may wire a script for that agent alone.
     adir = os.path.join(pdir, "agents")
     if os.path.isdir(adir):
         blob += "".join(read(os.path.join(adir, a)) for a in os.listdir(adir) if a.endswith(".md"))
@@ -97,7 +97,11 @@ for name, pdir in declared.items():
 
 # ── 3. in-repo markdown links resolve ────────────────────────────────────────
 MD_LINK = re.compile(r"\[[^\]]*\]\((?!https?://|#|mailto:)([^)\s]+)\)")
-BACKTICK_PATH = re.compile(r"`((?:\.\./)*(?:references|agents|skills|hooks|scripts|git-hooks|codex)/[A-Za-z0-9._/-]+\.(?:md|sh|json|yml|yaml|toml))`")
+# A path may be written cross-plugin (`coding-pipeline/scripts/x.py`): it resolves against that
+# plugin's root, the same as a plugin-rooted path does against the file's own plugin.
+# A command span (`python3 scripts/x.py --flag`, `scripts/verify/y.sh --diff $BASE`) names its
+# script first: the path is checked whether the span ends there or runs on into arguments.
+BACKTICK_PATH = re.compile(r"`(?:(?:python3|bash|sh) )?((?:\.\./)*(?:[a-z0-9-]+/)?(?:references|agents|skills|hooks|scripts|git-hooks|codex)/[A-Za-z0-9._/<>-]+\.(?:md|sh|py|json|yml|yaml|toml))(?=`| )")
 
 for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
     dirnames[:] = [d for d in dirnames if d != ".git"]
@@ -115,6 +119,13 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
         if plugin_dir:
             for raw in set(BACKTICK_PATH.findall(text)):
                 checked["link"] += 1
+                if "<" in raw or ">" in raw:   # placeholder such as languages/<language>.md
+                    continue
+                head = raw.split("/", 1)[0]
+                if head in declared:   # cross-plugin: `coding-pipeline/scripts/…`
+                    if not os.path.exists(os.path.join(declared[head], raw.split("/", 1)[1])):
+                        err("link", rel(path), f"cross-plugin path reference does not resolve -> {raw}")
+                    continue
                 # a plugin-rooted path like `references/x.md`, or one relative to this file
                 if os.path.exists(os.path.normpath(os.path.join(plugin_dir, raw))):
                     continue
@@ -126,8 +137,6 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
                     skill_root = os.sep.join(parts[: parts.index("skills") + 2])
                     if os.path.exists(os.path.normpath(os.path.join(skill_root, raw))):
                         continue
-                if "<" in raw or ">" in raw:   # placeholder such as languages/<language>.md
-                    continue
                 err("link", rel(path), f"path reference does not resolve -> {raw}")
 
 # ── 4. namespaced agent and skill references exist ───────────────────────────
@@ -155,7 +164,7 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
             else:
                 err("ref", rel(path), f"'{plugin}:{item}' matches no agent or skill in that plugin")
 
-# ── 5. CLAUDE.md routing table skills resolve to real skill directories ─────
+# ── 5. CLAUDE.md "Skills (invoke manually)" table resolves, and is complete ──
 all_skill_names = set()
 for pdir in declared.values():
     sdir = os.path.join(pdir, "skills")
@@ -167,30 +176,29 @@ for pdir in declared.values():
 routing_md = os.path.join(ROOT, "plugins", "coding-pipeline", "CLAUDE.md")
 if os.path.isfile(routing_md):
     text = read(routing_md)
-    # Both anchors are prose and can be reworded. If either moves, this check would
-    # otherwise scan an empty string and pass while verifying nothing — so a miss is
-    # an error, not a silent skip.
-    m = re.search(r"## Pipeline & Skills.*?\n(.*?)\n\*\*Rule\*\*:", text, re.S)
+    # The heading is prose and can be reworded. A miss is an error, not a silent skip,
+    # or this check would scan an empty string and pass while verifying nothing.
+    m = re.search(r"^## Skills \(invoke manually\)[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
     if not m:
-        err("routing", rel(routing_md), "routing table not found (section heading or '**Rule**:' anchor changed) — this check verified nothing")
+        err("routing", rel(routing_md), "'## Skills (invoke manually)' section not found — this check verified nothing")
     table_block = m.group(1) if m else ""
     routed = sorted(set(re.findall(r"`/([a-z0-9][a-z0-9-]*)`", table_block)))
     if m and not routed:
-        err("routing", rel(routing_md), "routing table matched but lists no skills — table shape changed")
+        err("routing", rel(routing_md), "skills table matched but lists no skills — table shape changed")
     for name in routed:
         checked["routing"] += 1
         if name not in all_skill_names:
-            err("routing", rel(routing_md), f"routed skill '/{name}' has no matching skills/{name}/SKILL.md")
+            err("routing", rel(routing_md), f"listed skill '/{name}' has no matching skills/{name}/SKILL.md")
+    if m:
+        for name in sorted(all_skill_names - set(routed)):
+            err("routing", rel(routing_md), f"skill '{name}' exists but is missing from the Skills table")
 
-# ── 6. every skill description carries at least one trigger phrase ──────────
-# Captures a folded/multi-line YAML description too: continuation lines are indented,
-# so keep consuming them. A first-line-only match would report a valid skill as having
-# no trigger phrase whenever its description wraps.
+# ── 6. every skill: description, manual-only, never calls another skill ─
+# A folded/multi-line YAML description is captured too: continuation lines are indented.
 DESC_FIELD = re.compile(r"^description:[ \t]*(.*(?:\n[ \t]+\S.*)*)$", re.M)
-# A floor, not a guarantee: this proves a quoted string is present, not that it is a
-# routing trigger. `grill-me` quotes "done"/"enough", which are stop-words. Tightening
-# it means deciding what counts as a trigger, which is a judgement call, not a regex.
-QUOTED_PHRASE = re.compile(r'"[^"]+"')
+# A skill must not tell the model to run another skill. Suggesting one ("Next: /validate-code")
+# is allowed — only a user starts a skill.
+SKILL_CALL = re.compile(r"Skill\(|\b(?:load|invoke|run)(?: and follow)? (?:the )?`/[a-z0-9-]+` skill", re.I)
 for name, pdir in declared.items():
     sdir = os.path.join(pdir, "skills")
     if not os.path.isdir(sdir):
@@ -206,182 +214,112 @@ for name, pdir in declared.items():
             err("desc", rel(skill_md), "missing frontmatter")
             continue
         dm = DESC_FIELD.search(fm.group(1))
-        if not dm:
+        if not dm or not dm.group(1).strip().strip("'\""):
             err("desc", rel(skill_md), "missing description field")
-            continue
-        if not QUOTED_PHRASE.search(dm.group(1).strip()):
-            err("desc", rel(skill_md), "description carries no quoted trigger phrase")
+        if not re.search(r"^disable-model-invocation:[ \t]*true[ \t]*$", fm.group(1), re.M):
+            err("desc", rel(skill_md), "frontmatter lacks 'disable-model-invocation: true' (skills are manual)")
+        if SKILL_CALL.search(text):
+            err("desc", rel(skill_md), "tells the model to invoke another skill — skills never call skills; suggest it instead")
 
-# ── 7. contract: dispatch and coding-pipeline naming conventions ────────────────
-# §7 is the host where later sub-tasks extend with rows for loop.md, agents, skills.
-# dispatch.md guards against the generic-agent regression that dropped model assignment.
+# ── 7. contract: naming conventions and the rules that must not drift ───────
 # Data-driven contract: (path, must_contain: list[str], must_not: list[str])
 CONTRACT = [
-    ("plugins/coding-pipeline/skills/bug-fix/references/dispatch.md",
-     ["subagent_type: \"bug-investigator\"", "subagent_type: \"coder\""],
-     ["subagent_type: \"claude\""]),
-
-    # loop.md diff scope and checkpoint structure (multi-agent)
-    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
-     ["git diff --name-only release/{slug}-{key}...HEAD",
-      "Fail fast", "no QA, Reviewer or Stress dispatch",
-      "TEST GAP", "Coder", "never straight to D",
-      "back to M",
-      "QA re-audits only if tests changed", "confirmation",
-      "run every mechanical check", "all failures",
-      "3 round trips", "ask the operator",
-      "security-scan.sh --diff", "tautology-scan.py --diff",
-      "classify-diff.sh --diff",
-      "roster `full`",
-      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
-      "≥ 2 manifest rows",
-      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
-      "dup-gate.sh --worktree"],
-     ["/pr-review", "Review + Stress in parallel"]),
-
-    # loop.md diff scope and checkpoint structure (task)
-    ("plugins/coding-pipeline/skills/task/references/loop.md",
-     ["git diff --name-only release/{slug}-{key}...HEAD",
-      "Fail fast", "no QA, Reviewer or Stress dispatch",
-      "TEST GAP", "Coder", "never straight to D",
-      "back to M",
-      "QA re-audits only if tests changed", "confirmation",
-      "run every mechanical check", "all failures",
-      "3 round trips", "ask the operator",
-      "security-scan.sh --diff", "tautology-scan.py --diff",
-      "classify-diff.sh --diff",
-      "roster `full`",
-      "Do not re-run tests, linters, coverage, dup-gate, security-scan or tautology-scan",
-      "≥ 2 manifest rows",
-      "gh pr create --draft", "gh pr ready", "review-{story-slug}.md",
-      "dup-gate.sh --worktree"],
-     ["/pr-review", "Review + Stress in parallel"]),
-
-    # agents (reviewer stress lens and routing)
-    ("plugins/coding-pipeline/agents/reviewer.md",
-     ["Stress Score:", "agents/stress.md",
-      "Do not re-run",
-      "security-scan.sh --diff",
-      "gh pr review", "review-{story-slug}.md"],
-     []),
-
-    # stress conditional
-    ("plugins/coding-pipeline/agents/stress.md",
-     ["roster `full`", "Folded mode"],
-     []),
-
-    # qa and gate routing
-    ("plugins/coding-pipeline/agents/qa.md",
-     [],
-     ["StressTester in parallel"]),
-
-    ("plugins/coding-pipeline/references/quality-gate-reference.md",
-     [],
-     ["(and Stress in parallel)"]),
-
-    # verdict roster
-    ("plugins/coding-pipeline/agents/verdict.md",
-     ["--roster", "--classify-exit"],
-     []),
-
-    # thresholds roster
-    ("plugins/coding-pipeline/references/thresholds.md",
-     ["## Roster"],
-     []),
-
-    # skills, standards, references (no story pr-review; task and multi-agent only)
-    ("plugins/coding-pipeline/skills/task/SKILL.md",
-     ["release", "/pr-review"],
-     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
-
-    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
-     ["release", "/pr-review"],
-     ["run `/pr-review` on it with the story", "/pr-review` on it; merge"]),
-
-    # manifest roster column
-    ("plugins/coding-pipeline/skills/planning/references/phases.md",
-     ["| Tier | Roster |"],
-     []),
-
-    # claude roster table
-    ("plugins/coding-pipeline/CLAUDE.md",
-     ["| Roster |", "classify-diff"],
-     []),
-
-    # worktree local mode
-    ("plugins/coding-pipeline/references/delivery-and-worktree.md",
-     ["local"],
-     ["run /pr-review on it; no findings → gh pr ready, then merge"]),
-
-    # readme no story pr-review and roster
-    ("README.md",
-     ["classify-diff", "roster `full`", "≥ 2 manifest rows"],
-     ["PER-STORY REVIEW", "REVIEW (parallel"]),
-
-    # planning offers execution options
-    ("plugins/coding-pipeline/skills/planning/SKILL.md",
-     ["Execution options", "--manifest"],
-     []),
-
-    ("plugins/coding-pipeline/skills/task/SKILL.md",
-     ["Execution options", "--manifest"],
-     []),
-
-    ("plugins/coding-pipeline/skills/multi-agent/SKILL.md",
-     ["Execution options", "--manifest"],
-     []),
-
-    # README describes what the release ships (checkpoint-m.sh, break-run.sh,
-    # release-content guard, execution-options rework ranges), never tells the operator
-    # to commit PROGRESS.md
-    ("README.md",
-     ["checkpoint-m.sh", "break-run.sh", "release-exclude", "with rework"],
-     ["commit PROGRESS.md"]),
-
     # agent scope guards: $TMPDIR for probes/scratch, break-run.sh for
     # falsification, never revert/"clean up" a change the agent did not make
     ("plugins/coding-pipeline/agents/coder.md",
-     ["$TMPDIR", "break-run.sh", "never revert"],
-     []),
+     ["$TMPDIR", "break-run.sh", "never revert"], []),
     ("plugins/coding-pipeline/agents/qa.md",
-     ["$TMPDIR", "break-run.sh", "never revert"],
-     []),
+     ["$TMPDIR", "break-run.sh", "never revert"], []),
     ("plugins/coding-pipeline/agents/stress.md",
-     ["$TMPDIR", "break-run.sh", "never revert"],
-     []),
-    ("plugins/coding-pipeline/agents/tuner.md",
-     ["$TMPDIR", "break-run.sh", "never revert"],
-     []),
-
-    # loop.md: checkpoint M is checkpoint-m.sh, not a hand-run list;
-    # falsification is break-run.sh
-    ("plugins/coding-pipeline/skills/multi-agent/references/loop.md",
-     ["checkpoint-m.sh", "break-run.sh"],
-     []),
-    ("plugins/coding-pipeline/skills/task/references/loop.md",
-     ["checkpoint-m.sh", "break-run.sh"],
-     []),
+     ["$TMPDIR", "break-run.sh", "never revert"], []),
 
     # PROGRESS.md is local memory: git-ignored, never committed state
     ("plugins/coding-pipeline/references/progress-file.md",
-     ["git-ignored"],
-     ["committed state"]),
-    ("plugins/devtools/skills/handoff/references/progress-file.md",
-     ["git-ignored"],
-     ["committed state"]),
+     ["git-ignored"], ["committed state"]),
     ("plugins/devtools/skills/handoff/SKILL.md",
-     ["git-ignored"],
-     ["committed state"]),
+     ["git-ignored"], ["committed state"]),
+
+    # README describes what the release ships and never tells the operator to commit PROGRESS.md
+    ("README.md",
+     ["release-exclude", "/planning", "/validate-code"], ["commit PROGRESS.md"]),
+
+    # standards file: manual skills table, fan-out rules, no roster machinery
+    ("plugins/coding-pipeline/CLAUDE.md",
+     ["## Skills (invoke manually)", "Skills never run each other",
+      "**Read-only fan-out**", "**Never spawn 4+ writers**", "Freeze the shared contract",
+      "the gate chain stays in the foreground", "`references/branching.md`",
+      "`references/agent-teams.md`", "aliases resolve to the newest model in each family",
+      "Load on demand", "scripts/estimate-run.py", "Per-language standards"],
+     ["| Roster |", "classify-diff", "Amelia", "Quinn", "/multi-agent"]),
+
+    ("plugins/coding-pipeline/references/thresholds.md",
+     ["| Writer subagents per turn | 3 (never 4+)", "| Read-only subagents per turn | 6",
+      "every one counts toward the session dispatch budget", "≤ 150 words or one table"],
+     ["| Subagents per turn | 3 (never 4+) |"]),
+
+    ("plugins/coding-pipeline/references/branching.md",
+     ["feat/{slug}", "fix/{slug}", "Never commit to `main`"], ["worktree add"]),
+
+    ("plugins/coding-pipeline/references/delivery-and-worktree.md",
+     ["never dispatch parallel coders into the same tree", "Read-only", "git worktree add", "branching.md"], []),
+
+    ("plugins/coding-pipeline/hooks/dispatch-budget.sh",
+     ["caps writers at three per *turn*"], ["caps three per *turn*"]),
+
+    # hooks suggest the manual skills, never instruct the model to act
+    ("plugins/coding-pipeline/hooks/pr-review-responder.sh",
+     ["/pr-fix"], ["ACTION REQUIRED", "gh pr comment"]),
+    ("plugins/coding-pipeline/hooks/delivery-gate.sh",
+     ["/validate-code"], ["code-review-gate"]),
+
+    # installers never enable agent teams; no team hooks
+    ("install.sh", [], ["AGENT_TEAMS"]),
+    ("plugins/coding-pipeline/scripts/install-global.sh", [], ["AGENT_TEAMS"]),
+    ("plugins/coding-pipeline/hooks/hooks.json", [], ["TeammateIdle", "TaskCompleted", "TaskCreated"]),
+
+    # Go refresh
+    ("plugins/coding-pipeline/references/go-modern-idioms.md",
+     ["| Idiom | Min Go |",
+      "Apply a row only when the module's `go` directive is at least its Min Go",
+      "`wg.Go(f)`", "`errors.AsType[T]`", "JetBrains/go-modern-guidelines"],
+     ["json/v2"]),
+    ("plugins/coding-pipeline/references/languages/go.md",
+     ["[`../go-modern-idioms.md`](../go-modern-idioms.md)",
+      "spell it `any`, never `interface{}`",
+      "From `go 1.25` start `WaitGroup` goroutines with `wg.Go(f)`",
+      "only below `go 1.22`"],
+     ["never `interface{}` / `any` in a signature",
+      "never at the end of the function; `defer wg.Done()` goes inside the goroutine closure",
+      "in leaf tests, with the loop variable captured"]),
+    ("plugins/coding-pipeline/references/quality-gate-reference.md",
+     ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
+      "never fails the gate", "`-diff` never rewrites a file"],
+     ["(and Stress in parallel)", "go run golang.org/x/tools"]),
+    ("plugins/coding-pipeline/references/language-rules-reference.md", [], ["go-modern-idioms"]),
+
+    # latency method and advisory-gate rules
+    ("plugins/engineering/skills/performance-profiling/references/optimize-and-benchmark.md",
+     ["SetMaxOpenConns", "MaxIdleConnsPerHost", "named invalidation owner",
+      "errgroup.WithContext", "off the request path", "Cursor pagination",
+      "EXPLAIN ANALYZE", "sync.Pool", "-gcflags=\"-m\""], []),
+    ("plugins/engineering/skills/performance-profiling/references/latency-budget.md",
+     ["## Trace first", "## Fix by layer", "/observability",
+      "sets no millisecond thresholds", "](optimize-and-benchmark.md)"],
+     ["20ms", "30ms", "50ms", "15ms", "50 ms", "20 ms"]),
+    ("plugins/engineering/skills/performance-profiling/SKILL.md",
+     ["`references/latency-budget.md` (trace first, then fix by layer)",
+      "references/optimize-and-benchmark.md"], []),
+    ("plugins/coding-pipeline/agents/qa.md",
+     ["advisory rows never cap the score", "- **Go advisory**: "], []),
+
+    ("CHANGELOG.md",
+     ["## [3.0.0]", "## [2.8.0]", "**JetBrains/go-modern-guidelines** (Apache-2.0)",
+      "**danicat/skills** (Apache-2.0)", "paraphrased (no text copied)"],
+     []),
 ]
 
-# Named rows carry their Test Case name and print `FAIL: <name>` on failure, so
-# break-run.sh can prove a row failed for itself.
-def contract_check(name, path, must_contain, must_not):
-    CONTRACT.append((path, must_contain, must_not, name))
-
-# Frontmatter tools: is scoped to the first `---` block, which contract_check's
-# substring match cannot do. Entries are split on commas outside parentheses so
-# `Agent(a, b)` stays one entry; a required entry matches by prefix.
+# Frontmatter tools: scoped to the first `---` block, which a substring match cannot do.
+# Entries are split on commas outside parentheses so `Agent(a, b)` stays one entry.
 def frontmatter_tools(path):
     lines = read(os.path.join(ROOT, path)).split("\n")
     if not lines or lines[0] != "---":
@@ -421,289 +359,61 @@ def tools_check(name, path, required=(), forbidden=()):
         if not any(e.startswith(r) for e in tools):
             errors.append(f"[contract] FAIL: {name} — {path}: tools: lacks {r}")
 
-
-# 4e6020 S1: Go refresh
-contract_check("contract_go_modern_idioms_rule",
-    "plugins/coding-pipeline/references/go-modern-idioms.md",
-    ["| Idiom | Min Go |",
-     "Apply a row only when the module's `go` directive is at least its Min Go",
-     "`wg.Go(f)`", "`errors.AsType[T]`",
-     "JetBrains/go-modern-guidelines"],
-    ["json/v2"])
-
-contract_check("contract_go_modern_idioms_no_127",
-    "plugins/coding-pipeline/references/go-modern-idioms.md",
-    [],
-    ["json/v2"])
-
-contract_check("link_go_md_to_idioms",
-    "plugins/coding-pipeline/references/languages/go.md",
-    ["[`../go-modern-idioms.md`](../go-modern-idioms.md)"],
-    [])
-
-contract_check("contract_go_md_version_fixes",
-    "plugins/coding-pipeline/references/languages/go.md",
-    ["spell it `any`, never `interface{}`",
-     "From `go 1.25` start `WaitGroup` goroutines with `wg.Go(f)`",
-     "only below `go 1.22`"],
-    ["never `interface{}` / `any` in a signature",
-     "never at the end of the function; `defer wg.Done()` goes inside the goroutine closure",
-     "in leaf tests, with the loop variable captured"])
-
-contract_check("contract_gate_ref_modernize_cp",
-    "plugins/coding-pipeline/references/quality-gate-reference.md",
-    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
-     "never fails the gate",
-     "`-diff` never rewrites a file"],
-    ["(and Stress in parallel)", "go run golang.org/x/tools"])
-
-contract_check("contract_gate_ref_modernize_eng",
-    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
-    ["| Modernize *(advisory)* | `rtk proxy go fix -diff ./...` |",
-     "never fails the gate",
-     "`-diff` never rewrites a file"],
-    ["(and Stress in parallel)", "go run golang.org/x/tools"])
-
-contract_check("contract_gate_ref_no_unpinned_fetch",
-    "plugins/coding-pipeline/references/quality-gate-reference.md",
-    [],
-    ["go run golang.org/x/tools"])
-
-contract_check("contract_gate_ref_no_unpinned_fetch_eng",
-    "plugins/engineering/skills/quality-gate/references/quality-gate-reference.md",
-    [],
-    ["go run golang.org/x/tools"])
-
-contract_check("contract_qa_advisory_never_caps",
-    "plugins/coding-pipeline/agents/qa.md",
-    ["advisory rows never cap the score", "- **Go advisory**: "],
-    [])
-
-contract_check("contract_eng_report_advisory",
-    "plugins/engineering/skills/quality-gate/references/execution-and-report.md",
-    ["Advisory rows (Go"],
-    [])
-
-contract_check("contract_language_index_unchanged",
-    "plugins/coding-pipeline/references/language-rules-reference.md",
-    [],
-    ["go-modern-idioms"])
-
-# 4e6020 S2: Latency fundamentals
-contract_check("contract_perf_fix_rows",
-    "plugins/engineering/skills/performance-profiling/references/optimize-and-benchmark.md",
-    ["SetMaxOpenConns", "MaxIdleConnsPerHost", "named invalidation owner",
-     "errgroup.WithContext", "off the request path", "Cursor pagination",
-     "EXPLAIN ANALYZE", "sync.Pool", "-gcflags=\"-m\""],
-    [])
-
-contract_check("contract_latency_budget",
-    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
-    ["## Trace first", "## Fix by layer", "/observability",
-     "sets no millisecond thresholds", "](optimize-and-benchmark.md)"],
-    ["20ms", "30ms", "50ms", "15ms", "50 ms", "20 ms"])
-
-contract_check("link_latency_budget_resolves",
-    "plugins/engineering/skills/performance-profiling/references/latency-budget.md",
-    ["](optimize-and-benchmark.md)"],
-    [])
-
-contract_check("contract_perf_skill_routes",
-    "plugins/engineering/skills/performance-profiling/SKILL.md",
-    ["`references/latency-budget.md` (trace first, then fix by layer)",
-     "references/optimize-and-benchmark.md"],
-    [])
-
-contract_check("characterization_perf_trigger_desc",
-    "plugins/engineering/skills/performance-profiling/SKILL.md",
-    ['"pprof"', '"latency"'],
-    [])
-
-contract_check("contract_architect_latency_fields",
-    "plugins/coding-pipeline/agents/architect.md",
-    ["Remote calls per request:", "invalidation trigger"],
-    [])
-
-# 4e6020 S3: Orchestration fan-out rules
-contract_check("contract_thresholds_widths",
-    "plugins/coding-pipeline/references/thresholds.md",
-    ["## Roster", "| Writer subagents per turn | 3 (never 4+)", "| Read-only subagents per turn | 6",
-     "every one counts toward the session dispatch budget", "≤ 150 words or one table"],
-    ["| Subagents per turn | 3 (never 4+) |"])
-
-contract_check("contract_claude_md_fanout",
-    "plugins/coding-pipeline/CLAUDE.md",
-    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
-     "the gate chain stays in the foreground", "Freeze the shared contract",
-     "the orchestrator coordinates", "writes no implementation code"],
-    ["- **Never spawn 4+** in a single turn.", "up to 6"])
-
-contract_check("contract_worktree_doc_background",
-    "plugins/coding-pipeline/references/delivery-and-worktree.md",
-    ["local", "Read-only subagents (Explore, code mapping) may still run in parallel",
-     "`Read-only subagents per turn`", "never a polling loop",
-     "never dispatch parallel Coder subagents into the same worktree"],
-    [])
-
-contract_check("characterization_sequential_stories",
-    "plugins/coding-pipeline/references/delivery-and-worktree.md",
-    ["never dispatch parallel Coder subagents into the same worktree"],
-    [])
-
-contract_check("contract_phase05_vector",
-    "plugins/coding-pipeline/skills/planning/references/phases.md",
-    ["| Tier | Roster |", "fan the mapping out by vector", "mappers never write it"],
-    [])
-
-contract_check("contract_dispatch_hook_comment",
-    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
-    ["caps writers at three per *turn*"],
-    ["caps three per *turn*"])
-
-contract_check("characterization_hooks_suite",
-    "plugins/coding-pipeline/hooks/dispatch-budget.sh",
-    ["# CLAUDE.md's Sub-agent Discipline caps writers at three per *turn*"],
-    [])
-
-# 4e6020 S4: Agent teams, models, release
-contract_check("contract_agent_teams_doc",
-    "plugins/coding-pipeline/references/agent-teams.md",
-    ["Experimental and opt-in", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "named subagent",
-     "never set by the installer", "read-only lanes only", "not user consent",
-     "| Worktree isolation |", "| Implementer ≠ validator |", "| Dispatch budget |",
-     "| Plan approval |", "| Context ceiling |", "| Skills |", "## Cost",
-     "https://code.claude.com/docs/en/agent-teams"],
-    [])
-
-contract_check("contract_installers_never_enable_teams",
-    "install.sh",
-    [],
-    ["AGENT_TEAMS"])
-
-contract_check("contract_installers_never_enable_teams",
-    "plugins/coding-pipeline/scripts/install-global.sh",
-    [],
-    ["AGENT_TEAMS"])
-
-contract_check("contract_no_team_hooks",
-    "plugins/coding-pipeline/hooks/hooks.json",
-    [],
-    ["TeammateIdle", "TaskCompleted", "TaskCreated"])
-
-contract_check("contract_claude_md_teams_and_alias",
-    "plugins/coding-pipeline/CLAUDE.md",
-    ["| Roster |", "classify-diff", "**Never spawn 4+ writers**", "**Read-only fan-out**",
-     "the gate chain stays in the foreground", "Freeze the shared contract",
-     "the orchestrator coordinates", "writes no implementation code",
-     "`references/agent-teams.md`", "aliases resolve to the newest model in each family"],
-    ["- **Never spawn 4+** in a single turn.", "up to 6"])
-
-contract_check("characterization_skill_model_restatements",
-    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
-    ["CLAUDE.md Model assignment table"],
-    [])
-
-contract_check("characterization_skill_model_restatements",
-    "plugins/coding-pipeline/skills/task/SKILL.md",
-    ["CLAUDE.md Model assignment table"],
-    [])
-
-contract_check("contract_changelog_attribution",
-    "CHANGELOG.md",
-    ["## [2.8.0]", "**JetBrains/go-modern-guidelines** (Apache-2.0)",
-     "**danicat/skills** (Apache-2.0)", "paraphrased (no text copied)"],
-    [])
-
-contract_check("contract_readme_refresh",
-    "README.md",
-    ["`go fix -diff` (Go ≥ 1.26, reports only)", "Read-only subagents may fan out wider than writers",
-     "layer-by-layer latency budget", "Aliases resolve to the newest model in each family"],
-    ["Agent teams are enabled"])
-
-# 4e6020 S5: Token efficiency
-# Every non-architect pipeline agent declares its tools: allowlist (C25); the
-# validators additionally cannot write, so implementer != validator is mechanical.
-TOOLS_ALLOWLIST_AGENTS = [
-    "qa", "reviewer", "stress", "verdict", "plan-reviewer",
-    "coder", "coder-backend", "coder-frontend",
-    "tuner", "devops", "bug-investigator",
-    "analyst", "pm", "scrum-master",
-]
-for agent in TOOLS_ALLOWLIST_AGENTS:
-    tools_check("contract_agent_tools_allowlist",
-        f"plugins/coding-pipeline/agents/{agent}.md")
-
+# Every pipeline agent declares a tools: allowlist; validators cannot write, so
+# implementer != validator is mechanical.
+for agent in ["qa", "reviewer", "stress", "verdict", "plan-reviewer",
+              "coder", "coder-backend", "coder-frontend", "bug-investigator"]:
+    tools_check("contract_agent_tools_allowlist", f"plugins/coding-pipeline/agents/{agent}.md")
 for agent in ["qa", "reviewer", "stress", "verdict", "plan-reviewer"]:
     tools_check("contract_validators_cannot_edit",
-        f"plugins/coding-pipeline/agents/{agent}.md",
-        forbidden=("Edit", "Write"))
+        f"plugins/coding-pipeline/agents/{agent}.md", forbidden=("Edit", "Write"))
 
-# C34: the thin orchestrator dispatches and runs gates; it cannot read or search
-# files into its own context.
-tools_check("contract_orchestrator_tools",
-    "plugins/coding-pipeline/agents/orchestrator.md",
-    required=("Agent(", "Bash", "SendMessage", "AskUserQuestion"),
-    forbidden=("Read", "Edit", "Write", "Grep", "Glob", "WebFetch", "WebSearch"))
-
-# C27-C29: the rules the orchestrator and the planner load must say what they say.
-contract_check("contract_loop_dispatch_hygiene",
-    "plugins/coding-pipeline/skills/multi-agent/references/loop.md",
-    ["never Reads the delivery file", "replays the agent's whole history", "Never pasted conversation"],
-    [])
-
-contract_check("contract_session_model_and_boundary",
-    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
-    ["/model sonnet", "/clear, then /multi-agent"],
-    [])
-
-# The skill's recommendation and the orchestrator's detection anchor must not drift apart.
-contract_check("contract_orchestrator_recommendation",
-    "plugins/coding-pipeline/skills/multi-agent/SKILL.md",
-    ["claude --agent orchestrator", "You are the delivery orchestrator"],
-    [])
-
-contract_check("contract_orchestrator_recommendation",
-    "plugins/coding-pipeline/skills/task/SKILL.md",
-    ["claude --agent orchestrator"],
-    [])
-
-contract_check("contract_orchestrator_recommendation",
-    "plugins/coding-pipeline/agents/orchestrator.md",
-    ["You are the delivery orchestrator"],
-    [])
-
-contract_check("contract_bundle_rule",
-    "plugins/coding-pipeline/skills/planning/references/phases.md",
-    ["≤ 120 lines", "become one row"],
-    [])
-
-# Each contract row is checked against its own file
-for path, must_contain, must_not, *name in CONTRACT:
+for path, must_contain, must_not in CONTRACT:
     checked["contract"] += 1
-    name_prefix = f"FAIL: {name[0]} — " if name else ""
     full = os.path.join(ROOT, path)
     if not os.path.isfile(full):
-        err("contract", path, f"{name_prefix}file missing")
+        err("contract", path, "file missing")
         continue
     text = read(full)
     for phrase in must_contain:
         if phrase not in text:
-            err("contract", path, f"{name_prefix}must contain '{phrase}'")
+            err("contract", path, f"must contain '{phrase}'")
     for phrase in must_not:
         if phrase in text:
-            err("contract", path, f"{name_prefix}must not contain '{phrase}'")
+            err("contract", path, f"must not contain '{phrase}'")
 
-# Glob check: no md files under plugins/coding-pipeline/ contain subagent_type: "claude"
-coding_pipeline_dir = os.path.join(ROOT, "plugins/coding-pipeline")
-checked["contract"] += 1
-for dirpath, dirnames, filenames in os.walk(coding_pipeline_dir):
-    for fn in filenames:
-        if not fn.endswith(".md"):
-            continue
-        path = os.path.join(dirpath, fn)
-        text = read(path)
-        if "subagent_type: \"claude\"" in text:
-            err("contract", rel(path), "must not contain 'subagent_type: \"claude\"'")
+# every agent except rote-* declares when it loads references (load-on-demand table)
+adir = os.path.join(ROOT, "plugins", "coding-pipeline", "agents")
+for fn in sorted(os.listdir(adir)):
+    if fn.endswith(".md") and not fn.startswith("rote-"):
+        checked["contract"] += 1
+        if "load on demand" not in read(os.path.join(adir, fn)).lower():
+            err("contract", f"plugins/coding-pipeline/agents/{fn}", "must contain 'load on demand' (references table)")
+
+# handoff's own copy of progress-file.md is optional, but if present must stay "git-ignored".
+hp = "plugins/devtools/skills/handoff/references/progress-file.md"
+if os.path.isfile(os.path.join(ROOT, hp)):
+    checked["contract"] += 1
+    ht = read(os.path.join(ROOT, hp))
+    if "git-ignored" not in ht or "committed state" in ht:
+        err("contract", hp, "must say 'git-ignored' and never 'committed state'")
+
+# ── 8. sweep: no persona names, no pointers to removed skills or machinery ──
+PERSONAS = re.compile(r"\b(Amelia|Quinn|Priya|Winston|Tyler)\b")
+REMOVED = re.compile(r"(?<![\w.])/(multi-agent|task|analysis|architecture|quality-gate|code-review-gate|pr-review|checkcomments|bug-fix)(?![\w.-])"
+                     r"|orchestrator-bash-guard|delivery-state\.sh|`release/\{slug\}")
+sweep = [os.path.join(ROOT, "README.md")]
+for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
+    sweep += [os.path.join(dirpath, f) for f in filenames if f.endswith((".md", ".json", ".sh"))]
+for path in sweep:
+    if not os.path.isfile(path) or f"{os.sep}scripts{os.sep}" in path:   # scripts/ are frozen, not swept
+        continue
+    checked["contract"] += 1
+    text = read(path)
+    for rx, what in ((PERSONAS, "persona name"), (REMOVED, "reference to a removed skill or file")):
+        hit = rx.search(text)
+        if hit:
+            err("sweep", rel(path), f"{what} '{hit.group(0)}'")
 
 print(f"checked: {checked}")
 if errors:

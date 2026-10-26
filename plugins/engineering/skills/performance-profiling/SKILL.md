@@ -1,27 +1,23 @@
 ---
 name: performance-profiling
-description: Investigate performance issues in Go services with pprof setup, profile capture, an analysis workflow, and common optimizations. Trigger phrases — "performance", "slow", "profiling", "optimize", "latency", "throughput", "memory leak", "high CPU", "pprof", "benchmark", "bottleneck", "p99".
+description: Diagnose a slow or resource-hungry Go service ("pprof", "latency", CPU, memory, goroutines) and land an optimization behind a characterization test and a before/after benchmark. Usage: /performance-profiling [symptom], e.g. "/performance-profiling p99 latency on /checkout".
+disable-model-invocation: true
 ---
 
-Optimization must never change behaviour: a characterization test pins the current output before any change and must stay GREEN through every optimization. The pprof endpoint must stay on an internal port, never a public one.
+**Input**: a Go service and the symptom (ask for the metric and the SLO/target if missing).
+**Output**: a profiled diagnosis, an optimization, a GREEN characterization test, and before/after benchmark numbers.
+**Boundary**: profiling is read-only; a change lands only behind a GREEN characterization test and a measured benchmark. The pprof endpoint stays on an internal port, never a public one. No dispatches.
 
-## Contract
-- Input: a Go service with a suspected performance problem.
-- Output: a profiled diagnosis plus an optimization guarded by a characterization test and a before/after benchmark.
-- Tool boundary: profiling is read-only; optimizations land only behind a GREEN characterization test and a measured benchmark.
-- Done when: the benchmark shows before/after numbers and the characterization test stays GREEN.
+Optimization never changes behaviour: the characterization test pins today's output first and stays GREEN through every change.
 
 ## Steps
-Latency spread across layers or services rather than one hot function: start with `references/latency-budget.md` (trace first, then fix by layer); it routes back to steps 4-5 for the fix.
-1. Enable the pprof endpoint on an internal port per `references/pprof-setup-and-capture.md`.
-2. Capture CPU, heap, goroutine, block, and mutex profiles with the commands in `references/pprof-setup-and-capture.md`.
-3. Analyse the profiles at the pprof prompt (`top10`, `list`, flame graph) per `references/pprof-setup-and-capture.md`; the widest bars at the top of the flame mark the hot path.
-4. Lock behaviour first: a characterization test pins the hot path's current output, per `references/optimize-and-benchmark.md`.
-5. Apply the matching entry from the common-fixes table in `references/optimize-and-benchmark.md`.
-6. Benchmark before and after per `references/optimize-and-benchmark.md`, then report the numbers in the PR description.
-7. For production visibility, the continuous-profiling options in `references/pprof-setup-and-capture.md` apply.
 
-## References
-- `references/pprof-setup-and-capture.md` — endpoint setup, capture commands, pprof-shell analysis, continuous profiling.
-- `references/optimize-and-benchmark.md` — characterization test, common-fixes table, before/after benchmark.
-- `references/latency-budget.md` — trace-first, layer-by-layer latency budget and the fix per layer.
+1. **Pick the route.** Latency spread across layers or services rather than one hot function → `references/latency-budget.md` (trace first, then fix by layer), which routes back to steps 4–6 for the fix. One hot process → continue at step 2.
+2. **Capture.** Enable pprof on an internal port and capture CPU, heap, goroutine, block and mutex profiles with the commands in `references/pprof-setup-and-capture.md`.
+3. **Analyse** at the pprof prompt (`top10`, `list`, flame graph) per `references/pprof-setup-and-capture.md`; the widest bars at the top of the flame are the hot path. State the diagnosis as `{function file:line} — {share of CPU/alloc} — {why}`.
+4. **Lock behaviour.** Write the characterization test for the hot path per `references/optimize-and-benchmark.md`; it passes before any change.
+5. **Fix.** Apply the matching row of the common-fixes table in `references/optimize-and-benchmark.md` — one change at a time.
+6. **Measure.** Run the before/after benchmark per `references/optimize-and-benchmark.md` (`-count=5` or more; compare with `benchstat` when installed) — a gain inside the run-to-run noise is not a gain. The characterization test is still GREEN.
+7. **Report** the diagnosis, the change (`file:line`), the benchmark table and the test name. For production visibility, the continuous-profiling options in `references/pprof-setup-and-capture.md` apply.
+
+Next: `/validate-code`, then `/review-code`; `/observability` if the trace showed blind spots.

@@ -129,7 +129,7 @@ fi
 # reimplemented instead of reused lints clean, types clean and covers clean, then
 # surfaces as rework weeks later. It gets a gate rather than a review nit because
 # no reviewer reads two files at once reliably.
-# The gate itself lives in dup-gate.sh so /quality-gate can run the identical
+# The gate itself lives in dup-gate.sh so /validate-code can run the identical
 # check on an uncommitted tree. 2 = UNENFORCED: it has already warned, and a hook
 # that dies on a machine without jscpd gets uninstalled, which costs every gate.
 dup_gate="$(dirname "$0")/dup-gate.sh"

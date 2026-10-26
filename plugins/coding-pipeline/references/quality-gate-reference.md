@@ -1,15 +1,15 @@
 > **Numbers live in [`thresholds.md`](thresholds.md)** — coverage floors, duplication limit and
 > score gates. This file carries the *commands*; that one carries the *values*.
 
-# Reference: quality-gate — Gate Commands by Stack
+# Reference: quality gates — Gate Commands by Stack
 
-> **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, scrum-master DoD, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
+> **Coverage thresholds — single source of truth.** The per-language minimums are defined here and **only** here: **Go · Java · JS/TS · Rust · React · Next.js · Kotlin ≥ 85% · PHP · Flutter ≥ 80%**. Any other file (qa.md, reviewer.md, verdict.md, git hooks) restates them for local context but defers to this table on conflict. Change a threshold here first, then propagate.
 
 > **RTK**: All commands below use `rtk` prefix. The `rtk hook claude` PreToolUse hook also intercepts every Bash call transparently — so even without an explicit prefix, RTK filters output. Use `rtk proxy <cmd>` when you need raw unfiltered output (debugging, structured parsing). Never prefix RTK meta-commands (`rtk gain`, `rtk discover`, `rtk proxy`) with `rtk` again.
 
-> **Every roster runs this mechanical checkpoint** — format, lint, build, existing tests, dup-gate,
-> vuln, and (standard/full) coverage/race — `cosmetic` through `full`, with no exceptions. What
-> scales with roster is which *agents* get dispatched on top of it (Reviewer, QA, Stress), never
+> **Every change runs this mechanical checkpoint** — format, lint, build, existing tests, dup-gate,
+> vuln, and (standard/full) coverage/race — whatever its size, with no exceptions. What
+> scales is which *agents* get dispatched on top of it (reviewer, qa, stress), never
 > these gates.
 
 ## Go
@@ -74,7 +74,7 @@ the rules were silenced. Any hit = FAIL (rationale + fixes:
 
 ## Duplication *(all stacks — language-agnostic, runs regardless of the detected stack)*
 
-**Threshold — single source of truth: ≤ 3%.** Any other file (reviewer.md, scrum-master DoD, the
+**Threshold — single source of truth: ≤ 3%.** Any other file (reviewer.md, the
 pre-push hook, CLAUDE.md) restates it for local context but defers here on conflict.
 
 | Gate | Command | Pass |
@@ -120,15 +120,15 @@ See `references/spec-driven-reference.md` for `.spectral.yaml` template, annotat
 
 ## Bug-Fix Loop Protocol
 
-*Shared by task, multi-agent, and bug-fix. Reference this section — do not copy-paste.*
+*Shared by `/code`, `/validate-code` fix rounds and `/bugfix`. Reference this section — do not copy-paste.*
 
-**Trigger**: Any quality gate FAILS, or Quinn's audit finds a missing/weak test, after `CODER DONE`.
+**Trigger**: Any quality gate FAILS, or qa's audit finds a missing/weak test, after `CODER DONE`.
 
-**Rule**: *Inside this loop only*, tests come RED-first — every iteration is fixing a known defect, and the RED is what proves the root cause was found rather than guessed. Everywhere else the pipeline is spec-first (implement to the frozen Test Case table, then write those tests, then falsify each). Amelia (Coder) owns BOTH the tests and the implementation; Quinn (QA) audits and runs gates but authors no tests. No exceptions.
+**Rule**: *Inside this loop only*, tests come RED-first — every iteration is fixing a known defect, and the RED is what proves the root cause was found rather than guessed. Everywhere else the work is spec-first (implement to the frozen Test Case table, then write those tests, then falsify each). the coder (Coder) owns BOTH the tests and the implementation; qa (QA) audits and runs gates but authors no tests. No exceptions.
 
 **Loop (max 3 iterations)**:
 
-1. Quinn emits a structured `QA→CODER BUG REPORT`:
+1. qa emits a structured `QA→CODER BUG REPORT`:
    ```
    QA→CODER BUG REPORT
    File: path/to/file.ext
@@ -139,33 +139,33 @@ See `references/spec-driven-reference.md` for `.spectral.yaml` template, annotat
    Gate: [which gate failed — lint / race / coverage / test]
    Classification: LOGIC | TYPING | CONCURRENCY | SECURITY | PERFORMANCE
    ```
-2. Pipeline routes BUG REPORT to Amelia — Amelia writes a test reproducing the bug and confirms it RED against the unfixed code (bug fixes are the one place a test comes first — the RED is what proves the root cause was found, not guessed), then fixes implementation to GREEN.
-3. Amelia emits `CODER DONE — BUGFIX [N]: [one-line description]` (N = iteration number).
-4. Quinn re-runs ALL quality gates from scratch.
+2. The BUG REPORT goes to a fresh `coder` dispatch — the coder writes a test reproducing the bug and confirms it RED against the unfixed code (bug fixes are the one place a test comes first — the RED is what proves the root cause was found, not guessed), then fixes implementation to GREEN.
+3. the coder emits `CODER DONE — BUGFIX [N]: [one-line description]` (N = iteration number).
+4. qa re-runs ALL quality gates from scratch.
 5. Repeat until PASS or max iterations reached.
 
-**After 3 failures** — Quinn escalates:
+**After 3 failures** — qa escalates:
 ```
 QA ESCALATION: Implementation unresolved after 3 iterations.
 [BUG REPORT attached]
-Routing to Reviewer with FAIL status.
+Stop and hand the open report to the human (or `/review-code` with FAIL status).
 ```
-Reviewer receives the FAIL-status artifact and scores accordingly.
+The reviewer scores the FAIL-status artifact accordingly.
 
-**Test-gap sub-path** (an AC lacks a real test — caught by Quinn's audit):
+**Test-gap sub-path** (an AC lacks a real test — caught by qa's audit):
 
-- Quinn emits `QA→CODER TEST GAP` (the AC + why the existing test is missing/weak).
-- Amelia rewrites the test so it asserts the row's Expected Observable Result, then falsifies it with the row's Falsified By break (apply, confirm the assertion fails, restore); emits `BUGFIX COMPLETE` with the evidence line.
-- Quinn re-audits and re-runs gates (counts as one bug-fix iteration).
+- qa emits `QA→CODER TEST GAP` (the AC + why the existing test is missing/weak).
+- the coder rewrites the test so it asserts the row's Expected Observable Result, then falsifies it with the row's Falsified By break (apply, confirm the assertion fails, restore); emits `BUGFIX COMPLETE` with the evidence line.
+- qa re-audits and re-runs gates (counts as one bug-fix iteration).
 
 **Coverage failure sub-path** (distinct from bug failures):
 
 If coverage < threshold AND uncovered paths are reachable behaviour with no test:
-- Quinn emits `QA→CODER TEST GAP` citing the missing Test Case row — Amelia adds the behaviour if absent, writes the test asserting its observable result, and falsifies it. Tests added only to raise the percentage are rejected by the tautology audit.
-- Quinn re-runs coverage gate.
+- qa emits `QA→CODER TEST GAP` citing the missing Test Case row — the coder adds the behaviour if absent, writes the test asserting its observable result, and falsifies it. Tests added only to raise the percentage are rejected by the tautology audit.
+- qa re-runs coverage gate.
 
 If coverage < threshold AND uncovered paths are dead code or framework-generated:
-- Quinn emits `QA→CODER COVERAGE REQUEST`:
+- qa emits `QA→CODER COVERAGE REQUEST`:
   ```
   QA→CODER COVERAGE REQUEST
   Coverage: {actual}% vs {target}% target
@@ -173,8 +173,8 @@ If coverage < threshold AND uncovered paths are dead code or framework-generated
   Reason untestable: [dead code / unreachable branch / framework-generated]
   Request: Refactor or remove the untestable code paths
   ```
-- Amelia refactors implementation to remove or expose the untestable paths.
-- Quinn re-runs coverage (counts as one bug-fix iteration).
+- the coder refactors implementation to remove or expose the untestable paths.
+- qa re-runs coverage (counts as one bug-fix iteration).
 
 ---
 
@@ -183,9 +183,9 @@ If coverage < threshold AND uncovered paths are dead code or framework-generated
 A loop that can edit its own verifier is not a gate, and a loop with no progress condition
 burns tokens without converging. Three rules make the iteration count mean something:
 
-**1. Never move the goalpost to reach it.** Within a fix loop, Amelia may change implementation
+**1. Never move the goalpost to reach it.** Within a fix loop, the coder may change implementation
 and test *logic*, never the thing doing the judging. The following are BLOCKING defects, not
-fixes, and Quinn fails the iteration outright when the diff contains one:
+fixes, and qa fails the iteration outright when the diff contains one:
 
 | Move | Why it is a defect |
 |------|--------------------|
@@ -204,11 +204,11 @@ iteration N's. If the failing test, gate, and message are identical, stop the lo
 and escalate rather than spending the remaining budget — the same input produced the same output,
 so a third attempt is a coin flip, not a fix. Iterations are for converging, not for retrying.
 
-**3. Compact at the boundary, never mid-story.** Long deliveries lose context to auto-compaction
+**3. Compact at the boundary, never mid-task.** Long runs lose context to auto-compaction
 at arbitrary points, often mid-implementation where the frozen spec is still load-bearing. The
-orchestrator compacts at story/sub-task boundaries instead — after a Verdict is printed and its
+session compacts at task boundaries instead — after a Verdict is printed and its
 `PROGRESS.md` entry is appended, which is exactly when the transcript is reconstructible from
-artifacts and the in-flight context is worth least. Never compact between a story's dispatch and
+artifacts and the in-flight context is worth least. Never compact between a task's dispatch and
 its Verdict.
 
 
@@ -216,16 +216,14 @@ its Verdict.
 
 *Standardized output signals for reliable agent-to-agent routing. Every agent output that triggers a routing decision MUST start with one of these exact strings.*
 
-| Signal | Emitted by | Meaning | Pipeline action |
+| Signal | Emitted by | Meaning | Next action |
 |--------|-----------|---------|-----------------|
-| `CODER DONE` | Coder (Amelia) | Tests-first cycle complete, ready for QA audit | Route to Quinn |
-| `QA→REVIEWER APPROVAL` | QA (Quinn) | Audit passed, all gates green, coverage met | Route to Reviewer; Stress only for roster `full` |
-| `QA→CODER BUG REPORT` | QA (Quinn) | Gate failed — implementation bug | Route to Amelia (count iteration) |
-| `QA→CODER TEST GAP` | QA (Quinn) | AC lacks a real test, or test is tautological/over-mocked | Route to Amelia (count iteration) |
-| `QA→CODER COVERAGE REQUEST` | QA (Quinn) | Coverage below threshold, implementation refactor needed | Route to Amelia (count iteration) |
-| `QA ESCALATION` | QA (Quinn) | 3 iterations failed | Route to Reviewer with FAIL status |
-| `BUGFIX COMPLETE` | Coder (Amelia) | Bug fix applied after QA report | Quinn re-runs gates |
-| `COVERAGE REFACTOR COMPLETE` | Coder (Amelia) | Untestable code refactored after coverage request | Quinn re-runs coverage gate |
-| `TUNER REQUEST` | Reviewer / StressTester | Score ≥ 7, MINOR/NIT only | Route to Tyler (Tuner) |
-| `TUNER COMPLETE` | Tuner (Tyler) | Tuning done, re-score | Reviewer re-scores changed files only |
-| `CODE REVIEW GATE PASSED` | code-review-gate skill | Gates + Reviewer both pass | Safe to push / open PR |
+| `CODER DONE` | coder | Tests-first cycle complete, ready for QA audit | Dispatch qa |
+| `QA→REVIEWER APPROVAL` | qa | Audit passed, all gates green, coverage met | Proceed to `/review-code`; stress as `/validate-code` dispatches it |
+| `QA→CODER BUG REPORT` | qa | Gate failed — implementation bug | Dispatch a fresh coder (count iteration) |
+| `QA→CODER TEST GAP` | qa | AC lacks a real test, or test is tautological/over-mocked | Dispatch a fresh coder (count iteration) |
+| `QA→CODER COVERAGE REQUEST` | qa | Coverage below threshold, implementation refactor needed | Dispatch a fresh coder (count iteration) |
+| `QA ESCALATION` | qa | 3 iterations failed | Stop; hand the report to the human |
+| `BUGFIX COMPLETE` | coder | Bug fix applied after QA report | qa re-runs gates |
+| `COVERAGE REFACTOR COMPLETE` | coder | Untestable code refactored after coverage request | qa re-runs coverage gate |
+| `VALIDATE PASSED` | `/validate-code` | Gates + qa + stress + verdict pass | Safe to run `/review-code`, then push / open PR when asked |

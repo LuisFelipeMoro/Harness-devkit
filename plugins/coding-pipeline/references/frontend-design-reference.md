@@ -1,8 +1,8 @@
 # Frontend design quality — anti-AI-slop reference
 
-Load this only when a story creates or materially redesigns visual surface (new page,
+Load this only when a task creates or materially redesigns visual surface (new page,
 component, theme, or layout) — not for pure logic/state changes to existing UI, and not
-for backend/API-only stories. Condensed from [Impeccable](https://github.com/pbakaus/impeccable)
+for backend/API-only tasks. Condensed from [Impeccable](https://github.com/pbakaus/impeccable)
 (Apache 2.0), which itself extends Anthropic's `frontend-design` skill.
 
 ## Absolute bans (match-and-refuse — rewrite on sight)

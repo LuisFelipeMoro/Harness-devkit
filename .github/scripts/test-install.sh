@@ -254,5 +254,84 @@ rc=$?
 check "ignores_stray_git_hooks_dirs" "install exited $rc or staged the stray directory" $?
 rm -rf "$H" "$WORK" "$SRC"
 
+# stages_sensor_scripts — skills and agents run scripts/verify/*, estimate-run.py and harness-metrics.py;
+# a flat install that omits them leaves /code and /validate-code citing paths that do not
+# exist. break-run.sh must also find its sibling diff-lib.sh from the staged copy.
+H="$(newhome)"; WORK="$(newhome)"
+( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
+D="$H/.claude/devkit/scripts"
+[ -x "$D/verify/break-run.sh" ] && [ -x "$D/verify/verdict.sh" ] && [ -f "$D/verify/diff-lib.sh" ] \
+    && [ -x "$D/estimate-run.py" ] && [ -x "$D/harness-metrics.py" ]
+check "stages_sensor_scripts" "verify/*.sh, estimate-run.py or harness-metrics.py missing or not executable under ~/.claude/devkit/scripts" $?
+rm -rf "$H" "$WORK"
+
+# retires_devkit_files — an upgrade from a 2.x flat install must not leave the retired
+# auto-invoked pipeline live beside 3.x: install-global.sh only adds and updates same-named
+# files, so a removed skill, agent or hook survives unless the installer acts on it. The names
+# are generic (architect, pm, task), so a name match alone proves nothing: only a file whose
+# bytes match a version the devkit shipped is the devkit's, and even that is moved to
+# ~/.claude/devkit/retired/<ts>/ — never deleted, so nothing is unrecoverable.
+V2=6d8fa54
+H="$(newhome)"; WORK="$(newhome)"
+mkdir -p "$H/.claude/skills/multi-agent/references" "$H/.claude/skills/my-skill" "$H/.claude/agents" "$H/.claude/hooks"
+git -C "$REPO" show "$V2:plugins/coding-pipeline/skills/multi-agent/SKILL.md" > "$H/.claude/skills/multi-agent/SKILL.md"
+printf 'loop\n' > "$H/.claude/skills/multi-agent/references/loop.md"
+git -C "$REPO" show "$V2:plugins/coding-pipeline/skills/bug-fix/SKILL.md" > "$H/.claude/skills/bug-fix.md"
+printf -- '---\nname: my-skill\n---\n' > "$H/.claude/skills/my-skill/SKILL.md"
+git -C "$REPO" show "$V2:plugins/coding-pipeline/agents/architect.md" > "$H/.claude/agents/architect.md"
+git -C "$REPO" show "$V2:plugins/coding-pipeline/agents/orchestrator.md" > "$H/.claude/agents/orchestrator.md"
+printf 'mine\n' > "$H/.claude/agents/my-agent.md"
+git -C "$REPO" show "$V2:plugins/coding-pipeline/hooks/orchestrator-bash-guard.sh" > "$H/.claude/hooks/orchestrator-bash-guard.sh"
+printf '#!/bin/sh\n' > "$H/.claude/hooks/my-hook.sh"
+cat > "$H/.claude/settings.json" <<JSON
+{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $H/.claude/hooks/orchestrator-bash-guard.sh"}]}]}}
+JSON
+out=$( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" 2>&1 )
+R=$(ls -d "$H/.claude/devkit/retired/"*/ 2>/dev/null | head -1)
+[ ! -e "$H/.claude/skills/multi-agent" ] && [ ! -e "$H/.claude/skills/bug-fix.md" ] \
+    && [ ! -e "$H/.claude/agents/architect.md" ] && [ ! -e "$H/.claude/agents/orchestrator.md" ] \
+    && [ ! -e "$H/.claude/hooks/orchestrator-bash-guard.sh" ]
+check "retires_devkit_files_out_of_live_paths" "a 2.x devkit skill, agent or hook is still live after the install" $?
+[ -n "$R" ] \
+    && git -C "$REPO" show "$V2:plugins/coding-pipeline/agents/architect.md" | cmp -s - "$R/agents/architect.md" \
+    && git -C "$REPO" show "$V2:plugins/coding-pipeline/skills/multi-agent/SKILL.md" | cmp -s - "$R/skills/multi-agent/SKILL.md" \
+    && [ "$(cat "$R/skills/multi-agent/references/loop.md" 2>/dev/null)" = "loop" ] \
+    && [ -f "$R/skills/bug-fix.md" ] && [ -f "$R/hooks/orchestrator-bash-guard.sh" ]
+check "retires_devkit_files_preserved_byte_for_byte" "a retired file is missing from devkit/retired/<ts>/ or its bytes changed" $?
+case "$R" in *"/devkit/retired/"[0-9]*T[0-9]*Z/) rc=0 ;; *) rc=1 ;; esac
+check "retires_devkit_files_into_utc_timestamp_dir" "retired dir is not devkit/retired/<UTC timestamp>/: '$R'" $rc
+[ -f "$H/.claude/skills/my-skill/SKILL.md" ] && [ -f "$H/.claude/agents/my-agent.md" ] && [ -f "$H/.claude/hooks/my-hook.sh" ]
+check "retires_devkit_files_keeps_user_files" "a user's own skill, agent or hook was moved or removed" $?
+case "$out" in *"moved retired skills/multi-agent"*"$R"*) rc=0 ;; *) rc=1 ;; esac
+case "$out" in *"moved retired agents/architect.md"*) ;; *) rc=1 ;; esac
+check "retires_devkit_files_prints_each_with_destination" "a move or its destination was not printed" $rc
+[ "$(hook_count "$H/.claude/settings.json" orchestrator-bash-guard.sh)" = "0" ]
+check "retires_devkit_files_unwires_hook" "settings.json still wires orchestrator-bash-guard.sh" $?
+# rerun_is_idempotent — a second run finds nothing of the devkit's left: no new retired dir,
+# and what the first run moved is still there.
+out2=$( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" 2>&1 )
+[ "$(ls -d "$H/.claude/devkit/retired/"*/ 2>/dev/null | wc -l | tr -d ' ')" = "1" ] && [ -f "$R/agents/architect.md" ] \
+    && [ -f "$H/.claude/skills/my-skill/SKILL.md" ]
+check "retires_devkit_files_rerun_idempotent" "a rerun created another retired dir or lost a retired file" $?
+case "$out2" in *"moved retired"*) rc=1 ;; *) rc=0 ;; esac
+check "retires_devkit_files_rerun_moves_nothing" "a rerun reported a move" $rc
+rm -rf "$H" "$WORK"
+
+# keeps_user_file_with_retired_name — a user's own agents/architect.md or skills/task/ shares
+# a retired name but not the devkit's bytes: it stays exactly where it is, and the installer
+# says so instead of acting silently.
+H="$(newhome)"; WORK="$(newhome)"
+mkdir -p "$H/.claude/agents" "$H/.claude/skills/task"
+printf -- '---\nname: architect\ndescription: my own architect\n---\nmine\n' > "$H/.claude/agents/architect.md"
+printf -- '---\nname: task\n---\nmy task skill\n' > "$H/.claude/skills/task/SKILL.md"
+out=$( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" 2>&1 )
+[ "$(cat "$H/.claude/agents/architect.md")" = "$(printf -- '---\nname: architect\ndescription: my own architect\n---\nmine')" ] \
+    && [ -f "$H/.claude/skills/task/SKILL.md" ] && [ ! -e "$H/.claude/devkit/retired" ]
+check "keeps_user_file_with_retired_name" "a user's own file with a retired name was moved or changed" $?
+case "$out" in *"kept (not the devkit's): $H/.claude/agents/architect.md"*) rc=0 ;; *) rc=1 ;; esac
+case "$out" in *"kept (not the devkit's): $H/.claude/skills/task"*) ;; *) rc=1 ;; esac
+check "keeps_user_file_with_retired_name_prints_kept" "the kept file was not reported" $rc
+rm -rf "$H" "$WORK"
+
 echo "install tests: $pass passed, exit=$fail"
 exit $fail

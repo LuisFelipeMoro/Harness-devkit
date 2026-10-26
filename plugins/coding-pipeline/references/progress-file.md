@@ -1,6 +1,6 @@
 # Reference: PROGRESS.md — Harness Memory & Progress
 
-`PROGRESS.md` lives at the repo root. It is the devkit's cross-session memory: pipelines and `/handoff` append to it; the SessionStart bootstrap hook (`hooks/session-bootstrap.sh`) reads it so the next session starts with context instead of blind. It is **git-ignored, local session state** — read straight off disk, never committed, and never part of the release content the guard checks.
+`PROGRESS.md` lives at the repo root. It is the devkit's cross-session memory: `/code`, `/bugfix` and `/handoff` append to it; the SessionStart bootstrap hook (`hooks/session-bootstrap.sh`) reads it so the next session starts with context instead of blind. It is **git-ignored, local session state** — read straight off disk, never committed, and never part of the release content the guard checks.
 
 ## Schema
 
@@ -33,12 +33,12 @@ _Last updated: <YYYY-MM-DD HH:MM> — <branch>_
 - **Convert relative dates to absolute** (`2026-06-26`, not "today").
 - **Never log secrets, tokens, or PII** — same rule as application logs.
 - **Tie to the Sensors.** A `Done` item should reference the test or gate that proves it — the test that was falsified (and the break that made it fail), the gate that passed.
-- **Prefix every entry with the delivery key** — `` `[a8f3c1]` STORY-3 cart totals — … `` — so concurrent deliveries interleave readably in one root-level file, and a resumed session can filter to its own. Bug fixes use their hotfix slug instead: `` `[hotfix/null-cart]` ``. See `references/delivery-and-worktree.md`.
+- **Prefix every entry with the plan slug** — `` `[cart-totals]` T3 totals rounding — … `` — so entries from concurrent pieces of work interleave readably in one root-level file, and a resumed session can filter to its own. `/bugfix` uses its fix slug instead: `` `[fix/null-cart]` ``.
 - **Atomic-commit discipline.** Each `Done` entry maps to one atomic commit where possible, so the progress log and git history agree.
 
 ## Lessons — what carries to the next session
 
-`Done` and `Failed` describe this delivery. `Lessons` is the only section meant to outlive it:
+`Done` and `Failed` describe this piece of work. `Lessons` is the only section meant to outlive it:
 a rule that would have prevented a failure, written so a future session can apply it without
 re-deriving it. This is the cheapest form of cross-session memory the harness has — it costs
 one line and is read back automatically by the SessionStart hook.
@@ -57,8 +57,8 @@ one line and is read back automatically by the SessionStart hook.
 
 ## Who writes it
 
-- `task` / `multi-agent`: append an entry at each sub-task/epic Verdict.
-- `bug-fix`: append the root cause + fix + regression test on completion.
+- `/code`: append an entry per completed Tasks row. `/validate-code`: append the verdict.
+- `/bugfix`: append the root cause + fix + regression test on completion.
 - `/handoff`: write the full `Current State` + `Next` snapshot at end of session, and record any
   `Lessons` the session produced.
 - Any agent that hits a failure worth not repeating: add the `Lessons` line at the same time it
