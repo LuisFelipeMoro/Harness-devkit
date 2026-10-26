@@ -293,6 +293,25 @@ orch_expect "test_orchestrator_guard_blocks" 2 'python3 .github/scripts/../x.py'
 orch_expect "test_orchestrator_guard_blocks" 2 'echo x > PROGRESS.md'
 orch_expect "test_orchestrator_guard_blocks" 2 'bash plugins/coding-pipeline/scripts/verify/x.sh 2>&1 | cat README.md'
 
+# ── agent_type scoping: a dispatched subagent is not the orchestrator ────────
+# Launching this agent via `claude --agent orchestrator` promotes its
+# frontmatter hooks to session scope, so without this check every Coder/QA/
+# Explore Bash call — including a bare `pwd` — would hit this same guard and
+# block, leaving no way to run go test, linters, or any gate from a subagent.
+expect "test_orchestrator_guard_subagent_passes" orchestrator-bash-guard.sh \
+    '{"agent_type":"coder","tool_input":{"command":"go test ./..."}}' 0
+expect "test_orchestrator_guard_subagent_passes" orchestrator-bash-guard.sh \
+    '{"agent_type":"Explore","tool_input":{"command":"ls"}}' 0
+expect "test_orchestrator_guard_subagent_passes" orchestrator-bash-guard.sh \
+    '{"agent_type":"qa","tool_input":{"command":"golangci-lint run"}}' 0
+# The orchestrator's own calls (agent_type absent, or explicitly itself) still block.
+expect "test_orchestrator_guard_own_calls_still_block" orchestrator-bash-guard.sh \
+    '{"tool_input":{"command":"ls"}}' 2
+expect "test_orchestrator_guard_own_calls_still_block" orchestrator-bash-guard.sh \
+    '{"agent_type":"orchestrator","tool_input":{"command":"ls"}}' 2
+expect "test_orchestrator_guard_own_calls_still_allowed" orchestrator-bash-guard.sh \
+    '{"agent_type":"orchestrator","tool_input":{"command":"git status"}}' 0
+
 # Fail open: an unparseable payload, and the devkit's per-hook kill switch.
 expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{not json' 0
 expect "test_orchestrator_guard_fail_open" orchestrator-bash-guard.sh '{"tool_input":{"command":"cat x"}}' 0 DEVKIT_DISABLED_HOOKS=pre:bash:orchestrator-guard

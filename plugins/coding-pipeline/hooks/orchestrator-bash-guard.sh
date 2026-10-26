@@ -7,6 +7,15 @@
 # and blocks everything else. It is a cost-discipline sensor, not a security
 # boundary: destructive-guard.sh still applies to the same session.
 #
+# Launching this agent via `claude --agent orchestrator` makes its frontmatter
+# hooks fire session-wide (Claude Code docs: "present when the session uses
+# --agent or the hook fires inside a subagent... for subagents, the subagent's
+# type takes precedence"), so every dispatched Coder/QA/Explore Bash call hits
+# this same hook. Those subagents need the real toolchain (go test, linters),
+# not gates-and-git — so this guard applies to the orchestrator's own calls
+# only: `agent_type` is absent or `orchestrator` there, and set to the
+# subagent's own type (e.g. `coder`, `Explore`) once dispatched.
+#
 # Structure is checked, not substrings: heredoc bodies are dropped first (commit
 # messages and PROGRESS entries carry arbitrary text), then the command is split
 # on every separator, and each segment must start with an allowed word.
@@ -22,6 +31,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 devkit_hook_enabled "pre:bash:orchestrator-guard" || exit 0
 
 input=$(cat)
+
+# A dispatched subagent's own agent_type overrides the --agent value that
+# promoted this hook to session scope, so this is the one field that tells the
+# orchestrator's own Bash calls apart from a Coder/QA/Explore/etc. it spawned.
+agent_type="$(devkit_field "$input" agent_type)"
+case "$agent_type" in
+    ""|orchestrator) ;;
+    *) exit 0 ;;
+esac
+
 cmd="$(devkit_field "$input" command)"
 [ -n "$cmd" ] || exit 0
 
