@@ -1,6 +1,6 @@
 {
   "name": "coding-pipeline",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Manual spec-first coding skills (planning, code, validate, bugfix, map) with plan-reviewer, coder, qa, reviewer, stress and verdict agents",
   "author": {
     "name": "Luis Moro"

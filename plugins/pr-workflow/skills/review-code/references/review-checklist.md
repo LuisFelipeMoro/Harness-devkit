@@ -3,7 +3,7 @@
 Apply in order: Security → language standards → test quality → change discipline → general. Fail any CRITICAL immediately.
 
 Every section below reports on one of the two axes the reviewer keeps apart — **Standards**
-(security, language, tests, PR size, reuse, design, CD2/CD4/CD5/CD6, general, plus the code-smell
+(security, language, tests, PR size, reuse, design, CD2/CD4/CD5/CD6/CD8, general, plus the code-smell
 baseline in `coding-pipeline/references/code-smells.md`) or **Spec** (CD1/CD3/CD7 and every
 finding that quotes an AC, Test Case row or request sentence). The split is defined in
 `coding-pipeline/agents/reviewer.md` § Two axes.
@@ -148,6 +148,7 @@ issue open and ask of each hunk: *which sentence asked for this?*
 - CD5 Pre-existing dead code deleted without being asked → HIGH
 - CD6 Orphan left by this diff — import, variable, or function the change itself made unused → MEDIUM
 - CD7 Ambiguity in the request silently resolved in code, where two or more readings existed and none was stated → HIGH
+- CD8 New file an existing file could hold — no closest existing file named, or a reason that does not hold; cite both paths → HIGH (exempt: tests beside new source, migrations, required manifests, generated code; nothing comparable → no finding)
 
 If the PR has no description and no linked issue, CD1, CD3, and CD7 cannot be judged: report
 that in the summary and skip them. Never infer intent from the diff under review.

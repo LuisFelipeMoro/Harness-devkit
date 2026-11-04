@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.1.0] — 2026-11-04
+
+### Added
+
+- A new file now needs a reason. Plans carry a `### New files` table under Tasks, mini-plans included: each new path names the closest existing file and why it cannot live there. `plan-reviewer` checks it under PR2, and `reviewer` and `/review-code` check the diff under the new CD8 row. Test files beside new source files, migrations, manifests and generated code are exempt.
+
+### Fixed
+
+- `CLAUDE.md` said `plan-reviewer` blocks on PR1–PR10; the agent defines PR1–PR11.
+
 ## [3.0.0] — 2026-10-24
 
 Breaking. The devkit is now used, not routed: every skill is started by you, does one job, never

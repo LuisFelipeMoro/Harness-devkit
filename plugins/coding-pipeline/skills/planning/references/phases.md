@@ -159,7 +159,7 @@ The Tasks table in the plan is what `/code` executes, one row at a time or in th
 `TypeScript 5 / Next.js 15`, `Java 21 / Spring Boot 3`). Every downstream agent reads it from the row —
 never inferred. `Tier` (Backend / Frontend, or `—` for scripts/docs/config) picks the coder overlay.
 `Files` is complete: it becomes the checkpoint's `--expect` set and decides which rows can run in
-parallel (disjoint `Files`, no `Depends on`).
+parallel (disjoint `Files`, no `Depends on`). A path not yet in the repo gets a `### New files` row.
 
 Cut the rows as **vertical tracer-bullet slices**, per the Tasks rules in `references/plan-template.md`:
 a narrow but complete path through every layer of the row's tier, verifiable alone, sized for one fresh
