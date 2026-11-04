@@ -10,8 +10,9 @@
 # declared — no silent extra edit, no silent revert, a rename or a deletion
 # counted as touching every path it touches — no stray commit sits ahead of
 # the base, no `*.devkit-break` marker was left behind by an interrupted
-# break-run.sh, a new Go test file is named after its source file, duplication
-# stays under the delivery's own gate
+# break-run.sh, a new Go test file is named after its source file, a changed
+# page does not block zoom, rendered UI carries reflow, axe and keyboard rows,
+# duplication stays under the delivery's own gate
 # (git-hooks/dup-gate.sh), the declared agent roster still matches the real
 # diff (classify-diff.sh, opt-in via --declared), and an arbitrary gates
 # command exits clean (opt-in via --gates).
@@ -139,6 +140,7 @@ fi
 # ── file-set: git diff <base>...HEAD ∪ git diff HEAD (working tree) ∪ ───────
 # ── untracked files, docs/ excluded ─────────────────────────────────────────
 touched=()
+renamed=()
 add_touched() {
     case "$1" in
         docs/*) return 0 ;;
@@ -164,6 +166,9 @@ collect_namestatus() {  # collect_namestatus <NUL-delimited name-status file>
             R*|C*)
                 add_touched "${toks[$i]}"
                 add_touched "${toks[$((i + 1))]}"
+                case "$st" in
+                    R*) renamed+=("${toks[$((i + 1))]}") ;;
+                esac
                 i=$((i + 2))
                 ;;
             *)
@@ -273,6 +278,15 @@ done < "$mk_tmp"
 # Only paths absent from the base are judged, so a repository's existing names
 # never block unrelated work. Pairing is per directory because that is how Go
 # groups a package: a same-named source file elsewhere proves nothing.
+is_renamed() {  # is_renamed <path>
+    local needle="$1" x
+    [ ${#renamed[@]} -gt 0 ] || return 1
+    for x in "${renamed[@]}"; do
+        [ "$x" = "$needle" ] && return 0
+    done
+    return 1
+}
+
 check_go_test_file_name() {  # check_go_test_file_name <path>
     local path="$1" dir stem
     case "$path" in
@@ -284,13 +298,18 @@ check_go_test_file_name() {  # check_go_test_file_name <path>
     esac
     [ -f "$path" ] || return 0
     git cat-file -e "$base:$path" 2>/dev/null && return 0
+    # A moved file keeps the name debt it already had; this diff did not create it.
+    is_renamed "$path" && return 0
     dir=$(dirname "$path")
     stem=$(basename "$path" _test.go)
     case "$stem" in
         main|export|example) return 0 ;;
     esac
     stem="${stem%_integration}"
+    stem="${stem%_e2e}"
     [ -f "$dir/$stem.go" ] && return 0
+    # A platform-split package has foo_linux.go and foo_windows.go but no foo.go.
+    find "$dir" -maxdepth 1 -name "${stem}_*.go" ! -name '*_test.go' | grep -q . && return 0
     # A test-only directory has no source file to pair with.
     find "$dir" -maxdepth 1 -name '*.go' ! -name '*_test.go' | grep -q . || return 0
     fail "test-file-name" "$path — no $stem.go in the same directory"
@@ -298,6 +317,54 @@ check_go_test_file_name() {  # check_go_test_file_name <path>
 if [ ${#seen[@]} -gt 0 ]; then
     for p in "${seen[@]}"; do
         check_go_test_file_name "$p"
+    done
+fi
+
+# ── viewport-zoom: a page this diff touches does not block zoom (WCAG 1.4.4) ─
+# Added lines only, so a page's existing markup never blocks unrelated work. The
+# scale floor is 2 because 200% is what the criterion requires: maximum-scale=5 passes.
+ZOOM_BLOCK='user-scalable *= *(no|0)|maximum-scale *= *[01](\.[0-9]+)?([^0-9.]|$)|userScalable *: *false|maximumScale *: *[01](\.[0-9]+)?([^0-9.]|$)'
+check_viewport_zoom() {  # check_viewport_zoom <path>
+    local path="$1" added
+    case "$path" in
+        *.test.*|*.spec.*|*.stories.*) return 0 ;;
+        *.html|*.htm|*.js|*.jsx|*.ts|*.tsx|*.vue|*.svelte|*.templ|*.gohtml) ;;
+        *) return 0 ;;
+    esac
+    [ -f "$path" ] || return 0
+    if git cat-file -e "$base:$path" 2>/dev/null; then
+        added=$(git diff "$base" -- "$path" | grep '^+')
+    else
+        added=$(cat "$path")
+    fi
+    printf '%s\n' "$added" | grep -Eiq "$ZOOM_BLOCK" || return 0
+    fail "viewport-zoom" "$path — blocks zoom (user-scalable=no, or a maximum scale below 2)"
+}
+
+# ── ui-rows: rendered UI names its reflow, axe and keyboard rows ────────────
+# jsdom computes no layout, so these are the rows a green component suite cannot
+# stand in for. Cosmetic depth carries no Test Case table, so it has nothing to check.
+is_rendered_ui() {  # is_rendered_ui <path>
+    case "$1" in
+        *.test.*|*.spec.*|*.stories.*) return 1 ;;
+        *.html|*.htm|*.css|*.scss|*.jsx|*.tsx|*.vue|*.svelte|*.templ|*.gohtml) [ -f "$1" ] ;;
+        *) return 1 ;;
+    esac
+}
+ui_file=""
+if [ ${#seen[@]} -gt 0 ]; then
+    for p in "${seen[@]}"; do
+        check_viewport_zoom "$p"
+        if [ -z "$ui_file" ] && is_rendered_ui "$p"; then
+            ui_file="$p"
+        fi
+    done
+fi
+if [ -n "$ui_file" ] && [ "$declared" != "cosmetic" ]; then
+    spec_rows=$(awk '/^\| *Test Name *\|/ { t=1; next } t && !/^\|/ { t=0 } t' "$spec")
+    for word in 320 axe keyboard; do
+        printf '%s\n' "$spec_rows" | grep -iq "$word" \
+            || fail "ui-rows" "$ui_file changed, but no Test Case row names '$word' (frontend-hardening-reference.md §9)"
     done
 fi
 

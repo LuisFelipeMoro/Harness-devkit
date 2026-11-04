@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.1.2] — 2026-11-04
+
+### Added
+
+- `checkpoint-m.sh` now enforces two front-end rules: `M: FAIL viewport-zoom` on an added line that blocks zoom, and `M: FAIL ui-rows` when rendered UI changes and the Test Case table names no `320`, `axe` or `keyboard` row. Cosmetic depth skips `ui-rows`.
+
+### Changed
+
+- `maximum-scale` is only a defect below 2, because WCAG 1.4.4 asks for 200%. The earlier rule also flagged `maximum-scale=5`.
+- The reflow test also asserts that no visible element passes the viewport's right edge, since `overflow-x: hidden` on the root hid overflow from the first assertion.
+- `coder-backend.md` says table-driven only where the logic repeats, matching the Go table limits.
+- HTMX non-semantic HTML is now MAJOR, matching React and HTML/CSS.
+- `flutter.md` states that Flutter's 48dp tap-target guideline is stricter than the web floor.
+
+### Fixed
+
+- The Go test file check wrongly failed `foo_test.go` in a platform-split package (`foo_linux.go`, no `foo.go`), `foo_e2e_test.go`, and an existing test file that was only renamed.
+- `test-git-hooks.sh` failed on any machine with the devkit installed, because `dup-gate.sh` found the installed `base-lib.sh` in `~/.claude`.
+
 ## [3.1.1] — 2026-11-04
 
 ### Added

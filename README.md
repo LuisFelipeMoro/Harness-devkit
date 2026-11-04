@@ -138,7 +138,7 @@ agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) ins
 - **Go test files are paired.** `foo.go` is tested by `foo_test.go`; `checkpoint-m.sh` fails a new test
   file that breaks this.
 - **Front-end work is tested for reach.** Rendered UI needs real-browser reflow, axe and keyboard rows,
-  with WCAG 2.2 AA as the floor.
+  with WCAG 2.2 AA as the floor; `checkpoint-m.sh` fails a change that omits them or blocks zoom.
 - **Implementer is not the validator.** `coder` builds; `qa`, `reviewer` and `stress` cannot edit files.
 - **Duplication is measured and attributed.** `jscpd` gates at 3% *introduced*; pre-existing debt is
   reported, never blocking (`git-hooks/dup-attribution.py`).

@@ -228,7 +228,7 @@ keyboard. Both controls look enforced and neither can fail on these defects.
 |------|-------------|------|
 | Reflow | Usable at 320 CSS px wide with no horizontal page scroll. Only content that needs two dimensions (data table, map, code block) scrolls, inside its own container | 1.4.10 |
 | Breakpoints | Mobile-first with `min-width`, set where the content breaks, not by device name | — |
-| Zoom | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or `maximum-scale` | 1.4.4 |
+| Zoom | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or a `maximum-scale` below 2 | 1.4.4 |
 | Text | Text at 200% loses no content; user spacing overrides clip nothing, so no fixed height on a text container | 1.4.4, 1.4.12 |
 | Orientation | Works in portrait and landscape unless one is essential | 1.3.4 |
 | Target size | Pointer targets at least 24×24 CSS px, or the spacing exception applies | 2.5.8 |
@@ -240,9 +240,11 @@ keyboard. Both controls look enforced and neither can fail on these defects.
 
 **Test Case rows for any change to rendered UI**, run in a real browser (Playwright):
 
-- **Reflow**: at 320 CSS px and at a desktop width, assert `scrollWidth <= clientWidth` on the root element. A 600px fixed-width child makes it fail.
+- **Reflow**: at 320 CSS px and at a desktop width, assert `scrollWidth <= clientWidth` on the root element, and that no visible element outside a scroll container passes the viewport's right edge. `overflow-x: hidden` on the root clips content without changing the first assertion, which is why the second exists. A 600px fixed-width child makes it fail.
 - **Scan**: `@axe-core/playwright` with no violations. `jest-axe` and `vitest-axe` add component coverage but run in jsdom, so they cannot check contrast. A clean scan does not prove keyboard operation.
 - **Keyboard**: drive the primary flow with Tab, Enter and Escape, asserting where focus lands.
+
+**Enforced by `checkpoint-m.sh`**: `M: FAIL viewport-zoom` on an added line that blocks zoom, and `M: FAIL ui-rows` when rendered UI changes and the Test Case table names no `320`, `axe` or `keyboard` row. It checks that the rows exist; the suite and review check that they hold.
 
 ---
 
@@ -262,7 +264,7 @@ keyboard. Both controls look enforced and neither can fail on these defects.
 | No pre-commit lint on staged files (`lint-staged` absent) | MINOR |
 | Pre-commit lint command weaker than the CI lint command | MAJOR |
 | Horizontal page scroll at 320 CSS px | MAJOR |
-| `user-scalable=no` or `maximum-scale` in the viewport meta | MAJOR |
+| `user-scalable=no` or a `maximum-scale` below 2 in the viewport meta | MAJOR |
 | Action reachable only by hover, or not by keyboard | MAJOR |
 | `outline: none` with no replacement focus style | MAJOR |
 | Meaning conveyed by color alone | MAJOR |
@@ -281,4 +283,4 @@ keyboard. Both controls look enforced and neither can fail on these defects.
 | Dead CI files | — | `ls .github/workflows/` | cross-ref architecture doc | "CI system matches file" |
 | Coverage config | `no-restricted-syntax` on config | same | `.filter(coverageConfigDefaults` | — |
 | Import boundary | `lint-staged` | CI eslint | import paths in moved files | — |
-| Responsive and accessibility | `eslint-plugin-jsx-a11y` | Playwright + `@axe-core/playwright` | §9 table | "no page overflow at 320 CSS px" · "axe clean" · "primary flow by keyboard" |
+| Responsive and accessibility | `eslint-plugin-jsx-a11y`, `checkpoint-m.sh` | Playwright + `@axe-core/playwright` | §9 table | "no page overflow at 320 CSS px" · "axe clean" · "primary flow by keyboard" |

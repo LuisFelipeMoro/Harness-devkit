@@ -574,7 +574,9 @@ d="$(fixture dup-shared-base)"
   printf 'hi\n' > a.txt && git add -A && git commit -qm base )
 base_lib_real="$HOOKS/base-lib.sh"
 mv "$base_lib_real" "$base_lib_real.disabled"
-out="$( cd "$d" && PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"
+# HOME points away from a real install: dup-gate.sh falls back to the copy under
+# ~/.claude, which would otherwise hide the moved file on a machine with the devkit.
+out="$( cd "$d" && HOME="$d" PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"
 mv "$base_lib_real.disabled" "$base_lib_real"
 case "$out" in *"base-lib.sh not found"*) ok=0 ;; *) ok=1 ;; esac
 gate_check "dup-gate: base resolution shared with the release guard" "$ok"
