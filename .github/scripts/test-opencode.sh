@@ -437,6 +437,48 @@ test_multi_level_symlinked_ancestor_rejected() {
     check "test_multi_level_symlinked_ancestor_rejected" "a file was written through the symlinked ancestor: $listing" $?
 }
 
+test_dotdot_through_missing_dir_rejected() {
+    # SEC-10: "missing_subdir/../link" — the walk's is_symlink() reports False for the ENOENT prefix, so only the
+    # literal ".." check stops mkdir creating missing_subdir and the kernel then resolving ../link through the symlink.
+    local dir="$WORK/dotdot-missing" ext="$WORK/dotdot-missing-ext" link="$WORK/dotdot-missing/link"
+    local sentinel out rc=0 listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    out="$(python3 -I "$GEN" --target "$dir/missing_subdir/../link/opencode" --plugins-root "$ROOT/plugins" \
+        --model-cheap test-provider/cheap-model --model-standard test-provider/standard-model \
+        --model-deep test-provider/deep-model 2>&1)" || rc=$?
+    [ "$rc" -ne 0 ]
+    check "test_dotdot_through_missing_dir_rejected" "generator exit $rc, want non-zero; got: $out" $?
+    has "$out" "$dir/missing_subdir/../link/opencode"
+    check "test_dotdot_through_missing_dir_rejected" "output does not name the rejected path; got: $out" $?
+    [ ! -e "$dir/missing_subdir" ]
+    check "test_dotdot_through_missing_dir_rejected" "missing_subdir was created before the rejection" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_dotdot_through_missing_dir_rejected" "a file was written through the symlink: $listing" $?
+}
+
+test_dotdot_with_preexisting_dir_still_caught_by_walk() {
+    # SEC-10 control: real_subdir pre-exists, so SEC-9's ancestor walk alone can lstat the symlink and refuse.
+    # This row must stay green with the SEC-10 literal check disabled, which proves the two layers are independent.
+    local dir="$WORK/dotdot-preexisting" ext="$WORK/dotdot-preexisting-ext" link="$WORK/dotdot-preexisting/link"
+    local sentinel out rc=0 listing
+    mkdir -p "$dir/real_subdir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    out="$(python3 -I "$GEN" --target "$dir/real_subdir/../link/opencode" --plugins-root "$ROOT/plugins" \
+        --model-cheap test-provider/cheap-model --model-standard test-provider/standard-model \
+        --model-deep test-provider/deep-model 2>&1)" || rc=$?
+    [ "$rc" -ne 0 ]
+    check "test_dotdot_with_preexisting_dir_still_caught_by_walk" "generator exit $rc, want non-zero; got: $out" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_dotdot_with_preexisting_dir_still_caught_by_walk" "a file was written through the symlink: $listing" $?
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -633,6 +675,8 @@ test_symlinked_project_dir_rejected
 test_symlinked_default_config_dir_rejected
 test_symlinked_target_ancestor_rejected
 test_multi_level_symlinked_ancestor_rejected
+test_dotdot_through_missing_dir_rejected
+test_dotdot_with_preexisting_dir_still_caught_by_walk
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

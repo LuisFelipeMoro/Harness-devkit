@@ -539,7 +539,8 @@ def discover_overrides(plugins_root: Path) -> dict[str, Path]:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="generate-opencode.py", description=__doc__.split("\n")[0])
-    parser.add_argument("--target", required=True, type=Path)
+    # Kept as the raw string: pathlib silently drops "." components, and SEC-10 must see them as given.
+    parser.add_argument("--target", required=True)
     parser.add_argument("--plugins-root", type=Path, default=DEFAULT_PLUGINS_ROOT)
     parser.add_argument("--model-cheap", required=True)
     parser.add_argument("--model-standard", required=True)
@@ -549,6 +550,17 @@ def main(argv: list[str]) -> int:
     except SystemExit as exc:
         # argparse exits 0 for -h/--help and 2 for a bad argument; keep whichever it chose.
         return 0 if exc.code is None else exc.code
+
+    # SEC-10: a literal "." or ".." component is refused on the string as given, before anything touches the
+    # filesystem. The stat-based walk below cannot see through a not-yet-existing directory followed by "..",
+    # because is_symlink() reports False for an ENOENT prefix; a pure string check has no such blind spot.
+    if any(part in (".", "..") for part in args.target.split(os.sep)):
+        print(
+            f"generate-opencode: --target has a '.' or '..' component: {args.target} — refusing to install through it",
+            file=sys.stderr,
+        )
+        return 1
+    args.target = Path(args.target)
 
     # SEC-8: the whole destination being a symlink leaves no partial install to report, so refuse outright.
     # This runs before mkdir, the lock and any read, because mkdir follows the link and would write through it.
