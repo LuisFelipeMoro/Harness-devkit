@@ -53,7 +53,7 @@ Audit rejects (emit `QA→CODER TEST GAP` if the coder's tests do any of these):
 - Any test with no falsification evidence, or evidence whose "failure" was a compile error rather than an assertion
 
 Expected test-file shape (what a compliant suite from the coder looks like):
-- Go: table-driven (CLAUDE.md pattern) · `testify/assert`+`require` · `//go:build integration`
+- Go: `foo_test.go` beside `foo.go` · table-driven where the logic repeats · `testify/assert`+`require` · `//go:build integration`
 - Java: JUnit 5 `@DisplayName` · Mockito · AssertJ
 - PHP: PHPUnit 10+ · Mockery · `@dataProvider` for table-driven
 - JS/TS: Jest `describe`/`it` · `@testing-library` for UI

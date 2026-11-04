@@ -31,6 +31,8 @@ Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idi
 
 ---
 ## Coding Rules
+**Priority for all Go code**: correctness → readability → simplification → optimization. Optimization never costs an earlier one without a measurement showing the gain.
+
 `fmt.Errorf("ctx: %w", err)` — no bare `return err`; `context.Context` first param; interfaces in consumer package; no `panic` in library code; `crypto/rand` not `math/rand`; parameterized queries; `ReadTimeout`/`WriteTimeout` on `http.Server`; `defer` for cleanup; every HTTP handler must have complete `swaggo/swag` annotations (`@Summary`, `@Description`, `@Tags`, `@Accept`, `@Produce`, `@Param`, `@Success`, `@Failure`, `@Router`); request/response types must be fully-typed Go structs (no `any`, no `interface{}`); types consumed across packages must be behind an interface in the consumer package; run `swag init ./...` — zero errors before handoff.
 
 ## Structure and Idiom *(authority: [Uber Go Style](https://github.com/uber-go/guide/blob/master/style.md) → [ardanlabs/service](https://github.com/ardanlabs/service) → Effective Go)*
@@ -114,8 +116,13 @@ Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idi
 ## Testing Idiom
 | Rule | Requirement |
 |------|-------------|
-| Shape | Table-driven with named cases; the case name is what a failure prints, so it names the behaviour, not `case 3` |
-| Isolation | `t.Parallel()` in leaf tests — capture the loop variable (`tc := tc`) only below `go 1.22`, where iterations share one variable; `t.Cleanup` over `defer` for teardown |
+| Test file | `foo.go` is tested by `foo_test.go` in the same directory, benchmarks and fuzz targets included, so a reader finds a test from its source file without searching. A tagged suite is `foo_integration_test.go`. Exempt: `main_test.go` (`TestMain`), `export_test.go`, `example_test.go`, a directory with no non-test `.go` file. `checkpoint-m.sh` fails a new file that breaks this |
+| Test function | `TestMyFunction_WhatIsBeingTested` — underscores only to group the cases of one function |
+| Table or not | A table when the same logic runs over varying inputs and outputs. Separate tests when a case needs its own path: no `shouldCallX`, no `setupMocks func`, no conditional assertions. One `shouldErr` branch is fine in a short body. Every field and all test logic apply to every case |
+| Table naming | The slice is `tests`, each case `tt`; inputs and outputs carry `give` and `want` prefixes |
+| Subtest name | `t.Run(tt.give, …)` when `give` is a readable label, otherwise a `name` field describing the behaviour; the name is what a failure prints, never `case 3` |
+| Setup failure | `t.Fatal`/`t.FailNow`, never `panic`: a panic stops the whole test binary instead of failing one test |
+| Isolation | `t.Parallel()` in leaf tests — capture the loop variable (`tt := tt`) only below `go 1.22`, where iterations share one variable; `t.Cleanup` over `defer` for teardown |
 | Helpers | `t.Helper()` in every assertion helper so the failure points at the caller's line |
 | HTTP | `httptest.Server` / `httptest.NewRecorder` — never a real network call in a unit test |
 | Golden files | Regenerated behind a `-update` flag, and reviewed as part of the diff — a golden file nobody read is a snapshot of a bug |
@@ -188,6 +195,9 @@ Confirm the spelling of any API in this table against live docs via context7 bef
 | `+=` string building in a loop, or a slice/map grown without a known-capacity `make` | MINOR |
 | Mixed pointer and value receivers on one type | MINOR |
 | `defer` inside a hot loop | MINOR |
+| New test file not named after its source file (`bench_test.go`, `wiring_test.go`) | MAJOR |
+| Table test that branches per case (`shouldCallX`, `setupMocks func`, conditional assertions) | MINOR |
+| Table using `tc`, or inputs and outputs without `give`/`want` | NIT |
 | Test without `t.Parallel()` where nothing prevents it, or an assertion helper missing `t.Helper()` | NIT |
 | Parser or decoder boundary with no fuzz target | MINOR |
 | Package spawning goroutines with no `goleak` verification | MINOR |

@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.1.1] — 2026-11-04
+
+### Added
+
+- Go test files are paired with their source: `foo.go` is tested by `foo_test.go` in the same directory, benchmarks and fuzz targets included. `checkpoint-m.sh` fails a new test file that breaks this; existing files are never flagged.
+- Go rules from the Uber Go Style Guide: `TestMyFunction_WhatIsBeingTested` names, `tests`/`tt`/`give`/`want` in tables, no branching tables, `t.Fatal` instead of `panic` in test setup, with matching review flags.
+- `go.md` states the order for all Go code: correctness, readability, simplification, optimization.
+- `qa` checks that a test file's name says what it tests, in every language.
+- Responsive layout and accessibility rules for front-end work, with WCAG 2.2 AA as the floor: `frontend-hardening-reference.md` §9 sets the rules and review flags, and plans for rendered UI now need real-browser reflow, axe and keyboard rows. The React, Next.js, HTMX, HTML/CSS and Flutter guides gain stack-specific rows.
+
+### Changed
+
+- `div onClick` in React is now MAJOR, because a keyboard cannot reach it.
+
+### Fixed
+
+- `plan-template.md` and `bug-investigator.md` gave two conflicting Go test-name examples. Both now use the one form.
+
 ## [3.1.0] — 2026-11-04
 
 ### Added

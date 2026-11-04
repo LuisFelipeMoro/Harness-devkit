@@ -148,21 +148,21 @@ Write a test that:
 - Is as narrow as possible: one behavior, focused assertions
 - Uses the project's test framework and patterns:
 
-*Go*: table-driven `_test.go`, `require`/`assert` from testify
+*Go*: `foo_test.go` beside `foo.go`, table-driven where the logic repeats, `require`/`assert` from testify
 ```go
-func TestFoo_WhenBarCondition_ShouldReturnBaz(t *testing.T) {
+func TestFoo_ReturnsBazWhenBar(t *testing.T) {
     tests := []struct {
-        name  string
-        input string
-        want  string
+        name string
+        give string
+        want string
     }{
         {"correct behavior description", "input", "expected"},
     }
-    for _, tc := range tests {
-        t.Run(tc.name, func(t *testing.T) {
-            got, err := Foo(tc.input)
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := Foo(tt.give)
             require.NoError(t, err)
-            assert.Equal(t, tc.want, got)
+            assert.Equal(t, tt.want, got)
         })
     }
 }

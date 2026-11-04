@@ -1,6 +1,6 @@
 {
   "name": "pr-workflow",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "PR skills \u2014 code review of a diff or PR, and triage-and-fix of PR comments",
   "author": {
     "name": "Luis Moro"

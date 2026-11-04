@@ -47,6 +47,7 @@ App Router for new projects (Pages Router only for legacy); Server Components by
 | Secrets | Server-only modules for anything holding a key; `NEXT_PUBLIC_` is a publication — treat it as one |
 | Routing | `loading.tsx` / `error.tsx` colocated per segment; a server redirect wherever a client-side one would flash |
 | Streaming | Suspense boundaries around slow segments instead of blocking the whole route |
+| Viewport | `viewport` export or `generateViewport`, never `userScalable: false` or `maximumScale`; `next/image` carries `sizes` when its width changes by breakpoint. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
 | Assets | `next/image` and `next/font` — a raw `<img>` for a content image is a CLS regression |
 
 ## Linting Commands
@@ -66,6 +67,7 @@ verify the flat-config blocks do not shadow one another
 | `'use client'` on a component with no state/events (needless client bloat) | MINOR |
 | Bare `<img>` instead of `next/image` | MINOR |
 | External font CDN instead of `next/font` | MINOR |
+| `userScalable: false` or `maximumScale` in `viewport` | MAJOR |
 | `next build` not run before handoff | MAJOR |
 | `security/*` or `regexp/*` rules absent from the config, or present at `warn` **[FH]** | MAJOR |
 | `coverageConfigDefaults.exclude` filtered in `vitest.config.*` / `jest.config.*` **[FH]** | MAJOR |

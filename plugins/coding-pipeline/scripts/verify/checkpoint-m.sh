@@ -10,7 +10,8 @@
 # declared — no silent extra edit, no silent revert, a rename or a deletion
 # counted as touching every path it touches — no stray commit sits ahead of
 # the base, no `*.devkit-break` marker was left behind by an interrupted
-# break-run.sh, duplication stays under the delivery's own gate
+# break-run.sh, a new Go test file is named after its source file, duplication
+# stays under the delivery's own gate
 # (git-hooks/dup-gate.sh), the declared agent roster still matches the real
 # diff (classify-diff.sh, opt-in via --declared), and an arbitrary gates
 # command exits clean (opt-in via --gates).
@@ -267,6 +268,38 @@ marker_f=""
 while IFS= read -r -d '' marker_f; do
     fail "break-marker" "leftover marker ${marker_f#./}"
 done < "$mk_tmp"
+
+# ── test-file-name: a new Go test file names the source file it tests ───────
+# Only paths absent from the base are judged, so a repository's existing names
+# never block unrelated work. Pairing is per directory because that is how Go
+# groups a package: a same-named source file elsewhere proves nothing.
+check_go_test_file_name() {  # check_go_test_file_name <path>
+    local path="$1" dir stem
+    case "$path" in
+        *_test.go) ;;
+        *) return 0 ;;
+    esac
+    case "/$path" in
+        */testdata/*|*/vendor/*) return 0 ;;
+    esac
+    [ -f "$path" ] || return 0
+    git cat-file -e "$base:$path" 2>/dev/null && return 0
+    dir=$(dirname "$path")
+    stem=$(basename "$path" _test.go)
+    case "$stem" in
+        main|export|example) return 0 ;;
+    esac
+    stem="${stem%_integration}"
+    [ -f "$dir/$stem.go" ] && return 0
+    # A test-only directory has no source file to pair with.
+    find "$dir" -maxdepth 1 -name '*.go' ! -name '*_test.go' | grep -q . || return 0
+    fail "test-file-name" "$path — no $stem.go in the same directory"
+}
+if [ ${#seen[@]} -gt 0 ]; then
+    for p in "${seen[@]}"; do
+        check_go_test_file_name "$p"
+    done
+fi
 
 # ── dup: git-hooks/dup-gate.sh, resolved the same way pre-push resolves it ──
 # (0 pass, 1 fail, 2 UNENFORCED — already warned by the gate itself — is

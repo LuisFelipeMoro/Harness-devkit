@@ -1,6 +1,6 @@
 {
   "name": "engineering",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Engineering skills \u2014 dependency audit, security review, DB migration, observability, performance profiling, release management",
   "author": {
     "name": "Luis Moro"

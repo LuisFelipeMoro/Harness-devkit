@@ -47,6 +47,7 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Security | No unescaped user data in an `hx-*` attribute; a CSRF token on every mutating request; `hx-vals` built from server-rendered data only |
 | Progressive enhancement | The flow works as a plain form POST with htmx absent, unless the story scopes that out explicitly |
 | Events | `hx-trigger` carries explicit modifiers (`changed delay:500ms`) — an un-debounced `input` trigger is a load defect |
+| Focus after swap | htmx keeps focus only on inputs with an `id`, so give swapped inputs a stable `id` and move focus deliberately when a swap removes the focused control. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
 | Boosting | `hx-boost` applied at a container with `hx-push-url` chosen deliberately, not inherited by accident |
 
 ## Linting Commands
@@ -60,6 +61,7 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Inline `<script>` or `onclick` handler (CSP violation) | MAJOR |
 | Non-semantic HTML (div-soup, missing landmarks) | MINOR |
 | Missing ARIA live region on `hx-swap` target | MINOR |
+| Swap that drops keyboard focus to `<body>` | MAJOR |
 | `hx-trigger` without debounce/throttle on high-frequency events | MINOR |
 | Missing `hx-indicator` on slow server responses | MINOR |
 | Playwright spec whose loop body is empty or whose assertion cannot fail **[FH]** | MAJOR |
