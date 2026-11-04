@@ -1852,6 +1852,17 @@ check "new-file discipline: no guide still says CD1–CD7" 1 "$rc"
 n=$(grep -r --include='*.md' 'CD1–CD8' "$ROOT/plugins" | wc -l | tr -d ' ')
 check "new-file discipline: guides state CD1–CD8 at all 5 mentions" 5 "$n"
 
+latest=$(grep -m1 -oE '^## \[[0-9.]+\]' "$ROOT/CHANGELOG.md" | tr -d '#[] ')
+rc=0
+for m in "$ROOT"/plugins/*/.claude-plugin/plugin.json; do
+    [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$m")" = "$latest" ] || rc=1
+done
+check "release: every plugin manifest matches the newest CHANGELOG heading" 0 "$rc"
+out=$(cat "$ROOT/README.md")
+check "new-file discipline: README states the rule" 0 0 "$out" "**New files are justified.**"
+out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+check "new-file discipline: CHANGELOG 3.1.0 names CD8" 0 0 "$out" "CD8"
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

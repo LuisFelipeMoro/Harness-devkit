@@ -133,6 +133,8 @@ agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) ins
   Tautology is the blocking defect, not low coverage.
 - **Plans are checked against the real repo.** Every plan carries a codebase map and a Reuse Map
   (`reuse:` / `extend:` / `new:`, cited `file:line`). `plan-reviewer` reads it with the repository open.
+- **New files are justified.** Every new file names the closest existing file and why it cannot
+  live there; `plan-reviewer` and `reviewer` flag a weak reason.
 - **Implementer is not the validator.** `coder` builds; `qa`, `reviewer` and `stress` cannot edit files.
 - **Duplication is measured and attributed.** `jscpd` gates at 3% *introduced*; pre-existing debt is
   reported, never blocking (`git-hooks/dup-attribution.py`).
