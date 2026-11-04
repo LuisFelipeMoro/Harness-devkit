@@ -32,10 +32,15 @@ Exit 2 — bad arguments.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -186,6 +191,50 @@ def _sha256_if_file(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _default_mode() -> int:
+    current = os.umask(0)
+    os.umask(current)
+    return 0o666 & ~current
+
+
+def _atomic_write(dest: Path, data: bytes, mode: int | None) -> None:
+    """Write to a temp file beside dest, then rename it into place (AC11).
+
+    A kill mid-write leaves the old file intact or the temp file behind; a reader never sees a
+    truncated or partial destination. os.replace is atomic on POSIX.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=dest.parent, prefix=f".{dest.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_name, mode if mode is not None else _default_mode())
+        os.replace(tmp_name, dest)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp_name)
+        raise
+
+
+@contextlib.contextmanager
+def _target_lock(target: Path) -> Iterator[None]:
+    """Hold an exclusive lock on the target for the whole generate + manifest-write sequence (SEC-5).
+
+    Without it, two concurrent runs each read the manifest before the other finished, and the
+    last process to write the manifest erases the other's bookkeeping. The lock is taken on the
+    target directory's own handle, so no lockfile is created inside the target: every file there
+    stays one the manifest accounts for.
+    """
+    fd = os.open(target, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
 class WriteGuard:
     """The one place the generator writes a file. Every engine calls write(), so the collision guard covers all of them."""
 
@@ -195,9 +244,17 @@ class WriteGuard:
         self.written: dict[str, str] = {}
         self.kept: list[str] = []
 
-    def write(self, rel: str, data: bytes, mode: int | None = None) -> ManifestEntry | None:
+    def write(
+        self, rel: str, data: bytes, mode: int | None = None, *, trusted_owner: bool = False
+    ) -> ManifestEntry | None:
+        """trusted_owner is set only for the manifest itself: its ownership is already established
+        by read_manifest, and it is never listed among the entries it records."""
         dest = self.target / rel
-        action = decide_write(self.prior, rel, _sha256_if_file(dest))
+        # Checked before anything follows the path: a symlink at a devkit-owned path is never written through (SEC-6).
+        if dest.is_symlink():
+            self.kept.append(f"kept (not the devkit's): {rel}")
+            return None
+        action = WRITE if trusted_owner else decide_write(self.prior, rel, _sha256_if_file(dest))
         if action == KEPT_MODIFIED:
             self.kept.append(f"kept (modified since install): {rel}")
             return None
@@ -205,11 +262,10 @@ class WriteGuard:
             self.kept.append(f"kept (not the devkit's): {rel}")
             return None
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-        if mode is not None:
-            dest.chmod(mode)
+        _atomic_write(dest, data, mode)
         sha = hashlib.sha256(data).hexdigest()
-        self.written[rel] = sha
+        if not trusted_owner:
+            self.written[rel] = sha
         return ManifestEntry(path=rel, sha256=sha)
 
     def manifest_entries(self) -> list[ManifestEntry]:
@@ -221,7 +277,8 @@ class WriteGuard:
 
 def read_manifest(target: Path) -> dict[str, str]:
     path = target / MANIFEST_NAME
-    if not path.is_file():
+    # A symlink is never read through (SEC-6): it is not a manifest this devkit owns.
+    if path.is_symlink() or not path.is_file():
         return {}
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
@@ -246,12 +303,14 @@ def read_manifest(target: Path) -> dict[str, str]:
     return prior
 
 
-def write_manifest(target: Path, entries: list[ManifestEntry]) -> None:
+def write_manifest(guard: WriteGuard) -> None:
+    entries = guard.manifest_entries()
     doc = {
         "version": MANIFEST_VERSION,
         "entries": [{"path": e.path, "sha256": e.sha256} for e in sorted(entries, key=lambda e: e.path)],
     }
-    (target / MANIFEST_NAME).write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    data = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    guard.write(MANIFEST_NAME, data, trusted_owner=True)
 
 
 def _emit(guard: WriteGuard, entries: list[ManifestEntry], rel: str, text: str) -> None:
@@ -447,15 +506,17 @@ def main(argv: list[str]) -> int:
     model_map = {"cheap": args.model_cheap, "standard": args.model_standard, "deep": args.model_deep}
     try:
         args.target.mkdir(parents=True, exist_ok=True)
-        guard = WriteGuard(args.target, read_manifest(args.target))
-        entries: list[ManifestEntry] = []
-        try:
-            entries += generate_skills(args.plugins_root, guard, discover_overrides(args.plugins_root))
-            entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, guard, model_map)
-            entries += generate_devkit(args.plugins_root, guard)
-        finally:
-            # Record every file actually written, even on a failed run, so the next run still owns them.
-            write_manifest(args.target, guard.manifest_entries())
+        # The lock is taken before the manifest is read, so a concurrent run's manifest is never stale (SEC-5).
+        with _target_lock(args.target):
+            guard = WriteGuard(args.target, read_manifest(args.target))
+            entries: list[ManifestEntry] = []
+            try:
+                entries += generate_skills(args.plugins_root, guard, discover_overrides(args.plugins_root))
+                entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, guard, model_map)
+                entries += generate_devkit(args.plugins_root, guard)
+            finally:
+                # Record every file actually written, even on a failed run, so the next run still owns them.
+                write_manifest(guard)
     except (OSError, ValueError) as exc:
         print(f"generate-opencode: {exc}", file=sys.stderr)
         return 1
