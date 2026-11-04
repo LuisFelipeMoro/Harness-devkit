@@ -399,6 +399,44 @@ test_symlinked_default_config_dir_rejected() {
     check "test_symlinked_default_config_dir_rejected" "a file was written through the symlinked config dir: $listing" $?
 }
 
+test_symlinked_target_ancestor_rejected() {
+    # SEC-9: --target DIR/newdir with DIR a symlink. SEC-8 only checks the leaf, which does not exist yet, so it passes.
+    local dir="$WORK/symlinked-target-ancestor" ext="$WORK/symlinked-target-ancestor-ext" link="$WORK/symlinked-target-ancestor-link"
+    local sentinel rc=0 err listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    inst --target "$link/newdir" "${TIERS[@]}" --no-git-hooks --yes >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
+    err="$(cat "$dir/stderr.txt")"
+    [ "$rc" -ne 0 ]
+    check "test_symlinked_target_ancestor_rejected" "installer exit $rc, want non-zero; stderr: $err" $?
+    has "$err" "$link"
+    check "test_symlinked_target_ancestor_rejected" "stderr does not name the symlinked ancestor; got: $err" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_symlinked_target_ancestor_rejected" "a file was written through the symlinked ancestor: $listing" $?
+}
+
+test_multi_level_symlinked_ancestor_rejected() {
+    # SEC-9: the symlink sits two levels above the leaf (--target LINK/mid/newdir), so only a full ancestor walk sees it.
+    local dir="$WORK/multi-level-ancestor" ext="$WORK/multi-level-ancestor-ext" link="$WORK/multi-level-ancestor-link"
+    local sentinel rc=0 err listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    inst --target "$link/mid/newdir" "${TIERS[@]}" --no-git-hooks --yes >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
+    err="$(cat "$dir/stderr.txt")"
+    [ "$rc" -ne 0 ]
+    check "test_multi_level_symlinked_ancestor_rejected" "installer exit $rc, want non-zero; stderr: $err" $?
+    has "$err" "$link"
+    check "test_multi_level_symlinked_ancestor_rejected" "stderr does not name the symlinked ancestor; got: $err" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_multi_level_symlinked_ancestor_rejected" "a file was written through the symlinked ancestor: $listing" $?
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -593,6 +631,8 @@ test_no_writes_outside_target
 test_commands_sample_written_and_never_merged
 test_symlinked_project_dir_rejected
 test_symlinked_default_config_dir_rejected
+test_symlinked_target_ancestor_rejected
+test_multi_level_symlinked_ancestor_rejected
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

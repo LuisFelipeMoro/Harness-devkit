@@ -134,20 +134,13 @@ if [ "$TIER_ERRORS" -ne 0 ]; then
 fi
 
 # ── target resolution ────────────────────────────────────────────────────────
-# SEC-9: TARGET does not exist yet on a first install, so generate-opencode.py's own symlink check
-# cannot see a symlinked parent. Check the input ancestor here, before the joined path is built.
-reject_symlinked_ancestor() {
-    if [ -L "$1" ]; then
-        die "$2 is a symlink: $1 — refusing to install through it"
-    fi
-}
+# Every symlink check (SEC-8/SEC-9) runs in generate-opencode.py on the one resolved TARGET below,
+# so --target, --project and the default path are covered by the same code.
 if [ "$PROJECT_SET" = 1 ]; then
-    reject_symlinked_ancestor "${PROJECT_DIR:-$PWD}" "--project DIR"
     TARGET="${PROJECT_DIR:-$PWD}/.opencode"
 elif [ "$TARGET_SET" = 1 ]; then
     TARGET="$TARGET_ARG"
 else
-    reject_symlinked_ancestor "${XDG_CONFIG_HOME:-$HOME/.config}" "config directory"
     TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 fi
 case "$TARGET" in

@@ -346,6 +346,22 @@ def _first_symlink_component(root: Path, rel_dir: str) -> str | None:
     return None
 
 
+def _first_symlink_ancestor(target: Path) -> Path | None:
+    """Return the first symlinked directory above target on the path as given, else None (SEC-9).
+
+    Every prefix from the anchor down to target's parent is lstat-ed. Nothing is resolved:
+    resolve() would follow a symlink and hide it. The leaf is excluded because SEC-8 owns it.
+    A relative target is anchored at the physical cwd, so a symlink inside the relative part is still seen.
+    """
+    as_given = target if target.is_absolute() else Path.cwd() / target
+    current = Path(as_given.anchor)
+    for part in as_given.parts[1:-1]:
+        current = current / part
+        if current.is_symlink():
+            return current
+    return None
+
+
 def generate_skills(
     plugins_root: Path, guard: WriteGuard, overrides: dict[str, Path]
 ) -> list[ManifestEntry]:
@@ -539,6 +555,20 @@ def main(argv: list[str]) -> int:
     if args.target.is_symlink():
         print(
             f"generate-opencode: --target is a symlink: {args.target} — refusing to install through it",
+            file=sys.stderr,
+        )
+        return 1
+
+    # SEC-9: a symlink anywhere above the target means mkdir would write through it. Checked here, once,
+    # for --target, --project and the default path alike, because all three arrive as this one argument.
+    try:
+        ancestor = _first_symlink_ancestor(args.target)
+    except OSError as exc:
+        print(f"generate-opencode: could not check the ancestors of --target {args.target}: {exc}", file=sys.stderr)
+        return 1
+    if ancestor is not None:
+        print(
+            f"generate-opencode: --target ancestor is a symlink: {ancestor} — refusing to install through it",
             file=sys.stderr,
         )
         return 1
