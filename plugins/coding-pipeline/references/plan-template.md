@@ -124,6 +124,11 @@ Disposition `Preserve` · `Change` · `Drop`. Greenfield → `n/a — no existin
 | ID | Task | Files | Test rows | Language | Tier | Depends on |
 |---|---|---|---|---|---|---|
 
+### New files
+| New path | Closest existing file | Why it cannot live there |
+|---|---|---|
+Or `none — every Files path already exists`.
+
 ## Open questions
 - {question} — {who decides} — {status / answer}
 
@@ -185,6 +190,7 @@ One row = one unit `/code` executes (inline, by one coder, or in parallel — th
   and independently reviewable.
 - `Files` lists every file the row touches. It becomes the checkpoint's `--expect` set, and rows with no
   `Depends on` and disjoint `Files` are the ones that may run in parallel.
+- Every `Files` path not yet in the repo gets a `### New files` row, in a mini-plan too: the closest existing file and the specific reason it cannot hold this. Reasons that hold: a different topic (one topic per file), a load-on-demand boundary, or nothing comparable exists (closest file `none`). Exempt, no row: a test file beside a new source file, migration, a manifest its tool requires (such as `package.json` or `plugin.json`), generated code.
 - `Test rows` names the Test Case rows the task implements; every Test Case row belongs to exactly one task.
 - `Language` comes from the header / Technology decisions, never guessed; `Tier` picks the coder overlay
   (`Backend` → `coder-backend`, `Frontend` → `coder-frontend`, `—` → `coder`).

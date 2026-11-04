@@ -1793,6 +1793,65 @@ mkdir -p "$W/hm-not-git"
 out=$(cd "$W/hm-not-git" && GIT_CEILING_DIRECTORIES="$W" python3 "$HM" 2>&1); rc=$?
 check "harness-metrics: outside a git repository is UNMEASURED" 2 "$rc" "$out" "not a git repository"
 
+# ── new-file discipline: the rule text the validators read, and the parser beside it ──
+# The rule has no mechanical sensor (the plan's decision), so these rows pin that
+# the text stays in every mirror. They prove the rule is stated, not that it is obeyed.
+PT="$ROOT/plugins/coding-pipeline/references/plan-template.md"
+CDF="$ROOT/plugins/coding-pipeline/references/change-discipline.md"
+RVW="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+RCK="$ROOT/plugins/pr-workflow/skills/review-code/references/review-checklist.md"
+STD="$ROOT/plugins/coding-pipeline/CLAUDE.md"
+
+out=$(cat "$PT")
+check "new-file discipline: plan template declares the New files table" 0 0 "$out" "| New path | Closest existing file | Why it cannot live there |"
+check "new-file discipline: Tasks rule covers mini-plans" 0 0 "$out" 'gets a `### New files` row, in a mini-plan too'
+check "new-file discipline: plan template exempts only tests beside new source" 0 0 "$out" "Exempt, no row: a test file beside a new source file"
+
+cat > "$W/nf-plan.md" <<'MD'
+## Tasks
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a/money.go` | TestA | Go 1.26 | Backend | — |
+
+### New files
+| New path | Closest existing file | Why it cannot live there |
+|---|---|---|
+| `a/money.go` | none | nothing comparable exists |
+MD
+out=$(python3 "$ER" --plan "$W/nf-plan.md" 2>&1); rc=$?
+check "new-file discipline: estimate-run stops before the New files table" 0 "$rc" "$out" "T1"
+
+out=$(cat "$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md")
+check "new-file discipline: planning phase 4 asks for New files" 0 0 "$out" 'A path not yet in the repo gets a `### New files` row.'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/plan-reviewer.md")
+check "new-file discipline: PR2 reviews new paths" 0 0 "$out" "(CD8 at plan time)"
+
+out=$(cat "$CDF")
+check "new-file discipline: CD8 row sets its severities" 0 0 "$out" "a reason that does not hold | MAJOR | HIGH |"
+check "new-file discipline: CD8 example holds without a plan" 0 0 "$out" "stays in force without a plan"
+check "new-file discipline: CD8 finding cites both paths" 0 0 "$out" "cites both the new path and the closest existing file"
+check "new-file discipline: CD8 exempts only tests beside new source" 0 0 "$out" "Exempt: a test file beside a new source file"
+check "new-file discipline: change-discipline title names rule 11" 0 0 "$out" "rules 1–3, 5, 6, 11"
+
+out=$(cat "$RVW")
+check "new-file discipline: reviewer mirrors CD8 as MAJOR" 0 0 "$out" "citing both paths (MAJOR)"
+check "new-file discipline: reviewer puts CD8 on the Standards axis" 0 0 "$out" "CD2 / CD4 / CD5 / CD6 / CD8"
+out=$(cat "$RCK")
+check "new-file discipline: checklist mirrors CD8 as HIGH" 0 0 "$out" "cite both paths → HIGH"
+check "new-file discipline: checklist puts CD8 on the Standards axis" 0 0 "$out" "CD2/CD4/CD5/CD6/CD8"
+out=$(cat "$ROOT/plugins/pr-workflow/skills/review-code/references/diff-verdict-and-rules.md")
+check "new-file discipline: diff verdict lists CD8 as MAJOR" 0 0 "$out" "could hold (CD8) are MAJOR"
+
+out=$(cat "$STD")
+check "new-file discipline: rule 11 states the rule" 0 0 "$out" "any new file, source included, states why it cannot (CD8)"
+check "new-file discipline: CLAUDE.md range matches plan-reviewer" 0 0 "$out" "PR1–PR11"
+grep -q 'PR1–PR10' "$STD"; rc=$?
+check "new-file discipline: CLAUDE.md no longer says PR1–PR10" 1 "$rc"
+grep -rlq 'CD1–CD7' "$ROOT/plugins"; rc=$?
+check "new-file discipline: no guide still says CD1–CD7" 1 "$rc"
+n=$(grep -r --include='*.md' 'CD1–CD8' "$ROOT/plugins" | wc -l | tr -d ' ')
+check "new-file discipline: guides state CD1–CD8 at all 5 mentions" 5 "$n"
+
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
