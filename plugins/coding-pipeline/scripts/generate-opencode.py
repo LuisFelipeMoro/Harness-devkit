@@ -7,6 +7,7 @@ This engine walks the source tree, applies the frozen transform-rule table and t
 two-pass dispatch-prose rewrite, and writes the result under a target directory:
 
   <target>/skills/<name>/SKILL.md        one per plugins/*/skills/*/SKILL.md
+  <target>/skills/<name>/references/<rel>.md   one per plugins/*/skills/*/references/**/*.md
   <target>/devkit/references/<rel>.md    one per plugins/*/references/**/*.md
   <target>/agents/<name>.md              one per plugins/coding-pipeline/agents/*.md
                                          (coder.md is merged into its two overlays,
@@ -277,6 +278,16 @@ def generate_skills(
             else:
                 text = apply_transforms(source.read_text(encoding="utf-8"))
             _emit(guard, entries, rel, text)
+
+            skill_refs_dir = source.parent / "references"
+            if not skill_refs_dir.is_dir():
+                continue
+            for ref in sorted(skill_refs_dir.rglob("*.md")):
+                ref_rel = f"skills/{name}/references/" + ref.relative_to(skill_refs_dir).as_posix()
+                if ref_rel in seen:
+                    raise ValueError(f"skill reference collision: {ref_rel} from {seen[ref_rel]} and {ref}")
+                seen[ref_rel] = ref
+                _emit(guard, entries, ref_rel, apply_transforms(ref.read_text(encoding="utf-8")))
 
     for plugin in iter_plugin_dirs(plugins_root):
         refs_dir = plugin / "references"
