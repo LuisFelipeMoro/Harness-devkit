@@ -462,7 +462,8 @@ test_dotdot_through_missing_dir_rejected() {
 
 test_dotdot_with_preexisting_dir_still_caught_by_walk() {
     # SEC-10 control: real_subdir pre-exists, so SEC-9's ancestor walk alone can lstat the symlink and refuse.
-    # This row must stay green with the SEC-10 literal check disabled, which proves the two layers are independent.
+    # Defense-in-depth, not independence: either SEC-9 or SEC-10 alone still catches this specific
+    # pre-existing-intermediate shape. The falsifying break is disabling both simultaneously.
     local dir="$WORK/dotdot-preexisting" ext="$WORK/dotdot-preexisting-ext" link="$WORK/dotdot-preexisting/link"
     local sentinel out rc=0 listing
     mkdir -p "$dir/real_subdir" "$ext"
