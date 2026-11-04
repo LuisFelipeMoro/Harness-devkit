@@ -534,6 +534,15 @@ def main(argv: list[str]) -> int:
         # argparse exits 0 for -h/--help and 2 for a bad argument; keep whichever it chose.
         return 0 if exc.code is None else exc.code
 
+    # SEC-8: the whole destination being a symlink leaves no partial install to report, so refuse outright.
+    # This runs before mkdir, the lock and any read, because mkdir follows the link and would write through it.
+    if args.target.is_symlink():
+        print(
+            f"generate-opencode: --target is a symlink: {args.target} — refusing to install through it",
+            file=sys.stderr,
+        )
+        return 1
+
     model_map = {"cheap": args.model_cheap, "standard": args.model_standard, "deep": args.model_deep}
     try:
         args.target.mkdir(parents=True, exist_ok=True)
