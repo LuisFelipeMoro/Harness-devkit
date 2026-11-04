@@ -406,6 +406,15 @@ line in `~/.claude/CLAUDE.md`, and the git hooks per repo with `bash ~/.claude/g
 `~/.agents/skills/`; `generate-codex-agents.sh` writes one `~/.codex/agents/<name>.toml` per agent.
 Skill sequencing under Codex is not yet validated live; see `plugins/coding-pipeline/codex/harness-adapter.md`.
 
+**OpenCode:** `bash plugins/coding-pipeline/scripts/install-opencode.sh` generates OpenCode-shaped
+skills, agents, references and `AGENTS.md` into `${XDG_CONFIG_HOME:-$HOME/.config}/opencode` (or
+`<DIR>/.opencode` with `--project DIR`), and requires all three model tiers
+(`--model-cheap`/`--model-standard`/`--model-deep`, `provider/model` form). Slash-command parity is
+not generated — only a hand-mergeable `devkit/commands.json.sample` snippet is printed and written,
+never auto-merged into the operator's own `opencode.json` — and the manual-skill-invocation rule is
+a documented gap under OpenCode, not something the installer enforces; see
+`plugins/coding-pipeline/opencode/harness-adapter.md`.
+
 ## Plugins
 
 ```
