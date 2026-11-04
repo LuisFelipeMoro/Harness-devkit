@@ -55,19 +55,20 @@ print(m.group(1) if m else "NOMATCH")
 ' "$VALIDATOR" "$1"
 }
 
-# expect_capture <span> <want> — one regex assertion under the regex test name.
-RX_TEST="test_backtick_path_regex_matches_opencode"
+# expect_capture <span> <want> — one regex assertion under test_backtick_path_regex_matches_opencode.
+# The test name is spelled literally in each check call so the static spec-coverage
+# sensor can match it; a variable would hide it from the grep.
 expect_capture() {
     local got rc
     got="$(capture "$1")"; rc=$?
     if [ "$rc" -ne 0 ]; then
-        check "$RX_TEST" "regex could not be loaded from validate-wiring.py (exit $rc)" 1
+        check "test_backtick_path_regex_matches_opencode" "regex could not be loaded from validate-wiring.py (exit $rc)" 1
         return
     fi
     if [ "$got" = "$2" ]; then
-        check "$RX_TEST" "" 0
+        check "test_backtick_path_regex_matches_opencode" "" 0
     else
-        check "$RX_TEST" "span '$1': got '$got', want '$2'" 1
+        check "test_backtick_path_regex_matches_opencode" "span '$1': got '$got', want '$2'" 1
     fi
 }
 
@@ -111,32 +112,31 @@ cat > "$ORIGINAL_BULLETS" <<'EOF'
 EOF
 
 test_agents_md_gains_exactly_one_bullet() {
-    local name="test_agents_md_gains_exactly_one_bullet"
     local now_head="$WORK/now-head.md" new_block new_count
 
     # Lines 22-36 byte-identical to the frozen original (15 lines).
     sed -n '22,36p' "$AGENTS" > "$now_head"
     if cmp -s "$ORIGINAL_BULLETS" "$now_head"; then
-        check "$name" "" 0
+        check "test_agents_md_gains_exactly_one_bullet" "" 0
     else
-        check "$name" "AGENTS.md lines 22-36 changed; existing bullets must stay byte-identical" 1
+        check "test_agents_md_gains_exactly_one_bullet" "AGENTS.md lines 22-36 changed; existing bullets must stay byte-identical" 1
     fi
 
     # Everything after the original 36 lines is one new bullet, and nothing else.
     new_block="$(sed -n '37,$p' "$AGENTS")"
     new_count="$(printf '%s\n' "$new_block" | grep -c '^- ')"
     if [ -n "$new_block" ] && [ "$new_count" -eq 1 ] && [ "$(printf '%s\n' "$new_block" | head -n 1 | cut -c1-2)" = "- " ]; then
-        check "$name" "" 0
+        check "test_agents_md_gains_exactly_one_bullet" "" 0
     else
-        check "$name" "expected exactly one new bullet after line 36, found $new_count bullet line(s)" 1
+        check "test_agents_md_gains_exactly_one_bullet" "expected exactly one new bullet after line 36, found $new_count bullet line(s)" 1
     fi
 
     # The new bullet points at the installer and the adapter doc.
     if printf '%s\n' "$new_block" | grep -q 'install-opencode\.sh' \
         && printf '%s\n' "$new_block" | grep -q 'opencode/harness-adapter\.md'; then
-        check "$name" "" 0
+        check "test_agents_md_gains_exactly_one_bullet" "" 0
     else
-        check "$name" "new bullet does not reference install-opencode.sh and opencode/harness-adapter.md" 1
+        check "test_agents_md_gains_exactly_one_bullet" "new bullet does not reference install-opencode.sh and opencode/harness-adapter.md" 1
     fi
 }
 
