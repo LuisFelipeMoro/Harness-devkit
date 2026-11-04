@@ -361,6 +361,44 @@ test_symlinked_target_root_rejected() {
     check "test_symlinked_target_root_rejected" "a file was written through the symlinked target: $listing" $?
 }
 
+test_symlinked_project_dir_rejected() {
+    # SEC-9: --project DIR is a symlink and DIR/.opencode does not exist yet, so SEC-8's TARGET check cannot see it.
+    local dir="$WORK/symlinked-project-dir" ext="$WORK/symlinked-project-dir-ext" link="$WORK/symlinked-project-dir-link"
+    local sentinel rc=0 err listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    inst --project "$link" "${TIERS[@]}" --no-git-hooks --yes >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
+    err="$(cat "$dir/stderr.txt")"
+    [ "$rc" -ne 0 ]
+    check "test_symlinked_project_dir_rejected" "installer exit $rc, want non-zero; stderr: $err" $?
+    has "$err" "$link"
+    check "test_symlinked_project_dir_rejected" "stderr does not name the symlinked project dir; got: $err" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_symlinked_project_dir_rejected" "a file was written through the symlinked project dir: $listing" $?
+}
+
+test_symlinked_default_config_dir_rejected() {
+    # SEC-9: XDG_CONFIG_HOME is a symlink on the zero-flag default path; opencode/ does not exist under it yet.
+    local dir="$WORK/symlinked-default-config" ext="$WORK/symlinked-default-config-ext" link="$WORK/symlinked-default-config-link"
+    local sentinel rc=0 err listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    ln -s "$ext" "$link"
+    XDG_CONFIG_HOME="$link" inst "${TIERS[@]}" --no-git-hooks --yes >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
+    err="$(cat "$dir/stderr.txt")"
+    [ "$rc" -ne 0 ]
+    check "test_symlinked_default_config_dir_rejected" "installer exit $rc, want non-zero; stderr: $err" $?
+    has "$err" "$link"
+    check "test_symlinked_default_config_dir_rejected" "stderr does not name the symlinked config directory; got: $err" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_symlinked_default_config_dir_rejected" "a file was written through the symlinked config dir: $listing" $?
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -553,6 +591,8 @@ test_project_and_target_mutually_exclusive
 test_no_shell_injection_from_target_path
 test_no_writes_outside_target
 test_commands_sample_written_and_never_merged
+test_symlinked_project_dir_rejected
+test_symlinked_default_config_dir_rejected
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]
