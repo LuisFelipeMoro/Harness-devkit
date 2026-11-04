@@ -287,6 +287,58 @@ PY
     check "test_killed_mid_write_leaves_no_torn_file" "destination changed after an interrupted write (generator exit $rc)" "$same"
 }
 
+test_broken_symlink_at_skill_dir_kept_not_crashed() {
+    # SEC-7: a broken link at skills/<name> made the old mkdir(exist_ok=True) raise FileExistsError.
+    local dir="$WORK/broken-skill-dir" target="$WORK/no-such-directory" out rc=0 link_target
+    mkdir -p "$dir/skills"
+    ln -s "$target" "$dir/skills/map"
+    out="$(gen "$dir" 2>&1)" || rc=$?
+    check "test_broken_symlink_at_skill_dir_kept_not_crashed" "generator exit $rc, want 0; got: $out" "$rc"
+    printf '%s\n' "$out" | grep -qxF "kept (not the devkit's): skills/map"
+    check "test_broken_symlink_at_skill_dir_kept_not_crashed" "stdout lacks the kept line; got: $out" $?
+    link_target="$(readlink "$dir/skills/map" 2>/dev/null)"
+    [ -L "$dir/skills/map" ] && [ "$link_target" = "$target" ]
+    check "test_broken_symlink_at_skill_dir_kept_not_crashed" "the broken symlink was deleted or replaced" $?
+}
+
+test_valid_symlink_at_skill_dir_not_followed() {
+    # SEC-7: a valid link at skills/<name> was followed by mkdir and SKILL.md was written into the external directory.
+    local dir="$WORK/valid-skill-dir" ext="$WORK/external-skill-dir" sentinel out rc=0 listing
+    mkdir -p "$dir/skills" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    cp "$sentinel" "$WORK/valid-sentinel-before.txt"
+    ln -s "$ext" "$dir/skills/map"
+    out="$(gen "$dir" 2>&1)" || rc=$?
+    check "test_valid_symlink_at_skill_dir_not_followed" "generator exit $rc, want 0; got: $out" "$rc"
+    printf '%s\n' "$out" | grep -qxF "kept (not the devkit's): skills/map"
+    check "test_valid_symlink_at_skill_dir_not_followed" "stdout lacks the kept line; got: $out" $?
+    cmp -s "$sentinel" "$WORK/valid-sentinel-before.txt"
+    check "test_valid_symlink_at_skill_dir_not_followed" "sentinel content in the external directory changed" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_valid_symlink_at_skill_dir_not_followed" "a file was written into the external directory: $listing" $?
+}
+
+test_valid_symlink_at_top_level_output_dir_not_followed() {
+    # SEC-7: a valid link at the whole agents/ directory was followed by mkdir, so agent files landed outside the target.
+    local dir="$WORK/valid-agents-dir" ext="$WORK/external-agents-dir" sentinel out rc=0 listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    cp "$sentinel" "$WORK/agents-sentinel-before.txt"
+    ln -s "$ext" "$dir/agents"
+    out="$(gen "$dir" 2>&1)" || rc=$?
+    check "test_valid_symlink_at_top_level_output_dir_not_followed" "generator exit $rc, want 0; got: $out" "$rc"
+    printf '%s\n' "$out" | grep -qxF "kept (not the devkit's): agents"
+    check "test_valid_symlink_at_top_level_output_dir_not_followed" "stdout lacks the kept line; got: $out" $?
+    cmp -s "$sentinel" "$WORK/agents-sentinel-before.txt"
+    check "test_valid_symlink_at_top_level_output_dir_not_followed" "sentinel content in the external directory changed" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_valid_symlink_at_top_level_output_dir_not_followed" "a file was written into the external directory: $listing" $?
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -301,6 +353,9 @@ test_hand_edited_devkit_file_kept_and_reported
 test_concurrent_installs_do_not_corrupt_manifest
 test_symlink_at_manifest_path_not_followed
 test_killed_mid_write_leaves_no_torn_file
+test_broken_symlink_at_skill_dir_kept_not_crashed
+test_valid_symlink_at_skill_dir_not_followed
+test_valid_symlink_at_top_level_output_dir_not_followed
 
 # ── Part B: installer-CLI tests — install-opencode.sh end-to-end ─────────────
 # Every installer run here passes --no-git-hooks so the repository's own .git/hooks is never touched,
