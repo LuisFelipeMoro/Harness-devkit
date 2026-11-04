@@ -207,6 +207,86 @@ test_hand_edited_devkit_file_kept_and_reported() {
     check "test_hand_edited_devkit_file_kept_and_reported" "generator exit $rc" "$rc"
 }
 
+test_concurrent_installs_do_not_corrupt_manifest() {
+    # Six trials, each two generator runs racing on one fresh target. Without the target lock the
+    # last manifest writer erases the other run's entries, so an overlapping trial exposes the race.
+    local trial dir pid_a pid_b rc_a=0 rc_b=0 files entries kept_count out
+    for trial in 1 2 3 4 5 6; do
+        dir="$WORK/concurrent-$trial"
+        gen "$dir" >/dev/null 2>&1 & pid_a=$!
+        # Start the second run once the first is mid-write, so the two genuinely overlap. The bounded
+        # poll only makes the overlap likely; the assertions below hold whether or not it happened.
+        for _ in $(seq 1 300); do [ -d "$dir/skills" ] && break; sleep 0.01; done
+        gen "$dir" >/dev/null 2>&1 & pid_b=$!
+        wait "$pid_a" || rc_a=$?
+        wait "$pid_b" || rc_b=$?
+        [ "$rc_a" -eq 0 ] && [ "$rc_b" -eq 0 ]
+        check "test_concurrent_installs_do_not_corrupt_manifest" "trial $trial: racing runs exited a=$rc_a b=$rc_b" $?
+        files="$(find "$dir" -type f ! -name .devkit-opencode-manifest.json | wc -l)"
+        entries="$(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["entries"]))' \
+            "$dir/.devkit-opencode-manifest.json" 2>/dev/null)" || entries=-1
+        [ "$entries" -eq "$files" ]
+        check "test_concurrent_installs_do_not_corrupt_manifest" "trial $trial: manifest lists $entries entries but $files files are on disk" $?
+        out="$(gen "$dir" 2>&1)" || true
+        kept_count="$(printf '%s\n' "$out" | grep -cF "kept (not the devkit's)")" || true
+        [ "$kept_count" -eq 0 ]
+        check "test_concurrent_installs_do_not_corrupt_manifest" "trial $trial: sequential re-run kept $kept_count devkit files as not-the-devkit's" $?
+    done
+}
+
+test_symlink_at_manifest_path_not_followed() {
+    local dir="$WORK/symlink-manifest" sentinel="$WORK/sentinel-outside-target.txt" out rc=0
+    mkdir -p "$dir"
+    printf 'EXTERNAL SENTINEL, must never be overwritten\n' >"$sentinel"
+    cp "$sentinel" "$WORK/sentinel-before.txt"
+    ln -s "$sentinel" "$dir/.devkit-opencode-manifest.json"
+    out="$(gen "$dir" 2>&1)" || rc=$?
+    cmp -s "$sentinel" "$WORK/sentinel-before.txt"
+    check "test_symlink_at_manifest_path_not_followed" "file behind the manifest symlink was overwritten" $?
+    printf '%s\n' "$out" | grep -qxF "kept (not the devkit's): .devkit-opencode-manifest.json"
+    check "test_symlink_at_manifest_path_not_followed" "stdout lacks the kept line; got: $out" $?
+    check "test_symlink_at_manifest_path_not_followed" "generator exit $rc" "$rc"
+}
+
+test_killed_mid_write_leaves_no_torn_file() {
+    # The driver loads the real generator and makes os.replace fail for one devkit-owned path, which
+    # is what a kill between the temp-file write and the rename looks like to the generator.
+    local dir="$WORK/torn" rel="skills/map/SKILL.md" driver="$WORK/fault-driver.py" old="$WORK/torn-old.txt" out rc=0 same=0
+    gen "$dir" >/dev/null 2>&1
+    printf 'OLD CONTENT from before the run\n' >"$old"
+    cat >"$driver" <<'PY'
+import hashlib, importlib.util, json, os, sys
+gen_path, target, rel, old_path = sys.argv[1:5]
+dest = os.path.join(target, rel)
+manifest = os.path.join(target, ".devkit-opencode-manifest.json")
+old = open(old_path, "rb").read()
+open(dest, "wb").write(old)
+doc = json.load(open(manifest, encoding="utf-8"))
+for entry in doc["entries"]:
+    if entry["path"] == rel:
+        entry["sha256"] = hashlib.sha256(old).hexdigest()
+open(manifest, "w", encoding="utf-8").write(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+spec = importlib.util.spec_from_file_location("generate_opencode", gen_path)
+gen = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = gen
+spec.loader.exec_module(gen)
+real_replace = os.replace
+def dying_replace(src, dst):
+    if os.path.abspath(os.fspath(dst)) == os.path.abspath(dest):
+        raise OSError("injected kill before rename")
+    return real_replace(src, dst)
+os.replace = dying_replace
+sys.exit(gen.main(["--target", target, "--model-cheap", "test-provider/cheap-model",
+                   "--model-standard", "test-provider/standard-model",
+                   "--model-deep", "test-provider/deep-model"]))
+PY
+    out="$(python3 -I "$driver" "$GEN" "$dir" "$rel" "$old" 2>&1)" || rc=$?
+    has "$out" "injected kill"
+    check "test_killed_mid_write_leaves_no_torn_file" "fault never fired, so the test proves nothing; got: $out" $?
+    cmp -s "$dir/$rel" "$old"; same=$?
+    check "test_killed_mid_write_leaves_no_torn_file" "destination changed after an interrupted write (generator exit $rc)" "$same"
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -218,6 +298,9 @@ test_backtick_adjacent_model_clause_swept
 test_rerun_byte_identical
 test_non_devkit_collision_kept_and_reported
 test_hand_edited_devkit_file_kept_and_reported
+test_concurrent_installs_do_not_corrupt_manifest
+test_symlink_at_manifest_path_not_followed
+test_killed_mid_write_leaves_no_torn_file
 
 # ── Part B: installer-CLI tests — install-opencode.sh end-to-end ─────────────
 # Every installer run here passes --no-git-hooks so the repository's own .git/hooks is never touched,
