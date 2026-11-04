@@ -34,3 +34,7 @@ Two conventions there are easy to get wrong and worth calling out up front:
   (pipeline *sequencing* is not yet validated in a live Codex session).
 - **Git hooks** (`plugins/coding-pipeline/git-hooks/`) are plain POSIX shell and work under any
   harness or none at all — install via `bash plugins/coding-pipeline/scripts/install-git-hooks.sh`.
+- **OpenCode** (`plugins/coding-pipeline/opencode/`) is a third installable target alongside Claude Code
+  and Codex. Run `plugins/coding-pipeline/scripts/install-opencode.sh` to generate its skills, agents,
+  references and `AGENTS.md`; see `plugins/coding-pipeline/opencode/harness-adapter.md` for the verified
+  capabilities and the known parity gaps (e.g. skills get no slash command, `disable-model-invocation` is inert).
