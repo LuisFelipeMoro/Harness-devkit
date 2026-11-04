@@ -1,6 +1,6 @@
 {
   "name": "devtools",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Developer tools \u2014 architectural health review, business/technical mapping, grill-me, handoff, skill authoring, rote automation",
   "author": {
     "name": "Luis Moro"

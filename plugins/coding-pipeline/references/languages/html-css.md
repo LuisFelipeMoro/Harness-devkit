@@ -43,6 +43,7 @@ Semantic HTML — `<section>`, `<article>`, `<nav>`, `<main>`, `<header>`, `<foo
 | Semantics | The element that means the thing (`button`, `nav`, `dialog`, `table`). ARIA is a last resort, never a substitute for the right element |
 | Focus | A visible focus indicator on every interactive element; logical tab order; focus trapped in a dialog and restored on close |
 | Contrast | WCAG 2.2 AA as the floor, verified with a tool — not eyeballed |
+| Responsive | Mobile-first `min-width` breakpoints; container queries when a component's layout depends on its own width; the floor is `../frontend-hardening-reference.md` §9 |
 | Layout | Grid/flex with logical properties (`inline-size`, `margin-block`); no fixed pixel height on a text container |
 | Cascade | `@layer` or one documented methodology; `!important` only with a comment naming what it overrides and why |
 | Units | `rem` for type, `ch` for measure, `clamp()` for fluid scales — never `px` for `font-size` |

@@ -135,6 +135,10 @@ agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) ins
   (`reuse:` / `extend:` / `new:`, cited `file:line`). `plan-reviewer` reads it with the repository open.
 - **New files are justified.** Every new file names the closest existing file and why it cannot
   live there; `plan-reviewer` and `reviewer` flag a weak reason.
+- **Go test files are paired.** `foo.go` is tested by `foo_test.go`; `checkpoint-m.sh` fails a new test
+  file that breaks this.
+- **Front-end work is tested for reach.** Rendered UI needs real-browser reflow, axe and keyboard rows,
+  with WCAG 2.2 AA as the floor.
 - **Implementer is not the validator.** `coder` builds; `qa`, `reviewer` and `stress` cannot edit files.
 - **Duplication is measured and attributed.** `jscpd` gates at 3% *introduced*; pre-existing debt is
   reported, never blocking (`git-hooks/dup-attribution.py`).

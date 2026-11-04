@@ -144,7 +144,7 @@ AC, edge case, and non-N/A OWASP mitigation. The coder writes these tests as giv
 or redesign them. Missing a case here means it doesn't get tested — be exhaustive.
 
 - **Test Name**: a literal identifier in the language's test-naming convention (Go
-  `Test_CreateOrder_RejectsNegativeQuantity`, Jest `it("rejects negative quantity")`). The coder copies it
+  `TestCreateOrder_RejectsNegativeQuantity`, Jest `it("rejects negative quantity")`). The coder copies it
   verbatim; `scripts/verify/spec-coverage.sh` matches it by exact string.
 - **Expected Observable Result**: a return value, persisted state, HTTP status + body field, rendered
   output, or emitted error. Never "the method is called", never "no exception is thrown" alone. If you
@@ -160,6 +160,8 @@ or redesign them. Missing a case here means it doesn't get tested — be exhaust
 - **Validators get a format matrix**: canonical input · format variants (spaced, hyphenated, surrounding
   whitespace, mixed case) · empty and junk · both off-by-one length boundaries · and the **exact string the
   real caller passes** (`references/frontend-hardening-reference.md` §4).
+- **Rendered UI gets responsive and accessibility rows**: no page overflow at 320 CSS px and at a desktop
+  width in a real browser, an axe scan, and the primary flow by keyboard (`references/frontend-hardening-reference.md` §9).
 - **Brownfield**: every `Preserve` row in Existing behaviour becomes a characterization row (Falsified By
   names a break in the *existing* code); every `Change` row gets two rows — old behaviour gone, new holds;
   every `Drop` row names the caller search that found nothing.

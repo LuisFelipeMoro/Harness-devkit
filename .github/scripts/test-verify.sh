@@ -1151,14 +1151,14 @@ cd - >/dev/null || exit
 cp9="$W/cp9"
 mkrepo "$cp9"
 cd "$cp9" || exit
-printf 'func TestN(t *testing.T) {}\n' > n_test.go
+printf 'func TestN(t *testing.T) {}\n' > filler_test.go
 write_dup_filler filler.go
 cat > "$W/cp9-spec.md" <<'MD'
 | Test Name | Input | Expected |
 |---|---|---|
 | `TestN` | a | b |
 MD
-out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp9-spec.md" --tests n_test.go --expect n_test.go filler.go never_here.go --gates false 2>&1); rc=$?
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp9-spec.md" --tests filler_test.go --expect filler_test.go filler.go never_here.go --gates false 2>&1); rc=$?
 check "checkpoint-m: reports every failure at once" 1 "$rc" "$out" "M: FAIL (2)"
 # The summary line "M: FAIL (2)" itself starts with "M: FAIL " — matched
 # separately (a check name followed by an em-dash) so it is never counted
@@ -1185,14 +1185,14 @@ cd - >/dev/null || exit
 cp11="$W/cp11"
 mkrepo "$cp11"
 cd "$cp11" || exit
-printf 'func TestOK(t *testing.T) {}\n' > ok_test.go
+printf 'func TestOK(t *testing.T) {}\n' > filler_test.go
 write_dup_filler filler.go
 cat > "$W/cp11-spec.md" <<'MD'
 | Test Name | Input | Expected |
 |---|---|---|
 | `TestOK` | a | b |
 MD
-out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp11-spec.md" --tests ok_test.go --expect ok_test.go filler.go --gates true 2>&1); rc=$?
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp11-spec.md" --tests filler_test.go --expect filler_test.go filler.go --gates true 2>&1); rc=$?
 check "checkpoint-m: all green passes" 0 "$rc" "$out" "M: PASS"
 cd - >/dev/null || exit
 
@@ -1860,8 +1860,124 @@ done
 check "release: every plugin manifest matches the newest CHANGELOG heading" 0 "$rc"
 out=$(cat "$ROOT/README.md")
 check "new-file discipline: README states the rule" 0 0 "$out" "**New files are justified.**"
-out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+out=$(awk '/^## \[3\.1\.0\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
 check "new-file discipline: CHANGELOG 3.1.0 names CD8" 0 0 "$out" "CD8"
+
+# ── checkpoint-m.sh: a new Go test file names the source file it tests ──────
+cat > "$W/tfn-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestRow` | a | b |
+MD
+# These fixtures are one-liners, too small for dup-gate to measure, and duplication is not what they test.
+printf 'exit 0\n' > "$W/tfn-dup-ok.sh"
+tfn_run() {  # tfn_run <fixture> <commit|worktree> <path>... — creates each path, then runs the checkpoint
+    local dir="$W/tfn-$1" mode="$2" p
+    shift 2
+    mkrepo "$dir"
+    cd "$dir" || exit
+    for p in "$@"; do
+        mkdir -p "$(dirname "$p")"
+        printf 'func TestRow(t *testing.T) {}\n' > "$p"
+    done
+    if [ "$mode" = commit ]; then
+        git -c user.email=t@t -c user.name=t add -A
+        git -c user.email=t@t -c user.name=t commit -q -m "fixture"
+    fi
+    out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/tfn-spec.md" --tests "$@" --expect "$@" --allow-commits 2>&1); rc=$?
+    cd "$ROOT" || exit
+}
+tfn_run orphan commit other.go orphan_test.go
+check "checkpoint-m: new test file with no same-name source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_run pair commit cart.go cart_test.go
+check "checkpoint-m: new test file beside its source passes" 0 "$rc" "$out" "M: PASS"
+tfn_run otherdir commit a/cart.go b/other.go b/cart_test.go
+check "checkpoint-m: same name in another directory does not count" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_run benchfuzz commit other.go bench_test.go fuzz_test.go
+check "checkpoint-m: bench and fuzz files fail" 1 "$rc" "$out" "bench_test.go — no bench.go"
+check "checkpoint-m: bench and fuzz files fail" 1 "$rc" "$out" "fuzz_test.go — no fuzz.go"
+tfn_run exempt commit other.go main_test.go export_test.go example_test.go
+check "checkpoint-m: main export and example test files are exempt" 0 "$rc" "$out" "M: PASS"
+tfn_run integration commit store.go store_integration_test.go
+check "checkpoint-m: integration suffix pairs with its source" 0 "$rc" "$out" "M: PASS"
+tfn_run ghost commit other.go ghost_integration_test.go
+check "checkpoint-m: integration suffix with no source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+# Each tree holds a source file too, so only the path skip can pass them, not the test-only exemption.
+tfn_run ignored commit testdata/other.go testdata/orphan_test.go vendor/x/other.go vendor/x/orphan_test.go
+check "checkpoint-m: testdata and vendor are ignored" 0 "$rc" "$out" "M: PASS"
+tfn_run testonly commit stress/stress_test.go
+check "checkpoint-m: test-only directory is exempt" 0 "$rc" "$out" "M: PASS"
+tfn_run uncommitted worktree other.go orphan_test.go
+check "checkpoint-m: uncommitted new test file is checked" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_pre="$W/tfn-pre"
+mkrepo "$tfn_pre"
+cd "$tfn_pre" || exit
+printf 'func TestRow(t *testing.T) {}\n' > old_test.go
+printf 'package x\n' > other.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "misnamed before this change"
+printf '// edited\n' >> old_test.go
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/tfn-spec.md" --tests old_test.go --expect old_test.go 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: pre-existing misnamed test file is not flagged" 0 "$rc" "$out" "M: PASS"
+
+# ── Go test rules: the guides state one pattern ─────────────────────────────
+GO="$ROOT/plugins/coding-pipeline/references/languages/go.md"
+out=$(cat "$GO")
+check "go rules: test file pairing stated" 0 0 "$out" '`foo.go` is tested by `foo_test.go`'
+check "go rules: test function form stated" 0 0 "$out" 'TestMyFunction_WhatIsBeingTested'
+check "go rules: table variables stated" 0 0 "$out" '`tests`, each case `tt`'
+check "go rules: table variables stated" 0 0 "$out" '`tt := tt`'
+grep -q 'tc := tc' "$GO"; rc=$?
+check "go rules: table variables stated" 1 "$rc"
+check "go rules: table limits stated" 0 0 "$out" 'no `shouldCallX`, no `setupMocks func`'
+check "go rules: subtest name stated" 0 0 "$out" 't.Run(tt.give'
+check "go rules: setup failure stated" 0 0 "$out" '`t.Fatal`/`t.FailNow`, never `panic`'
+check "go rules: review flags stated" 0 0 "$out" 'not named after its source file (`bench_test.go`, `wiring_test.go`) | MAJOR |'
+check "go rules: priority order stated" 0 0 "$out" 'correctness → readability → simplification → optimization'
+grep -rqE --include='*.md' 'Test_CreateOrder|for _, tc := range tests' "$ROOT/plugins"; rc=$?
+check "guides: no conflicting Go test examples" 1 "$rc"
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/qa.md")
+check "qa: test file name rule stated" 0 0 "$out" "a test file's name says what it tests"
+out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+check "release: 3.1.1 entry names the test file rule" 0 0 "$out" '`foo_test.go`'
+out=$(cat "$ROOT/README.md")
+check "release: README states the test file rule" 0 0 "$out" '**Go test files are paired.**'
+
+# ── Responsive and accessibility: rules exist and each stack points at them ──
+FH="$ROOT/plugins/coding-pipeline/references/frontend-hardening-reference.md"
+out=$(cat "$FH")
+check "frontend: reflow floor stated" 0 0 "$out" 'Usable at 320 CSS px wide with no horizontal page scroll'
+check "frontend: zoom may not be disabled" 0 0 "$out" 'never `user-scalable=no` or `maximum-scale`'
+check "frontend: target size stated" 0 0 "$out" 'at least 24×24 CSS px'
+check "frontend: keyboard and focus stated" 0 0 "$out" 'not hidden by sticky headers or banners'
+check "frontend: status messages stated" 0 0 "$out" '`role="status"`'
+check "frontend: jsdom cannot prove layout" 0 0 "$out" 'jsdom, which computes no layout'
+check "frontend: scan does not replace keyboard row" 0 0 "$out" 'A clean scan does not prove keyboard operation'
+check "frontend: review flags set severity" 0 0 "$out" 'Horizontal page scroll at 320 CSS px | MAJOR |'
+out=$(cat "$ROOT/plugins/coding-pipeline/references/plan-template.md")
+check "frontend: plans require UI rows" 0 0 "$out" '**Rendered UI gets responsive and accessibility rows**'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder-frontend.md")
+check "frontend: coder must test in a real browser" 0 0 "$out" '**Responsive is a real-browser test**'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/qa.md")
+check "frontend: qa audits the rows" 0 0 "$out" 'real-browser reflow, axe and keyboard rows'
+LG="$ROOT/plugins/coding-pipeline/references/languages"
+out=$(cat "$LG/html-css.md")
+check "frontend: html-css states responsive rule" 0 0 "$out" '| Responsive | Mobile-first `min-width` breakpoints'
+out=$(cat "$LG/react.md")
+check "frontend: react states focus rule" 0 0 "$out" '| Focus | A client route change'
+check "frontend: react div onClick is MAJOR" 0 0 "$out" '(`div onClick` instead of `button`) | MAJOR |'
+out=$(cat "$LG/nextjs.md")
+check "frontend: nextjs bans zoom-blocking viewport" 0 0 "$out" '`userScalable: false` or `maximumScale` in `viewport` | MAJOR |'
+out=$(cat "$LG/htmx.md")
+check "frontend: htmx states focus after swap" 0 0 "$out" '| Focus after swap | htmx keeps focus only on inputs with an `id`'
+out=$(cat "$LG/flutter.md")
+check "frontend: flutter states responsive rule" 0 0 "$out" '| Responsive | `LayoutBuilder` or `MediaQuery.sizeOf`'
+check "frontend: flutter states accessibility rule" 0 0 "$out" '`androidTapTargetGuideline`, `labeledTapTargetGuideline` and `textContrastGuideline`'
+out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+check "release: 3.1.1 entry names the front-end floor" 0 0 "$out" 'WCAG 2.2 AA'
+out=$(cat "$ROOT/README.md")
+check "release: README states the front-end floor" 0 0 "$out" '**Front-end work is tested for reach.**'
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"
