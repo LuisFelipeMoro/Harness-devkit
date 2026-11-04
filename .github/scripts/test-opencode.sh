@@ -339,6 +339,28 @@ test_valid_symlink_at_top_level_output_dir_not_followed() {
     check "test_valid_symlink_at_top_level_output_dir_not_followed" "a file was written into the external directory: $listing" $?
 }
 
+test_symlinked_target_root_rejected() {
+    # SEC-8: a symlinked --target root was followed by mkdir, so the whole install wrote into the external directory.
+    local dir="$WORK/symlinked-target-root" ext="$WORK/symlinked-target-root-ext" link="$WORK/symlinked-target-root-link"
+    local sentinel out rc=0 listing
+    mkdir -p "$dir" "$ext"
+    sentinel="$ext/sentinel.txt"
+    printf 'EXTERNAL SENTINEL, must never be written into\n' >"$sentinel"
+    cp "$sentinel" "$dir/sentinel-before.txt"
+    ln -s "$ext" "$link"
+    out="$(python3 -I "$GEN" --target "$link" --plugins-root "$ROOT/plugins" --model-cheap test-provider/cheap-model \
+        --model-standard test-provider/standard-model --model-deep test-provider/deep-model 2>&1)" || rc=$?
+    [ "$rc" -ne 0 ]
+    check "test_symlinked_target_root_rejected" "generator exit $rc, want non-zero; got: $out" $?
+    has "$out" "$link"
+    check "test_symlinked_target_root_rejected" "output does not name the symlinked target path; got: $out" $?
+    cmp -s "$sentinel" "$dir/sentinel-before.txt"
+    check "test_symlinked_target_root_rejected" "sentinel content in the external directory changed" $?
+    listing="$(ls -A "$ext")"
+    [ "$listing" = "sentinel.txt" ]
+    check "test_symlinked_target_root_rejected" "a file was written through the symlinked target: $listing" $?
+}
+
 test_generate_writes_all_24_skills
 test_generate_writes_12_agents_with_coder_merge
 test_readonly_agents_get_permission_deny_and_tools_false
@@ -356,6 +378,7 @@ test_killed_mid_write_leaves_no_torn_file
 test_broken_symlink_at_skill_dir_kept_not_crashed
 test_valid_symlink_at_skill_dir_not_followed
 test_valid_symlink_at_top_level_output_dir_not_followed
+test_symlinked_target_root_rejected
 
 # ── Part B: installer-CLI tests — install-opencode.sh end-to-end ─────────────
 # Every installer run here passes --no-git-hooks so the repository's own .git/hooks is never touched,
