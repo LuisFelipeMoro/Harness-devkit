@@ -101,7 +101,7 @@ MD_LINK = re.compile(r"\[[^\]]*\]\((?!https?://|#|mailto:)([^)\s]+)\)")
 # plugin's root, the same as a plugin-rooted path does against the file's own plugin.
 # A command span (`python3 scripts/x.py --flag`, `scripts/verify/y.sh --diff $BASE`) names its
 # script first: the path is checked whether the span ends there or runs on into arguments.
-BACKTICK_PATH = re.compile(r"`(?:(?:python3|bash|sh) )?((?:\.\./)*(?:[a-z0-9-]+/)?(?:references|agents|skills|hooks|scripts|git-hooks|codex)/[A-Za-z0-9._/<>-]+\.(?:md|sh|py|json|yml|yaml|toml))(?=`| )")
+BACKTICK_PATH = re.compile(r"`(?:(?:python3|bash|sh) )?((?:\.\./)*(?:[a-z0-9-]+/)?(?:references|agents|skills|hooks|scripts|git-hooks|codex|opencode)/[A-Za-z0-9._/<>-]+\.(?:md|sh|py|json|yml|yaml|toml))(?=`| )")
 
 for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
     dirnames[:] = [d for d in dirnames if d != ".git"]
