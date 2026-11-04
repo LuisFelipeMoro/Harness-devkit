@@ -1894,8 +1894,8 @@ check "checkpoint-m: new test file beside its source passes" 0 "$rc" "$out" "M: 
 tfn_run otherdir commit a/cart.go b/other.go b/cart_test.go
 check "checkpoint-m: same name in another directory does not count" 1 "$rc" "$out" "M: FAIL test-file-name"
 tfn_run benchfuzz commit other.go bench_test.go fuzz_test.go
-check "checkpoint-m: bench and fuzz files fail" 1 "$rc" "$out" "bench_test.go — no bench.go"
-check "checkpoint-m: bench and fuzz files fail" 1 "$rc" "$out" "fuzz_test.go — no fuzz.go"
+check "checkpoint-m: bench file fails" 1 "$rc" "$out" "bench_test.go — no bench.go"
+check "checkpoint-m: fuzz file fails" 1 "$rc" "$out" "fuzz_test.go — no fuzz.go"
 tfn_run exempt commit other.go main_test.go export_test.go example_test.go
 check "checkpoint-m: main export and example test files are exempt" 0 "$rc" "$out" "M: PASS"
 tfn_run integration commit store.go store_integration_test.go
@@ -1927,9 +1927,9 @@ out=$(cat "$GO")
 check "go rules: test file pairing stated" 0 0 "$out" '`foo.go` is tested by `foo_test.go`'
 check "go rules: test function form stated" 0 0 "$out" 'TestMyFunction_WhatIsBeingTested'
 check "go rules: table variables stated" 0 0 "$out" '`tests`, each case `tt`'
-check "go rules: table variables stated" 0 0 "$out" '`tt := tt`'
+check "go rules: loop copy uses tt" 0 0 "$out" '`tt := tt`'
 grep -q 'tc := tc' "$GO"; rc=$?
-check "go rules: table variables stated" 1 "$rc"
+check "go rules: no tc copy left" 1 "$rc"
 check "go rules: table limits stated" 0 0 "$out" 'no `shouldCallX`, no `setupMocks func`'
 check "go rules: subtest name stated" 0 0 "$out" 't.Run(tt.give'
 check "go rules: setup failure stated" 0 0 "$out" '`t.Fatal`/`t.FailNow`, never `panic`'
@@ -1939,7 +1939,7 @@ grep -rqE --include='*.md' 'Test_CreateOrder|for _, tc := range tests' "$ROOT/pl
 check "guides: no conflicting Go test examples" 1 "$rc"
 out=$(cat "$ROOT/plugins/coding-pipeline/agents/qa.md")
 check "qa: test file name rule stated" 0 0 "$out" "a test file's name says what it tests"
-out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+out=$(awk '/^## \[3\.1\.1\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
 check "release: 3.1.1 entry names the test file rule" 0 0 "$out" '`foo_test.go`'
 out=$(cat "$ROOT/README.md")
 check "release: README states the test file rule" 0 0 "$out" '**Go test files are paired.**'
@@ -1948,7 +1948,7 @@ check "release: README states the test file rule" 0 0 "$out" '**Go test files ar
 FH="$ROOT/plugins/coding-pipeline/references/frontend-hardening-reference.md"
 out=$(cat "$FH")
 check "frontend: reflow floor stated" 0 0 "$out" 'Usable at 320 CSS px wide with no horizontal page scroll'
-check "frontend: zoom may not be disabled" 0 0 "$out" 'never `user-scalable=no` or `maximum-scale`'
+check "frontend: zoom may not be disabled" 0 0 "$out" 'never `user-scalable=no` or a `maximum-scale` below 2'
 check "frontend: target size stated" 0 0 "$out" 'at least 24×24 CSS px'
 check "frontend: keyboard and focus stated" 0 0 "$out" 'not hidden by sticky headers or banners'
 check "frontend: status messages stated" 0 0 "$out" '`role="status"`'
@@ -1968,16 +1968,117 @@ out=$(cat "$LG/react.md")
 check "frontend: react states focus rule" 0 0 "$out" '| Focus | A client route change'
 check "frontend: react div onClick is MAJOR" 0 0 "$out" '(`div onClick` instead of `button`) | MAJOR |'
 out=$(cat "$LG/nextjs.md")
-check "frontend: nextjs bans zoom-blocking viewport" 0 0 "$out" '`userScalable: false` or `maximumScale` in `viewport` | MAJOR |'
+check "frontend: nextjs bans zoom-blocking viewport" 0 0 "$out" '`userScalable: false` or a `maximumScale` below 2 in `viewport` | MAJOR |'
 out=$(cat "$LG/htmx.md")
 check "frontend: htmx states focus after swap" 0 0 "$out" '| Focus after swap | htmx keeps focus only on inputs with an `id`'
 out=$(cat "$LG/flutter.md")
 check "frontend: flutter states responsive rule" 0 0 "$out" '| Responsive | `LayoutBuilder` or `MediaQuery.sizeOf`'
 check "frontend: flutter states accessibility rule" 0 0 "$out" '`androidTapTargetGuideline`, `labeledTapTargetGuideline` and `textContrastGuideline`'
-out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+out=$(awk '/^## \[3\.1\.1\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
 check "release: 3.1.1 entry names the front-end floor" 0 0 "$out" 'WCAG 2.2 AA'
 out=$(cat "$ROOT/README.md")
 check "release: README states the front-end floor" 0 0 "$out" '**Front-end work is tested for reach.**'
+
+# ── 3.1.2: review findings on the test file check ───────────────────────────
+tfn_run platform commit foo_linux.go foo_windows.go foo_test.go
+check "checkpoint-m: test file pairs with a platform-split source" 0 "$rc" "$out" "M: PASS"
+tfn_run e2e commit store.go store_e2e_test.go
+check "checkpoint-m: e2e suffix pairs with its source" 0 "$rc" "$out" "M: PASS"
+tfn_run e2eghost commit other.go ghost_e2e_test.go
+check "checkpoint-m: e2e suffix with no source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_mv="$W/tfn-mv"
+mkrepo "$tfn_mv"
+cd "$tfn_mv" || exit
+printf 'func TestRow(t *testing.T) {}\nfunc helperA() {}\nfunc helperB() {}\nfunc helperC() {}\n' > old_test.go
+printf 'package x\n' > other.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "misnamed before this change"
+git mv old_test.go moved_test.go
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/tfn-spec.md" --tests moved_test.go --expect old_test.go moved_test.go 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: renamed test file is not judged as new" 0 "$rc" "$out" "M: PASS"
+
+# ── checkpoint-m.sh: zoom blocking and rendered UI rows ─────────────────────
+cat > "$W/ui-full.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestRow_320_axe_keyboard` | a | b |
+MD
+ui_run() {  # ui_run <fixture> <spec> <path|content>... — writes each file, then runs the checkpoint
+    local dir="$W/ui-$1" spec="$2" item path paths
+    shift 2
+    mkrepo "$dir"
+    cd "$dir" || exit
+    printf 'func TestRow(t *testing.T) {}\nfunc TestRow_320_axe_keyboard(t *testing.T) {}\n' > main_test.go
+    paths=(main_test.go)
+    for item in "$@"; do
+        path="${item%%|*}"
+        mkdir -p "$(dirname "$path")"
+        printf '%s\n' "${item#*|}" > "$path"
+        paths+=("$path")
+    done
+    out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$spec" --tests main_test.go --expect "${paths[@]}" 2>&1); rc=$?
+    cd "$ROOT" || exit
+}
+ui_run zoomno "$W/ui-full.md" 'index.html|<meta name="viewport" content="width=device-width, user-scalable=no">'
+check "checkpoint-m: user-scalable=no fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomone "$W/ui-full.md" 'index.html|<meta name="viewport" content="maximum-scale=1">'
+check "checkpoint-m: maximum-scale below 2 fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomfive "$W/ui-full.md" 'index.html|<meta name="viewport" content="maximum-scale=5">'
+check "checkpoint-m: maximum-scale of 5 passes" 0 "$rc" "$out" "M: PASS"
+ui_run zoomnext "$W/ui-full.md" 'app/layout.tsx|export const viewport = { userScalable: false }'
+check "checkpoint-m: nextjs userScalable false fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomtest "$W/ui-full.md" 'page.test.tsx|const blocked = "user-scalable=no"'
+check "checkpoint-m: zoom string in a test file is not flagged" 0 "$rc" "$out" "M: PASS"
+zoom_old="$W/ui-zoomold"
+mkrepo "$zoom_old"
+cd "$zoom_old" || exit
+printf 'func TestRow_320_axe_keyboard(t *testing.T) {}\n' > main_test.go
+printf '<meta name="viewport" content="user-scalable=no">\n<p>old</p>\n' > index.html
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "zoom blocked before this change"
+printf '<p>new</p>\n' >> index.html
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/ui-full.md" --tests main_test.go --expect index.html 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: zoom block already at base is not flagged" 0 "$rc" "$out" "M: PASS"
+ui_run uimissing "$W/tfn-spec.md" 'ui/button.css|button { color: red; }'
+check "checkpoint-m: rendered UI with no reach rows fails" 1 "$rc" "$out" "M: FAIL ui-rows"
+check "checkpoint-m: ui-rows names each missing word" 1 "$rc" "$out" "names 'keyboard'"
+ui_run uifull "$W/ui-full.md" 'ui/button.css|button { color: red; }'
+check "checkpoint-m: rendered UI with reach rows passes" 0 "$rc" "$out" "M: PASS"
+# The test file sits before the base: a cosmetic diff holds the stylesheet alone, or the roster check escalates it.
+ui_cos="$W/ui-cosmetic"
+mkrepo "$ui_cos"
+cd "$ui_cos" || exit
+printf 'func TestRow(t *testing.T) {}\n' > main_test.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "test file before the base"
+ui_cos_base=$(git rev-parse HEAD)
+mkdir -p ui
+printf 'button { color: red; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "style only"
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base "$ui_cos_base" --spec "$W/tfn-spec.md" --tests main_test.go --expect ui/button.css --declared cosmetic --allow-commits 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: cosmetic depth skips ui-rows" 0 "$rc" "$out" "M: PASS"
+ui_run uigo "$W/tfn-spec.md" 'cart.go|package cart'
+check "checkpoint-m: non-UI change needs no reach rows" 0 "$rc" "$out" "M: PASS"
+
+# ── 3.1.2: guide corrections ────────────────────────────────────────────────
+out=$(cat "$FH")
+check "frontend: scale floor is 2" 0 0 "$out" 'a `maximum-scale` below 2 |'
+check "frontend: reflow catches clipped overflow" 0 0 "$out" 'no visible element outside a scroll container'
+check "frontend: enforcement is stated" 0 0 "$out" 'M: FAIL ui-rows'
+out=$(cat "$LG/htmx.md")
+check "frontend: htmx non-semantic HTML is MAJOR" 0 0 "$out" '| Non-semantic HTML (div-soup, missing landmarks) | MAJOR |'
+out=$(cat "$LG/flutter.md")
+check "frontend: flutter tap target floor is stated" 0 0 "$out" 'enforces 48dp'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder-backend.md")
+check "guides: coder-backend limits tables" 0 0 "$out" 'table-driven where the logic repeats'
+check "go rules: platform and e2e pairing stated" 0 0 "$(cat "$GO")" 'such as `foo_linux.go`'
+out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+check "release: 3.1.2 entry names the new checks" 0 0 "$out" 'M: FAIL ui-rows'
+check "release: README states the enforcement" 0 0 "$(cat "$ROOT/README.md")" 'fails a change that omits them or blocks zoom'
 
 rm -rf "$W"
 echo "verify tests: $pass passed, exit=$fail"

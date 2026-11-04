@@ -116,7 +116,7 @@ Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idi
 ## Testing Idiom
 | Rule | Requirement |
 |------|-------------|
-| Test file | `foo.go` is tested by `foo_test.go` in the same directory, benchmarks and fuzz targets included, so a reader finds a test from its source file without searching. A tagged suite is `foo_integration_test.go`. Exempt: `main_test.go` (`TestMain`), `export_test.go`, `example_test.go`, a directory with no non-test `.go` file. `checkpoint-m.sh` fails a new file that breaks this |
+| Test file | `foo.go` is tested by `foo_test.go` in the same directory, benchmarks and fuzz targets included, so a reader finds a test from its source file without searching. A tagged suite is `foo_integration_test.go` or `foo_e2e_test.go`. `foo_test.go` also pairs with a platform file such as `foo_linux.go` when there is no `foo.go`. Exempt: `main_test.go` (`TestMain`), `export_test.go`, `example_test.go`, a directory with no non-test `.go` file. `checkpoint-m.sh` fails a new file that breaks this; a renamed file is not new |
 | Test function | `TestMyFunction_WhatIsBeingTested` — underscores only to group the cases of one function |
 | Table or not | A table when the same logic runs over varying inputs and outputs. Separate tests when a case needs its own path: no `shouldCallX`, no `setupMocks func`, no conditional assertions. One `shouldErr` branch is fine in a short body. Every field and all test logic apply to every case |
 | Table naming | The slice is `tests`, each case `tt`; inputs and outputs carry `give` and `want` prefixes |

@@ -59,7 +59,7 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Server-rendered user content not HTML-encoded | CRITICAL |
 | Missing `HX-Request` header check server-side (CSRF vector) | CRITICAL |
 | Inline `<script>` or `onclick` handler (CSP violation) | MAJOR |
-| Non-semantic HTML (div-soup, missing landmarks) | MINOR |
+| Non-semantic HTML (div-soup, missing landmarks) | MAJOR |
 | Missing ARIA live region on `hx-swap` target | MINOR |
 | Swap that drops keyboard focus to `<body>` | MAJOR |
 | `hx-trigger` without debounce/throttle on high-frequency events | MINOR |
