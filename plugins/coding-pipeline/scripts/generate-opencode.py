@@ -252,14 +252,20 @@ class WriteGuard:
         dest = self.target / rel
         # Checked before anything follows the path: a symlink at a devkit-owned path is never written through (SEC-6).
         if dest.is_symlink():
-            self.kept.append(f"kept (not the devkit's): {rel}")
+            self._keep_not_devkit(rel)
+            return None
+        # SEC-7: every directory between the target root and dest.parent is checked, so a symlinked
+        # agents/, devkit/ or skills/<name>/ is never created through or written into.
+        symlinked = _first_symlink_component(self.target, Path(rel).parent.as_posix())
+        if symlinked is not None:
+            self._keep_not_devkit(symlinked)
             return None
         action = WRITE if trusted_owner else decide_write(self.prior, rel, _sha256_if_file(dest))
         if action == KEPT_MODIFIED:
             self.kept.append(f"kept (modified since install): {rel}")
             return None
         if action == KEPT_NOT_DEVKIT:
-            self.kept.append(f"kept (not the devkit's): {rel}")
+            self._keep_not_devkit(rel)
             return None
         dest.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(dest, data, mode)
@@ -267,6 +273,12 @@ class WriteGuard:
         if not trusted_owner:
             self.written[rel] = sha
         return ManifestEntry(path=rel, sha256=sha)
+
+    def _keep_not_devkit(self, rel: str) -> None:
+        # One line per offending path: a symlinked directory skips every file under it, and each would repeat it.
+        line = f"kept (not the devkit's): {rel}"
+        if line not in self.kept:
+            self.kept.append(line)
 
     def manifest_entries(self) -> list[ManifestEntry]:
         # Prior entries carry over: a kept-modified file stays devkit-owned under its old hash,
@@ -319,6 +331,21 @@ def _emit(guard: WriteGuard, entries: list[ManifestEntry], rel: str, text: str) 
         entries.append(entry)
 
 
+def _first_symlink_component(root: Path, rel_dir: str) -> str | None:
+    """Return the first directory under root/rel_dir that is a symlink, broken or valid, else None (SEC-7).
+
+    is_dir()/exists() disagree for a broken link, so only is_symlink() is trusted here. Every
+    component is checked, so a symlink at any level of the chain is seen, not just the last.
+    The returned path is relative to root, so the kept line names the link itself (e.g. `agents`).
+    """
+    current = root
+    for part in Path(rel_dir).parts:
+        current = current / part
+        if current.is_symlink():
+            return current.relative_to(root).as_posix()
+    return None
+
+
 def generate_skills(
     plugins_root: Path, guard: WriteGuard, overrides: dict[str, Path]
 ) -> list[ManifestEntry]:
@@ -332,20 +359,24 @@ def generate_skills(
             if rel in seen:
                 raise ValueError(f"skill output collision: {rel} from {seen[rel]} and {source}")
             seen[rel] = source
+
+            skill_refs_dir = source.parent / "references"
+            ref_sources = sorted(skill_refs_dir.rglob("*.md")) if skill_refs_dir.is_dir() else []
+            ref_rels: list[str] = []
+            for ref in ref_sources:
+                ref_rel = f"skills/{name}/references/" + ref.relative_to(skill_refs_dir).as_posix()
+                if ref_rel in seen:
+                    raise ValueError(f"skill reference collision: {ref_rel} from {seen[ref_rel]} and {ref}")
+                seen[ref_rel] = ref
+                ref_rels.append(ref_rel)
+
             if name in overrides:
                 text = overrides[name].read_text(encoding="utf-8")
             else:
                 text = apply_transforms(source.read_text(encoding="utf-8"))
             _emit(guard, entries, rel, text)
 
-            skill_refs_dir = source.parent / "references"
-            if not skill_refs_dir.is_dir():
-                continue
-            for ref in sorted(skill_refs_dir.rglob("*.md")):
-                ref_rel = f"skills/{name}/references/" + ref.relative_to(skill_refs_dir).as_posix()
-                if ref_rel in seen:
-                    raise ValueError(f"skill reference collision: {ref_rel} from {seen[ref_rel]} and {ref}")
-                seen[ref_rel] = ref
+            for ref, ref_rel in zip(ref_sources, ref_rels):
                 _emit(guard, entries, ref_rel, apply_transforms(ref.read_text(encoding="utf-8")))
 
     for plugin in iter_plugin_dirs(plugins_root):
