@@ -11,11 +11,21 @@ two-pass dispatch-prose rewrite, and writes the result under a target directory:
   <target>/agents/<name>.md              one per plugins/coding-pipeline/agents/*.md
                                          (coder.md is merged into its two overlays,
                                          not emitted on its own)
+  <target>/devkit/AGENTS.md              CLAUDE.md, transformed, plus the OpenCode Guide
+  <target>/devkit/git-hooks/*            copied unchanged
+  <target>/devkit/scripts/...            verify/, estimate-run.py, harness-metrics.py, unchanged
+  <target>/devkit/commands.json.sample   a static, hand-mergeable snippet — never merged
+  <target>/.devkit-opencode-manifest.json  path -> sha256 of every file this engine wrote
+
+Every write goes through WriteGuard. A file already at the target is overwritten only when
+the manifest records it as devkit-owned and its bytes still match the recorded hash; otherwise
+it is kept and reported. opencode.json is never read or written.
 
 Usage: generate-opencode.py --target DIR --model-cheap P/M --model-standard P/M
            --model-deep P/M [--plugins-root DIR]
-Exit 0 — every source file written.
-Exit 1 — a source file could not be read or parsed, or two sources map to one output path.
+Exit 0 — every source file written (kept files are reported, not errors).
+Exit 1 — a source file could not be read or parsed, two sources map to one output path,
+         or the manifest is unreadable.
 Exit 2 — bad arguments.
 """
 from __future__ import annotations
@@ -38,6 +48,46 @@ TIERS = ("cheap", "standard", "deep")
 MODEL_TIER_FOR_SOURCE = {"haiku": "cheap", "sonnet": "standard", "opus": "deep"}
 READ_WRITE_TOOLS = ("Edit", "Write", "Patch")
 DISPATCH_ALIASES = {"Explore": "explore", "general-purpose": "general"}
+
+DEVKIT_DIR = "devkit"
+MANIFEST_NAME = ".devkit-opencode-manifest.json"
+MANIFEST_VERSION = 1
+HEX_SHA256 = re.compile(r"[0-9a-f]{64}")
+# Directories and files copied unchanged from plugins/coding-pipeline/ into devkit/.
+GIT_HOOKS_SUBDIR = "git-hooks"
+SCRIPTS_SUBDIR = "scripts"
+SCRIPT_SOURCES = ("verify", "estimate-run.py", "harness-metrics.py")
+# Appended to the transformed CLAUDE.md. The S3 finding (harness-adapter.md) showed OpenCode
+# auto-invokes skills on trigger phrases regardless of disable-model-invocation, so the
+# manual-skill rule is stated here as an imperative the model must follow.
+OPENCODE_GUIDE = """## OpenCode Guide
+
+This file is the OpenCode flavour of the standards above. Everything in it applies under
+OpenCode except where this section says otherwise.
+
+- **A skill is only ever started by the user.** Never start a skill yourself, and never load one
+  because a phrase in the user's message resembles its description. OpenCode can auto-invoke a skill
+  on a trigger phrase even when the skill sets `disable-model-invocation: true`, so this rule is a
+  convention you must follow, not a setting the tool enforces. If a skill looks relevant, name it
+  and wait for the user to start it.
+- **Slash commands are not automatic.** Skills are not registered as slash commands. The snippet in
+  `devkit/commands.json.sample` is for the operator to merge by hand into their own `opencode.json`;
+  nothing in this install writes that file.
+"""
+COMMANDS_SAMPLE = """{
+  "command": {
+    "devkit-help": {
+      "template": "Run the devkit-help skill with: $ARGUMENTS",
+      "description": "Show what the devkit has, or one skill's usage"
+    },
+    "retro": {
+      "template": "Run the retro skill with: $ARGUMENTS",
+      "description": "Retrospective on a session; propose environment improvements"
+    }
+  }
+}
+"""
+WRITE, KEPT_MODIFIED, KEPT_NOT_DEVKIT = "write", "kept-modified", "kept-not-devkit"
 
 # Frozen transform-rule table (Pass 1), applied in table order as plain substitutions.
 # The dispatch rows are deliberately absent: Pass 2 (rewrite_dispatch) handles them.
@@ -115,16 +165,102 @@ def iter_plugin_dirs(plugins_root: Path) -> list[Path]:
     return sorted(p for p in plugins_root.iterdir() if p.is_dir())
 
 
-def _write(target: Path, rel: str, text: str) -> ManifestEntry:
-    data = text.encode("utf-8")
-    dest = target / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return ManifestEntry(path=rel, sha256=hashlib.sha256(data).hexdigest())
+def decide_write(prior: dict[str, str], rel: str, on_disk: str | None) -> str:
+    """Pure guard: may the generator overwrite `rel`, given the previous manifest and the file's hash on disk.
+
+    No file at the path -> write. A path the manifest does not own -> keep (not the devkit's).
+    An owned path whose bytes no longer match the recorded hash -> keep (hand-edited since install).
+    Only an owned path whose bytes still match is overwritten.
+    """
+    if on_disk is None:
+        return WRITE
+    if rel not in prior:
+        return KEPT_NOT_DEVKIT
+    return WRITE if on_disk == prior[rel] else KEPT_MODIFIED
+
+
+def _sha256_if_file(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class WriteGuard:
+    """The one place the generator writes a file. Every engine calls write(), so the collision guard covers all of them."""
+
+    def __init__(self, target: Path, prior: dict[str, str]) -> None:
+        self.target = target
+        self.prior = dict(prior)
+        self.written: dict[str, str] = {}
+        self.kept: list[str] = []
+
+    def write(self, rel: str, data: bytes, mode: int | None = None) -> ManifestEntry | None:
+        dest = self.target / rel
+        action = decide_write(self.prior, rel, _sha256_if_file(dest))
+        if action == KEPT_MODIFIED:
+            self.kept.append(f"kept (modified since install): {rel}")
+            return None
+        if action == KEPT_NOT_DEVKIT:
+            self.kept.append(f"kept (not the devkit's): {rel}")
+            return None
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        if mode is not None:
+            dest.chmod(mode)
+        sha = hashlib.sha256(data).hexdigest()
+        self.written[rel] = sha
+        return ManifestEntry(path=rel, sha256=sha)
+
+    def manifest_entries(self) -> list[ManifestEntry]:
+        # Prior entries carry over: a kept-modified file stays devkit-owned under its old hash,
+        # and a file the devkit no longer generates keeps its ownership (no pruning is performed).
+        merged = {**self.prior, **self.written}
+        return [ManifestEntry(path=p, sha256=merged[p]) for p in sorted(merged)]
+
+
+def read_manifest(target: Path) -> dict[str, str]:
+    path = target / MANIFEST_NAME
+    if not path.is_file():
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{path}: manifest unreadable ({exc}); fix or delete it") from exc
+    version = doc.get("version") if isinstance(doc, dict) else None
+    if not isinstance(version, int) or isinstance(version, bool) or version != MANIFEST_VERSION:
+        raise ValueError(f"{path}: not a version {MANIFEST_VERSION} manifest; fix or delete it")
+    raw = doc.get("entries")
+    if not isinstance(raw, list):
+        raise ValueError(f"{path}: manifest has no entries list")
+    prior: dict[str, str] = {}
+    for item in raw:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("sha256"), str)
+            or not HEX_SHA256.fullmatch(item["sha256"])
+        ):
+            raise ValueError(f"{path}: malformed manifest entry {item!r}")
+        prior[item["path"]] = item["sha256"]
+    return prior
+
+
+def write_manifest(target: Path, entries: list[ManifestEntry]) -> None:
+    doc = {
+        "version": MANIFEST_VERSION,
+        "entries": [{"path": e.path, "sha256": e.sha256} for e in sorted(entries, key=lambda e: e.path)],
+    }
+    (target / MANIFEST_NAME).write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _emit(guard: WriteGuard, entries: list[ManifestEntry], rel: str, text: str) -> None:
+    entry = guard.write(rel, text.encode("utf-8"))
+    if entry is not None:
+        entries.append(entry)
 
 
 def generate_skills(
-    plugins_root: Path, target: Path, overrides: dict[str, Path]
+    plugins_root: Path, guard: WriteGuard, overrides: dict[str, Path]
 ) -> list[ManifestEntry]:
     entries: list[ManifestEntry] = []
     seen: dict[str, Path] = {}
@@ -140,7 +276,7 @@ def generate_skills(
                 text = overrides[name].read_text(encoding="utf-8")
             else:
                 text = apply_transforms(source.read_text(encoding="utf-8"))
-            entries.append(_write(target, rel, text))
+            _emit(guard, entries, rel, text)
 
     for plugin in iter_plugin_dirs(plugins_root):
         refs_dir = plugin / "references"
@@ -149,7 +285,7 @@ def generate_skills(
             if rel in seen:
                 raise ValueError(f"reference output collision: {rel} from {seen[rel]} and {source}")
             seen[rel] = source
-            entries.append(_write(target, rel, apply_transforms(source.read_text(encoding="utf-8"))))
+            _emit(guard, entries, rel, apply_transforms(source.read_text(encoding="utf-8")))
 
     return entries
 
@@ -216,7 +352,7 @@ def render_frontmatter(fields: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate_agents(agents_dir: Path, target: Path, model_map: dict[str, str]) -> list[ManifestEntry]:
+def generate_agents(agents_dir: Path, guard: WriteGuard, model_map: dict[str, str]) -> list[ManifestEntry]:
     for tier in TIERS:
         if not model_map.get(tier):
             raise ValueError(f"model tier {tier!r} is not set")
@@ -234,7 +370,46 @@ def generate_agents(agents_dir: Path, target: Path, model_map: dict[str, str]) -
             body = core_body.rstrip("\n") + "\n\n" + body
         front = render_frontmatter(build_agent_frontmatter(fields, model_map))
         rel = f"agents/{source.stem}.md"
-        entries.append(_write(target, rel, front + "\n" + apply_transforms(body)))
+        _emit(guard, entries, rel, front + "\n" + apply_transforms(body))
+    return entries
+
+
+def _copy_source(guard: WriteGuard, entries: list[ManifestEntry], src: Path, rel: str) -> None:
+    if not src.is_file():
+        raise ValueError(f"devkit source file missing: {src}")
+    entry = guard.write(rel, src.read_bytes(), mode=src.stat().st_mode & 0o777)
+    if entry is not None:
+        entries.append(entry)
+
+
+def generate_devkit(plugins_root: Path, guard: WriteGuard) -> list[ManifestEntry]:
+    """devkit/AGENTS.md, the copied git-hooks and scripts, and the static commands sample. Never opencode.json."""
+    core = plugins_root / "coding-pipeline"
+    entries: list[ManifestEntry] = []
+
+    claude_md = core / "CLAUDE.md"
+    if not claude_md.is_file():
+        raise ValueError(f"standards file {claude_md} not found")
+    agents_md = apply_transforms(claude_md.read_text(encoding="utf-8")).rstrip("\n") + "\n\n" + OPENCODE_GUIDE
+    _emit(guard, entries, f"{DEVKIT_DIR}/AGENTS.md", agents_md)
+
+    hooks_dir = core / GIT_HOOKS_SUBDIR
+    if not hooks_dir.is_dir():
+        raise ValueError(f"git-hooks directory {hooks_dir} not found")
+    for src in sorted(p for p in hooks_dir.iterdir() if p.is_file()):
+        _copy_source(guard, entries, src, f"{DEVKIT_DIR}/{GIT_HOOKS_SUBDIR}/{src.name}")
+
+    scripts_dir = core / SCRIPTS_SUBDIR
+    for name in SCRIPT_SOURCES:
+        src = scripts_dir / name
+        if src.is_dir():
+            for file in sorted(p for p in src.rglob("*") if p.is_file()):
+                rel = f"{DEVKIT_DIR}/{SCRIPTS_SUBDIR}/{name}/{file.relative_to(src).as_posix()}"
+                _copy_source(guard, entries, file, rel)
+        else:
+            _copy_source(guard, entries, src, f"{DEVKIT_DIR}/{SCRIPTS_SUBDIR}/{name}")
+
+    _emit(guard, entries, f"{DEVKIT_DIR}/commands.json.sample", COMMANDS_SAMPLE)
     return entries
 
 
@@ -254,18 +429,28 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--model-deep", required=True)
     try:
         args = parser.parse_args(argv)
-    except SystemExit:
-        return 2
+    except SystemExit as exc:
+        # argparse exits 0 for -h/--help and 2 for a bad argument; keep whichever it chose.
+        return 0 if exc.code is None else exc.code
 
     model_map = {"cheap": args.model_cheap, "standard": args.model_standard, "deep": args.model_deep}
     try:
         args.target.mkdir(parents=True, exist_ok=True)
-        entries = generate_skills(args.plugins_root, args.target, discover_overrides(args.plugins_root))
-        entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, args.target, model_map)
+        guard = WriteGuard(args.target, read_manifest(args.target))
+        entries: list[ManifestEntry] = []
+        try:
+            entries += generate_skills(args.plugins_root, guard, discover_overrides(args.plugins_root))
+            entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, guard, model_map)
+            entries += generate_devkit(args.plugins_root, guard)
+        finally:
+            # Record every file actually written, even on a failed run, so the next run still owns them.
+            write_manifest(args.target, guard.manifest_entries())
     except (OSError, ValueError) as exc:
         print(f"generate-opencode: {exc}", file=sys.stderr)
         return 1
 
+    for line in guard.kept:
+        print(line)
     print(f"generate-opencode: wrote {len(entries)} files under {args.target}")
     return 0
 
