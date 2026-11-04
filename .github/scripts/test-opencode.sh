@@ -61,13 +61,14 @@ gen_rc=0
 gen "$OUT" >"$WORK/gen-out.txt" 2>"$WORK/gen-err.txt" || gen_rc=$?
 
 test_generate_writes_all_24_skills() {
-    local n missing="" name src
+    local n missing="" name src rc=0
     n="$(find "$OUT/skills" -mindepth 2 -maxdepth 2 -name SKILL.md 2>/dev/null | wc -l)"
     for src in "$ROOT"/plugins/*/skills/*/SKILL.md; do
         name="$(basename "$(dirname "$src")")"
         [ -f "$OUT/skills/$name/SKILL.md" ] || missing="$missing $name"
     done
-    [ "$gen_rc" -eq 0 ]; check "test_generate_writes_all_24_skills" "generator exit $gen_rc: $(cat "$WORK/gen-err.txt")" $?
+    [ "$gen_rc" -eq 0 ]; rc=$?
+    check "test_generate_writes_all_24_skills" "generator exit $gen_rc: $(cat "$WORK/gen-err.txt")" "$rc"
     [ "$n" -eq 24 ]; check "test_generate_writes_all_24_skills" "found $n skill files under skills/ (want 24)" $?
     [ -z "$missing" ]; check "test_generate_writes_all_24_skills" "skills not generated:$missing" $?
 }
@@ -217,6 +218,180 @@ test_backtick_adjacent_model_clause_swept
 test_rerun_byte_identical
 test_non_devkit_collision_kept_and_reported
 test_hand_edited_devkit_file_kept_and_reported
+
+# ── Part B: installer-CLI tests — install-opencode.sh end-to-end ─────────────
+# Every installer run here passes --no-git-hooks so the repository's own .git/hooks is never touched,
+# and clears the operator's DEVKIT_OPENCODE_MODEL_* variables so only the flags under test pick the tiers.
+# The real `opencode` binary is never invoked; it is not installed in CI and nothing here needs it.
+INSTALL="$ROOT/plugins/coding-pipeline/scripts/install-opencode.sh"
+TIERS=(--model-cheap test-provider/cheap-model --model-standard test-provider/standard-model --model-deep test-provider/deep-model)
+
+# inst <args...> — run the installer with the operator's model-tier environment cleared.
+inst() {
+    env -u DEVKIT_OPENCODE_MODEL_CHEAP -u DEVKIT_OPENCODE_MODEL_STANDARD -u DEVKIT_OPENCODE_MODEL_DEEP \
+        bash "$INSTALL" "$@"
+}
+
+# snap_tree <root> [skip] — sorted path, mtime and size listing; "absent" when root does not exist.
+snap_tree() {
+    local root="$1" skip="${2:-}"
+    if [ ! -e "$root" ]; then
+        echo "absent $root"
+        return 0
+    fi
+    if [ -n "$skip" ]; then
+        find "$root" -path "$skip" -prune -o -printf '%p %T@ %s\n' | LC_ALL=C sort
+    else
+        find "$root" -printf '%p %T@ %s\n' | LC_ALL=C sort
+    fi
+}
+
+test_missing_model_tier_exits_nonzero_naming_tier() {
+    local dir="$WORK/missing-tier" rc=0 err
+    mkdir -p "$dir"
+    inst --target "$dir/cfg" --model-standard test-provider/standard-model \
+        --model-deep test-provider/deep-model --no-git-hooks --yes >/dev/null 2>"$dir/err.txt" || rc=$?
+    err="$(cat "$dir/err.txt")"
+    [ "$rc" -eq 2 ]; check "test_missing_model_tier_exits_nonzero_naming_tier" "exit $rc, want 2" $?
+    has "$err" 'model tier "cheap" is not set'; check "test_missing_model_tier_exits_nonzero_naming_tier" "stderr does not name the cheap tier: $err" $?
+    [ ! -e "$dir/cfg" ]; check "test_missing_model_tier_exits_nonzero_naming_tier" "files written before the tier check failed" $?
+}
+
+test_malformed_model_string_rejected() {
+    local dir="$WORK/malformed-tier" rc=0 err
+    mkdir -p "$dir"
+    inst --target "$dir/cfg" --model-cheap haiku --model-standard test-provider/standard-model \
+        --model-deep test-provider/deep-model --no-git-hooks --yes >/dev/null 2>"$dir/err.txt" || rc=$?
+    err="$(cat "$dir/err.txt")"
+    [ "$rc" -eq 2 ]; check "test_malformed_model_string_rejected" "exit $rc, want 2" $?
+    has "$err" 'model tier "cheap" is malformed'; check "test_malformed_model_string_rejected" "stderr does not name the cheap tier as malformed: $err" $?
+    has "$err" "provider/model"; check "test_malformed_model_string_rejected" "stderr omits the expected provider/model shape: $err" $?
+    [ ! -e "$dir/cfg" ]; check "test_malformed_model_string_rejected" "files written for a malformed tier" $?
+}
+
+test_opencode_json_mtime_unchanged() {
+    local dir="$WORK/mtime" cfg="$WORK/mtime/cfg" rc=0 rc_bad=0 before_sha before_mt after_sha after_mt
+    mkdir -p "$cfg"
+    printf '{"provider": {"test": {"apiKey": "sentinel-key"}}}\n' >"$cfg/opencode.json"
+    touch -d '2001-09-09 00:00:00 UTC' "$cfg/opencode.json"
+    before_sha="$(sha256sum "$cfg/opencode.json" | cut -d' ' -f1)"
+    before_mt="$(stat -c %Y "$cfg/opencode.json")"
+
+    inst --target "$cfg" "${TIERS[@]}" --no-git-hooks --yes >/dev/null 2>&1 || rc=$?
+    [ "$rc" -eq 0 ] && [ -f "$cfg/devkit/commands.json.sample" ]
+    check "test_opencode_json_mtime_unchanged" "happy-path install did not complete (exit $rc)" $?
+    after_sha="$(sha256sum "$cfg/opencode.json" | cut -d' ' -f1)"
+    after_mt="$(stat -c %Y "$cfg/opencode.json")"
+    [ "$after_sha" = "$before_sha" ] && [ "$after_mt" = "$before_mt" ]
+    check "test_opencode_json_mtime_unchanged" "happy path changed opencode.json (mtime $before_mt -> $after_mt)" $?
+
+    inst --target "$cfg" --model-cheap haiku --model-standard test-provider/standard-model \
+        --model-deep test-provider/deep-model --no-git-hooks --yes >/dev/null 2>&1 || rc_bad=$?
+    [ "$rc_bad" -eq 2 ]; check "test_opencode_json_mtime_unchanged" "error-path run exit $rc_bad, want 2" $?
+    after_sha="$(sha256sum "$cfg/opencode.json" | cut -d' ' -f1)"
+    after_mt="$(stat -c %Y "$cfg/opencode.json")"
+    [ "$after_sha" = "$before_sha" ] && [ "$after_mt" = "$before_mt" ]
+    check "test_opencode_json_mtime_unchanged" "error path changed opencode.json (mtime $before_mt -> $after_mt)" $?
+}
+
+test_check_and_dry_run_write_nothing() {
+    local dir="$WORK/check" tgt="$WORK/check/target" mode label want rc before after
+    local -a tiers
+    mkdir -p "$tgt"
+    printf 'user file\n' >"$tgt/user-file.txt"
+    for mode in --check --dry-run; do
+        for label in valid invalid; do
+            if [ "$label" = valid ]; then
+                tiers=("${TIERS[@]}"); want=0
+            else
+                tiers=(--model-cheap haiku --model-standard test-provider/standard-model --model-deep test-provider/deep-model); want=2
+            fi
+            before="$(snap_tree "$tgt")"
+            rc=0
+            inst --target "$tgt/install" "$mode" "${tiers[@]}" --no-git-hooks --yes >/dev/null 2>&1 || rc=$?
+            [ "$rc" -eq "$want" ]; check "test_check_and_dry_run_write_nothing" "$mode with $label tiers: exit $rc, want $want" $?
+            after="$(snap_tree "$tgt")"
+            [ "$before" = "$after" ]; check "test_check_and_dry_run_write_nothing" "$mode with $label tiers changed the target tree" $?
+            [ ! -e "$tgt/install" ]; check "test_check_and_dry_run_write_nothing" "$mode with $label tiers created the install directory" $?
+        done
+    done
+}
+
+test_project_and_target_mutually_exclusive() {
+    local dir="$WORK/mutex" rc=0 err
+    mkdir -p "$dir"
+    inst --project "$dir/p" --target "$dir/t" "${TIERS[@]}" --no-git-hooks --yes >/dev/null 2>"$dir/err.txt" || rc=$?
+    err="$(cat "$dir/err.txt")"
+    [ "$rc" -eq 2 ]; check "test_project_and_target_mutually_exclusive" "exit $rc, want 2: $err" $?
+    has "$err" "mutually exclusive"; check "test_project_and_target_mutually_exclusive" "stderr lacks the mutual-exclusion message: $err" $?
+    ! has "$err" "model tier"; check "test_project_and_target_mutually_exclusive" "a model-tier message appeared before the flag error: $err" $?
+    [ ! -e "$dir/p" ] && [ ! -e "$dir/t" ]; check "test_project_and_target_mutually_exclusive" "a target directory was created" $?
+}
+
+test_no_shell_injection_from_target_path() {
+    local dir="$WORK/inject" sentinel="$WORK/inject/cwd/sentinel-pwned" rc=0
+    mkdir -p "$dir/cwd"
+    (cd "$dir/cwd" && inst --target "$dir/cwd/x; touch sentinel-pwned" "${TIERS[@]}" --no-git-hooks --yes >/dev/null 2>&1) || rc=$?
+    [ ! -e "$sentinel" ]; check "test_no_shell_injection_from_target_path" "injected command ran: $sentinel exists (installer exit $rc)" $?
+}
+
+test_no_writes_outside_target() {
+    local dir="$WORK/outside" target="$WORK/outside/target/install" rc=0 before after repo_before repo_after
+    local home="$WORK/outside/home" xdg="$WORK/outside/xdg" tmp="$WORK/outside/tmp" cwd="$WORK/outside/cwd"
+    mkdir -p "$home" "$xdg" "$tmp" "$cwd" "$WORK/outside/target"
+    before="$(snap_tree "$home")$(snap_tree "$xdg")$(snap_tree "$tmp")$(snap_tree "$cwd")"
+    repo_before="$(snap_tree "$ROOT" "$ROOT/.git")"
+    (cd "$cwd" && env -u DEVKIT_OPENCODE_MODEL_CHEAP -u DEVKIT_OPENCODE_MODEL_STANDARD -u DEVKIT_OPENCODE_MODEL_DEEP \
+        HOME="$home" XDG_CONFIG_HOME="$xdg" TMPDIR="$tmp" \
+        bash "$INSTALL" --target "$target" "${TIERS[@]}" --no-git-hooks --yes >/dev/null 2>&1) || rc=$?
+    [ "$rc" -eq 0 ] && [ -f "$target/devkit/commands.json.sample" ]
+    check "test_no_writes_outside_target" "install did not complete into the target (exit $rc)" $?
+    after="$(snap_tree "$home")$(snap_tree "$xdg")$(snap_tree "$tmp")$(snap_tree "$cwd")"
+    repo_after="$(snap_tree "$ROOT" "$ROOT/.git")"
+    # The status is captured before any command substitution in a detail string runs, or it would be diff's.
+    local same=0 repo_same=0
+    [ "$before" = "$after" ] || same=$?
+    check "test_no_writes_outside_target" "paths changed outside the target (HOME/XDG/TMPDIR/cwd): $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -3)" "$same"
+    [ "$repo_before" = "$repo_after" ] || repo_same=$?
+    check "test_no_writes_outside_target" "repository tree changed: $(diff <(printf '%s\n' "$repo_before") <(printf '%s\n' "$repo_after") | head -3)" "$repo_same"
+}
+
+test_commands_sample_written_and_never_merged() {
+    local dir="$WORK/sample" cfg="$WORK/sample/cfg" out="$WORK/sample/stdout.txt" rc=0
+    local sample="$cfg/devkit/commands.json.sample" snippet stdout err before_sha before_mt after_sha after_mt
+    mkdir -p "$cfg"
+    printf '{"provider": {"test": {"apiKey": "sentinel-key"}}}\n' >"$cfg/opencode.json"
+    touch -d '2001-09-09 00:00:00 UTC' "$cfg/opencode.json"
+    before_sha="$(sha256sum "$cfg/opencode.json" | cut -d' ' -f1)"
+    before_mt="$(stat -c %Y "$cfg/opencode.json")"
+
+    inst --target "$cfg" "${TIERS[@]}" --no-git-hooks --yes >"$out" 2>"$dir/stderr.txt" || rc=$?
+    err="$(cat "$dir/stderr.txt")"
+    [ "$rc" -eq 0 ]; check "test_commands_sample_written_and_never_merged" "installer exit $rc: $err" $?
+    [ -f "$sample" ]; check "test_commands_sample_written_and_never_merged" "devkit/commands.json.sample not written" $?
+    grep -qF '"command"' "$sample" 2>/dev/null; check "test_commands_sample_written_and_never_merged" "sample lacks the command JSON snippet" $?
+
+    snippet="$(cat "$sample" 2>/dev/null)"
+    stdout="$(cat "$out")"
+    case "$stdout" in
+        *"$snippet"*) check "test_commands_sample_written_and_never_merged" "" 0 ;;
+        *) check "test_commands_sample_written_and_never_merged" "installer stdout lacks the sample snippet" 1 ;;
+    esac
+
+    after_sha="$(sha256sum "$cfg/opencode.json" | cut -d' ' -f1)"
+    after_mt="$(stat -c %Y "$cfg/opencode.json")"
+    [ "$after_sha" = "$before_sha" ] && [ "$after_mt" = "$before_mt" ]
+    check "test_commands_sample_written_and_never_merged" "opencode.json was merged into or rewritten" $?
+}
+
+test_missing_model_tier_exits_nonzero_naming_tier
+test_malformed_model_string_rejected
+test_opencode_json_mtime_unchanged
+test_check_and_dry_run_write_nothing
+test_project_and_target_mutually_exclusive
+test_no_shell_injection_from_target_path
+test_no_writes_outside_target
+test_commands_sample_written_and_never_merged
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]
