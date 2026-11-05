@@ -840,6 +840,38 @@ PY
     [ -z "$msg" ]; check "test_commands_sample_template_explicitly_invokes_skill_tool" "$msg" $?
 }
 
+test_bare_plugin_root_reference_rewritten_to_devkit_path() {
+    local dir="$WORK/bare-ref-rewrite" rc=0
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_bare_plugin_root_reference_rewritten_to_devkit_path" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    has "$(cat "$dir/out/skills/planning/SKILL.md")" '`<devkit>/references/branching.md`'
+    check "test_bare_plugin_root_reference_rewritten_to_devkit_path" "planning/SKILL.md still has the bare, unresolvable \`references/branching.md\` mention" $?
+}
+
+test_skill_local_reference_mention_left_unrewritten() {
+    local dir="$WORK/skill-local-ref-unrewritten" rc=0
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_skill_local_reference_mention_left_unrewritten" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    has "$(cat "$dir/out/skills/code/SKILL.md")" '`references/loop.md`'
+    check "test_skill_local_reference_mention_left_unrewritten" "code/SKILL.md's own skill-local \`references/loop.md\` mention was rewritten (should be untouched)" $?
+}
+
+test_unresolvable_bare_reference_fails_loudly() {
+    local dir="$WORK/unresolvable-ref" rc=0
+    mkdir -p "$dir/pr"
+    mk_fixture_plugins "$dir/pr" "fixture skill"
+    printf -- '---\nname: fixture\ndescription: fixture skill\n---\nSee `references/does-not-exist.md` for details.\n' \
+        >"$dir/pr/devtools/skills/fixture/SKILL.md"
+    gen_fixture "$dir/out" "$dir/pr" >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 1 ]; check "test_unresolvable_bare_reference_fails_loudly" "generator exit $rc (want 1)" $?
+    has "$(cat "$dir/stderr.txt")" "does-not-exist.md"
+    check "test_unresolvable_bare_reference_fails_loudly" "stderr does not name the unresolved reference: $(cat "$dir/stderr.txt")" $?
+    [ ! -d "$dir/out" ] || [ -z "$(ls -A "$dir/out" 2>/dev/null)" ]
+    check "test_unresolvable_bare_reference_fails_loudly" "target holds files despite the unresolvable reference: $(ls -RA "$dir/out" 2>/dev/null)" $?
+}
+
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
 test_generator_direct_invocation_empty_tier_writes_nothing
@@ -861,6 +893,9 @@ test_commands_sample_is_valid_json_despite_embedded_quotes
 test_commands_sample_unescapes_double_quoted_yaml_scalar
 test_commands_sample_preserves_non_ascii_literally
 test_commands_sample_template_explicitly_invokes_skill_tool
+test_bare_plugin_root_reference_rewritten_to_devkit_path
+test_skill_local_reference_mention_left_unrewritten
+test_unresolvable_bare_reference_fails_loudly
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

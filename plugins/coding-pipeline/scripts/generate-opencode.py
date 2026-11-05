@@ -158,6 +158,48 @@ def iter_plugin_dirs(plugins_root: Path) -> list[Path]:
     return sorted(p for p in plugins_root.iterdir() if p.is_dir())
 
 
+def plugin_root_references(plugins_root: Path) -> set[str]:
+    """Every *.md path under any plugin's own references/ dir, relative to that dir.
+
+    This is exactly the set generate_devkit's own plugin-root walk writes to devkit/references/ —
+    used to tell a skill-local `references/X.md` mention from one that only reads that way in
+    source because Claude Code's own skill-loading has full plugin-tree visibility to resolve it.
+    """
+    refs: set[str] = set()
+    for plugin in iter_plugin_dirs(plugins_root):
+        refs_dir = plugin / "references"
+        if refs_dir.is_dir():
+            for f in sorted(refs_dir.rglob("*.md")):
+                refs.add(f.relative_to(refs_dir).as_posix())
+    return refs
+
+
+BARE_REFERENCE = re.compile(r"`references/([A-Za-z0-9_./-]+\.md)`")
+
+
+def resolve_bare_plugin_references(text: str, origin: Path, skill_local_refs: set[str], plugin_root_refs: set[str]) -> str:
+    """A backtick-quoted `references/X.md` mention is ambiguous the moment a skill's own
+    references/ directory doesn't contain X.md: Claude Code resolves it by searching the whole
+    plugin tree, so the source text never needed to say which kind it is. OpenCode ships each
+    skill as a self-contained directory with only its own local references beside it, so the
+    exact same text silently breaks — a real gap, found live, not something this source text
+    needs to change for Claude Code's own sake. Rewrite every non-local mention to the
+    `<devkit>/references/...` path the plugin-root walk actually writes it to; a mention that
+    resolves to neither is a real defect in the source (a typo, a moved file) and fails loudly
+    rather than guessing.
+    """
+
+    def replace(m: re.Match[str]) -> str:
+        rel = m.group(1)
+        if rel in skill_local_refs:
+            return m.group(0)
+        if rel in plugin_root_refs:
+            return f"`<devkit>/references/{rel}`"
+        raise ValueError(f"{origin}: `references/{rel}` is neither a skill-local nor a plugin-root reference")
+
+    return BARE_REFERENCE.sub(replace, text)
+
+
 def decide_write(prior: dict[str, str], rel: str, on_disk: str | None) -> str:
     """Pure guard: may the generator overwrite `rel`, given the previous manifest and the file's hash on disk.
 
@@ -377,6 +419,7 @@ def generate_skills(
     entries: list[ManifestEntry] = []
     descriptions: list[tuple[str, str]] = []
     seen: dict[str, Path] = {}
+    plugin_root_refs = plugin_root_references(plugins_root)
 
     for plugin in iter_plugin_dirs(plugins_root):
         for source in sorted((plugin / "skills").glob("*/SKILL.md")):
@@ -389,8 +432,11 @@ def generate_skills(
             skill_refs_dir = source.parent / "references"
             ref_sources = sorted(skill_refs_dir.rglob("*.md")) if skill_refs_dir.is_dir() else []
             ref_rels: list[str] = []
+            skill_local_refs: set[str] = set()
             for ref in ref_sources:
-                ref_rel = f"skills/{name}/references/" + ref.relative_to(skill_refs_dir).as_posix()
+                local_rel = ref.relative_to(skill_refs_dir).as_posix()
+                skill_local_refs.add(local_rel)
+                ref_rel = f"skills/{name}/references/{local_rel}"
                 if ref_rel in seen:
                     raise ValueError(f"skill reference collision: {ref_rel} from {seen[ref_rel]} and {ref}")
                 seen[ref_rel] = ref
@@ -402,6 +448,7 @@ def generate_skills(
             else:
                 origin = source
                 text = apply_transforms(source.read_text(encoding="utf-8"))
+                text = resolve_bare_plugin_references(text, origin, skill_local_refs, plugin_root_refs)
             fields, _ = split_frontmatter(text, origin)
             description = _unquote_yaml_scalar(fields.get("description", ""))
             if not description:
@@ -410,7 +457,9 @@ def generate_skills(
             _emit(guard, entries, rel, text)
 
             for ref, ref_rel in zip(ref_sources, ref_rels):
-                _emit(guard, entries, ref_rel, apply_transforms(ref.read_text(encoding="utf-8")))
+                ref_text = apply_transforms(ref.read_text(encoding="utf-8"))
+                ref_text = resolve_bare_plugin_references(ref_text, ref, skill_local_refs, plugin_root_refs)
+                _emit(guard, entries, ref_rel, ref_text)
 
     for plugin in iter_plugin_dirs(plugins_root):
         refs_dir = plugin / "references"
