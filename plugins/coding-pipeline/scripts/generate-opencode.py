@@ -486,10 +486,14 @@ def render_frontmatter(fields: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate_agents(agents_dir: Path, guard: WriteGuard, model_map: dict[str, str]) -> list[ManifestEntry]:
+def validate_model_tiers(model_map: dict[str, str]) -> None:
+    """Refuse a missing or empty tier before any write (AC4): argparse only checks the flag was given."""
     for tier in TIERS:
         if not model_map.get(tier):
             raise ValueError(f"model tier {tier!r} is not set")
+
+
+def generate_agents(agents_dir: Path, guard: WriteGuard, model_map: dict[str, str]) -> list[ManifestEntry]:
     core_path = agents_dir / f"{CORE_AGENT}.md"
     if not core_path.is_file():
         raise ValueError(f"core agent {core_path} not found")
@@ -581,6 +585,15 @@ def main(argv: list[str]) -> int:
         # argparse exits 0 for -h/--help and 2 for a bad argument; keep whichever it chose.
         return 0 if exc.code is None else exc.code
 
+    # AC4: a missing or empty tier is refused before the first write. install-opencode.sh guards this too,
+    # but a direct caller of this script must get the same refusal without relying on that wrapper.
+    model_map = {"cheap": args.model_cheap, "standard": args.model_standard, "deep": args.model_deep}
+    try:
+        validate_model_tiers(model_map)
+    except ValueError as exc:
+        print(f"generate-opencode: {exc}", file=sys.stderr)
+        return 1
+
     # SEC-10: a literal "." or ".." component is refused on the string as given, before anything touches the
     # filesystem. The stat-based walk below cannot see through a not-yet-existing directory followed by "..",
     # because is_symlink() reports False for an ENOENT prefix; a pure string check has no such blind spot.
@@ -615,7 +628,6 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    model_map = {"cheap": args.model_cheap, "standard": args.model_standard, "deep": args.model_deep}
     try:
         args.target.mkdir(parents=True, exist_ok=True)
         # The lock is taken before the manifest is read, so a concurrent run's manifest is never stale (SEC-5).
