@@ -549,6 +549,20 @@ test_malformed_model_string_rejected() {
     [ ! -e "$dir/cfg" ]; check "test_malformed_model_string_rejected" "files written for a malformed tier" $?
 }
 
+# The generator is invoked directly, bypassing install-opencode.sh's bash-side validate_tier, so an
+# empty value must be refused by the generator itself before any file is written (AC4).
+test_generator_direct_invocation_empty_tier_writes_nothing() {
+    local dir="$WORK/empty-tier-direct" rc=0 err leftover
+    mkdir -p "$dir/target"
+    python3 -I "$GEN" --target "$dir/target" --model-cheap "test/cheap" \
+        --model-standard "test/standard" --model-deep "" >/dev/null 2>"$dir/err.txt" || rc=$?
+    err="$(cat "$dir/err.txt")"
+    [ "$rc" -ne 0 ]; check "test_generator_direct_invocation_empty_tier_writes_nothing" "generator exited 0 on an empty deep tier" $?
+    has "$err" "model tier 'deep' is not set"; check "test_generator_direct_invocation_empty_tier_writes_nothing" "stderr does not name the empty deep tier: $err" $?
+    leftover="$(find "$dir/target" -mindepth 1 -print | head -n 5)"
+    [ -z "$leftover" ]; check "test_generator_direct_invocation_empty_tier_writes_nothing" "files written before the tier check failed: $leftover" $?
+}
+
 test_opencode_json_mtime_unchanged() {
     local dir="$WORK/mtime" cfg="$WORK/mtime/cfg" rc=0 rc_bad=0 before_sha before_mt after_sha after_mt
     mkdir -p "$cfg"
@@ -809,6 +823,7 @@ PY
 
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
+test_generator_direct_invocation_empty_tier_writes_nothing
 test_opencode_json_mtime_unchanged
 test_check_and_dry_run_write_nothing
 test_project_and_target_mutually_exclusive
