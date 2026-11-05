@@ -80,19 +80,6 @@ OpenCode except where this section says otherwise.
   `devkit/commands.json.sample` is for the operator to merge by hand into their own `opencode.json`;
   nothing in this install writes that file.
 """
-COMMANDS_SAMPLE = """{
-  "command": {
-    "devkit-help": {
-      "template": "Run the devkit-help skill with: $ARGUMENTS",
-      "description": "Show what the devkit has, or one skill's usage"
-    },
-    "retro": {
-      "template": "Run the retro skill with: $ARGUMENTS",
-      "description": "Retrospective on a session; propose environment improvements"
-    }
-  }
-}
-"""
 WRITE, KEPT_MODIFIED, KEPT_NOT_DEVKIT = "write", "kept-modified", "kept-not-devkit"
 
 # Frozen transform-rule table (Pass 1), applied in table order as plain substitutions.
@@ -362,10 +349,27 @@ def _first_symlink_ancestor(target: Path) -> Path | None:
     return None
 
 
+def _unquote_yaml_scalar(value: str) -> str:
+    """Strip exactly one matching pair of outer quotes; leave a bare scalar unchanged (AC12).
+
+    A doubled '' escape inside a single-quoted scalar is not unescaped: no current skill description
+    uses one, so the case is not built speculatively.
+    """
+    if len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
+        return value[1:-1]
+    return value
+
+
 def generate_skills(
     plugins_root: Path, guard: WriteGuard, overrides: dict[str, Path]
-) -> list[ManifestEntry]:
+) -> tuple[list[ManifestEntry], list[tuple[str, str]]]:
+    """Write every skill and its references. Also return (name, description) per skill, for the commands sample.
+
+    The description is read from the same text written to skills/<name>/SKILL.md, so the sample and the
+    installed skill always agree; for an overridden skill that is the override's own frontmatter.
+    """
     entries: list[ManifestEntry] = []
+    descriptions: list[tuple[str, str]] = []
     seen: dict[str, Path] = {}
 
     for plugin in iter_plugin_dirs(plugins_root):
@@ -387,9 +391,16 @@ def generate_skills(
                 ref_rels.append(ref_rel)
 
             if name in overrides:
-                text = overrides[name].read_text(encoding="utf-8")
+                origin = overrides[name]
+                text = origin.read_text(encoding="utf-8")
             else:
+                origin = source
                 text = apply_transforms(source.read_text(encoding="utf-8"))
+            fields, _ = split_frontmatter(text, origin)
+            description = _unquote_yaml_scalar(fields.get("description", ""))
+            if not description:
+                raise ValueError(f"{origin}: frontmatter has no description")
+            descriptions.append((name, description))
             _emit(guard, entries, rel, text)
 
             for ref, ref_rel in zip(ref_sources, ref_rels):
@@ -404,7 +415,7 @@ def generate_skills(
             seen[rel] = source
             _emit(guard, entries, rel, apply_transforms(source.read_text(encoding="utf-8")))
 
-    return entries
+    return entries, descriptions
 
 
 def split_frontmatter(text: str, source: Path) -> tuple[dict[str, str], str]:
@@ -499,8 +510,21 @@ def _copy_source(guard: WriteGuard, entries: list[ManifestEntry], src: Path, rel
         entries.append(entry)
 
 
-def generate_devkit(plugins_root: Path, guard: WriteGuard) -> list[ManifestEntry]:
-    """devkit/AGENTS.md, the copied git-hooks and scripts, and the static commands sample. Never opencode.json."""
+def commands_sample(descriptions: list[tuple[str, str]]) -> str:
+    """The hand-mergeable command snippet, one entry per skill. json.dumps escapes embedded quotes (AC12)."""
+    doc = {
+        "command": {
+            name: {"template": f"Run the {name} skill with: $ARGUMENTS", "description": description}
+            for name, description in descriptions
+        }
+    }
+    return json.dumps(doc, indent=2) + "\n"
+
+
+def generate_devkit(
+    plugins_root: Path, guard: WriteGuard, descriptions: list[tuple[str, str]]
+) -> list[ManifestEntry]:
+    """devkit/AGENTS.md, the copied git-hooks and scripts, and the commands sample. Never opencode.json."""
     core = plugins_root / "coding-pipeline"
     entries: list[ManifestEntry] = []
 
@@ -526,7 +550,7 @@ def generate_devkit(plugins_root: Path, guard: WriteGuard) -> list[ManifestEntry
         else:
             _copy_source(guard, entries, src, f"{DEVKIT_DIR}/{SCRIPTS_SUBDIR}/{name}")
 
-    _emit(guard, entries, f"{DEVKIT_DIR}/commands.json.sample", COMMANDS_SAMPLE)
+    _emit(guard, entries, f"{DEVKIT_DIR}/commands.json.sample", commands_sample(descriptions))
     return entries
 
 
@@ -593,9 +617,12 @@ def main(argv: list[str]) -> int:
             guard = WriteGuard(args.target, read_manifest(args.target))
             entries: list[ManifestEntry] = []
             try:
-                entries += generate_skills(args.plugins_root, guard, discover_overrides(args.plugins_root))
+                skill_entries, descriptions = generate_skills(
+                    args.plugins_root, guard, discover_overrides(args.plugins_root)
+                )
+                entries += skill_entries
                 entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, guard, model_map)
-                entries += generate_devkit(args.plugins_root, guard)
+                entries += generate_devkit(args.plugins_root, guard, descriptions)
             finally:
                 # Record every file actually written, even on a failed run, so the next run still owns them.
                 write_manifest(guard)

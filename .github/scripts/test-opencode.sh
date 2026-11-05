@@ -664,6 +664,89 @@ test_commands_sample_written_and_never_merged() {
     check "test_commands_sample_written_and_never_merged" "opencode.json was merged into or rewritten" $?
 }
 
+test_commands_sample_covers_every_generated_skill() {
+    local dir="$WORK/cmds-cover" rc=0 msg
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_covers_every_generated_skill" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import json, pathlib, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+out = pathlib.Path(sys.argv[1])
+cmds = set(json.loads((out / "devkit/commands.json.sample").read_text(encoding="utf-8"))["command"])
+skills = {p.name for p in (out / "skills").iterdir() if p.is_dir()}
+if not skills or cmds != skills:
+    print(f"sample keys {len(cmds)} != skill dirs {len(skills)}; missing={sorted(skills - cmds)}")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_covers_every_generated_skill" "$msg" $?
+}
+
+test_commands_sample_description_matches_frontmatter_dequoted() {
+    local dir="$WORK/cmds-desc" rc=0 msg
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_description_matches_frontmatter_dequoted" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import json, pathlib, re, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+out = pathlib.Path(sys.argv[1])
+cmds = json.loads((out / "devkit/commands.json.sample").read_text(encoding="utf-8"))["command"]
+
+def written_description(name):
+    text = (out / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    value = re.search(r"^description:\s*(.*)$", text.split("\n---", 1)[0], re.M).group(1).strip()
+    if len(value) >= 2 and value[0] in "'\"" and value[-1] == value[0]:
+        value = value[1:-1]
+    return value
+
+for name in ("retro", "map"):
+    got, want = cmds[name]["description"], written_description(name)
+    if got != want:
+        print(f"{name}: sample {got[:60]!r} != written SKILL.md {want[:60]!r}")
+        sys.exit(1)
+    if got[:1] in ("'", '"') and got[-1:] == got[:1]:
+        print(f"{name}: outer quote left in {got[:40]!r}")
+        sys.exit(1)
+if "CLAUDE.md" in cmds["retro"]["description"]:
+    print("retro sample describes CLAUDE.md, which is absent from the install")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_description_matches_frontmatter_dequoted" "$msg" $?
+}
+
+test_commands_sample_is_valid_json_despite_embedded_quotes() {
+    local dir="$WORK/cmds-json" rc=0 msg
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_is_valid_json_despite_embedded_quotes" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import json, pathlib, re, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+out = pathlib.Path(sys.argv[1])
+try:
+    cmds = json.loads((out / "devkit/commands.json.sample").read_text(encoding="utf-8"))["command"]
+except (ValueError, KeyError) as exc:
+    print(f"sample is not valid command JSON: {exc}")
+    sys.exit(1)
+text = (out / "skills" / "devkit-help" / "SKILL.md").read_text(encoding="utf-8")
+want = re.search(r"^description:\s*(.*)$", text.split("\n---", 1)[0], re.M).group(1).strip()
+if len(want) >= 2 and want[0] in "'\"" and want[-1] == want[0]:
+    want = want[1:-1]
+got = cmds["devkit-help"]["description"]
+if '"' not in got:
+    print("devkit-help description has no embedded quote; the row's precondition is not exercised")
+    sys.exit(1)
+if got != want:
+    print(f"devkit-help description not byte-identical: {got[:60]!r} vs {want[:60]!r}")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_is_valid_json_despite_embedded_quotes" "$msg" $?
+}
+
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
 test_opencode_json_mtime_unchanged
@@ -678,6 +761,9 @@ test_symlinked_target_ancestor_rejected
 test_multi_level_symlinked_ancestor_rejected
 test_dotdot_through_missing_dir_rejected
 test_dotdot_with_preexisting_dir_still_caught_by_walk
+test_commands_sample_covers_every_generated_skill
+test_commands_sample_description_matches_frontmatter_dequoted
+test_commands_sample_is_valid_json_despite_embedded_quotes
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]
