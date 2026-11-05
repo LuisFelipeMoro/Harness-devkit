@@ -42,6 +42,10 @@ __pycache__/
 # Plans and codebase maps (docs/plans) — local working artifacts, not shipped
 /docs/
 
+# Local-only base notes / assistant config, never part of the devkit's own repo content
+/plans/
+/.github/copilot-instructions.md
+
 # Session memory and run artifacts stay local — a release carries code, docs and static tests only.
 PROGRESS.md
 handoff-*.md
