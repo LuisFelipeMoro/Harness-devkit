@@ -430,7 +430,10 @@ fi
 if [ -n "$DISPATCH_TARGET" ]; then
     resolve_source
     sync_source
-    exec bash "$SOURCE_DIR/plugins/$PLUGIN_NAME/scripts/install-$DISPATCH_TARGET.sh" "${DISPATCH_ARGS[@]}"
+    # The pre-4.4-safe idiom: a bare "${DISPATCH_ARGS[@]}" aborts with "unbound variable" under
+    # set -u on bash < 4.4 (macOS's default system bash) when the array has zero elements — the
+    # most common real invocation shape (e.g. "install.sh --codex" with no further arguments).
+    exec bash "$SOURCE_DIR/plugins/$PLUGIN_NAME/scripts/install-$DISPATCH_TARGET.sh" "${DISPATCH_ARGS[@]+"${DISPATCH_ARGS[@]}"}"
 fi
 
 # ── main ─────────────────────────────────────────────────────────────────────

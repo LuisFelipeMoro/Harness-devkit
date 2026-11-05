@@ -391,5 +391,13 @@ case "$out" in *"--opencode"*) : ;; *) ok=1 ;; esac
 case "$out" in *"--codex"*) : ;; *) ok=1 ;; esac
 check "test_install_sh_help_documents_dispatch" "out=$out" "$ok"
 
+# dispatch_args_safe_under_nounset_empty_array — a bare "${DISPATCH_ARGS[@]}" aborts with
+# "unbound variable" under set -u on bash < 4.4 (macOS's default system bash) when the array
+# is empty, which no bash available in this sandbox or CI can reproduce live (fixed upstream
+# in 4.4; every runner here is >= 5.2). This is a static check of the source pattern instead.
+exec_line=$(grep -n 'exec bash "\$SOURCE_DIR/plugins/\$PLUGIN_NAME/scripts/install-\$DISPATCH_TARGET.sh"' "$REPO/install.sh")
+case "$exec_line" in *'${DISPATCH_ARGS[@]+"${DISPATCH_ARGS[@]}"}'*) ok=0 ;; *) ok=1 ;; esac
+check "test_install_sh_dispatch_args_safe_under_nounset_empty_array" "exec line=$exec_line" "$ok"
+
 echo "install tests: $pass passed, exit=$fail"
 exit $fail
