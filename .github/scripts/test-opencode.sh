@@ -821,6 +821,25 @@ PY
     [ -z "$msg" ]; check "test_commands_sample_preserves_non_ascii_literally" "$msg" $?
 }
 
+test_commands_sample_template_explicitly_invokes_skill_tool() {
+    local dir="$WORK/cmds-skill-tool" rc=0 msg
+    mkdir -p "$dir"
+    gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_template_explicitly_invokes_skill_tool" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import json, pathlib, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+out = pathlib.Path(sys.argv[1])
+cmds = json.loads((out / "devkit/commands.json.sample").read_text(encoding="utf-8"))["command"]
+template = cmds["planning"]["template"]
+if "skill tool" not in template or '"planning"' not in template:
+    print(f"template does not explicitly name the skill tool and id: {template!r}")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_template_explicitly_invokes_skill_tool" "$msg" $?
+}
+
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
 test_generator_direct_invocation_empty_tier_writes_nothing
@@ -841,6 +860,7 @@ test_commands_sample_description_matches_frontmatter_dequoted
 test_commands_sample_is_valid_json_despite_embedded_quotes
 test_commands_sample_unescapes_double_quoted_yaml_scalar
 test_commands_sample_preserves_non_ascii_literally
+test_commands_sample_template_explicitly_invokes_skill_tool
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

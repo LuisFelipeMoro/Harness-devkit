@@ -524,7 +524,10 @@ def commands_sample(descriptions: list[tuple[str, str]]) -> str:
     """The hand-mergeable command snippet, one entry per skill. json.dumps escapes embedded quotes (AC12)."""
     doc = {
         "command": {
-            name: {"template": f"Run the {name} skill with: $ARGUMENTS", "description": description}
+            name: {
+                "template": f'Call the skill tool with id "{name}" to load its instructions, then follow them using these arguments: $ARGUMENTS',
+                "description": description,
+            }
             for name, description in descriptions
         }
     }
