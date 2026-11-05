@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.3] — 2026-11-05
+
+### Changed
+
+- `/review-code` posts comments that read like a person wrote them. Severity labels, emoji and axis or OWASP tags no longer appear in anything posted to GitHub. The terminal review is unchanged, and severity still decides between "request changes" and a comment.
+- `posting.md` has a new Voice section: start with what breaks, then the fix, in one to three sentences with one point per comment, and let the wording carry how serious it is.
+- The style question now offers Short and With suggestions. Terse, Detailed and Conventional Comments are gone.
+- The posted summary is a short paragraph: what has to change, what is worth a look, what couldn't be checked. It no longer has the score, severity counts or gate table. Plan gaps are also posted as a short paragraph, and only when something is missing.
+
+### Fixed
+
+- `output-format.md` no longer carries an inline-comment template starting with `[SEVERITY]`, which contradicted the new rules.
+
 ## [3.1.2] — 2026-11-04
 
 ### Added

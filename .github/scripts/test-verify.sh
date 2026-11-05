@@ -2076,10 +2076,30 @@ check "frontend: flutter tap target floor is stated" 0 0 "$out" 'enforces 48dp'
 out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder-backend.md")
 check "guides: coder-backend limits tables" 0 0 "$out" 'table-driven where the logic repeats'
 check "go rules: platform and e2e pairing stated" 0 0 "$(cat "$GO")" 'such as `foo_linux.go`'
-out=$(awk '/^## \[/{n++} n==1' "$ROOT/CHANGELOG.md")
+out=$(awk '/^## \[3\.1\.2\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
 check "release: 3.1.2 entry names the new checks" 0 0 "$out" 'M: FAIL ui-rows'
 check "release: README states the enforcement" 0 0 "$(cat "$ROOT/README.md")" 'fails a change that omits them or blocks zoom'
 
 rm -rf "$W"
+# --- /review-code: posted comments read like a person wrote them
+RC="$ROOT/plugins/pr-workflow/skills/review-code"
+out=$(cat "$RC/references/posting.md")
+check "review voice: posting.md leads with what breaks" 0 0 "$out" "Start with what actually breaks, then say how to fix it."
+check "review voice: seriousness is carried by wording" 0 0 "$out" "this needs to change before merge because"
+check "review voice: a skipped sensor is still stated in the summary" 0 0 "$out" "a sensor that did not run or a review with no spec is always stated"
+check "review voice: severity still decides the review event" 0 0 "$out" '`event`: `REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`'
+LC_ALL=C grep -qE '\[Standards\]|\[Spec\]|\[OWASP|Terse|Conventional Comments|score \{X\}|CRITICAL \{a\}|\xF0\x9F\x9F|\xF0\x9F\x94\xB4' "$RC/references/posting.md"; rc=$?
+check "review voice: posting.md has no label, emoji, old style or score template" 1 "$rc"
+out=$(cat "$RC/SKILL.md")
+check "review voice: the style question offers the two styles" 0 0 "$out" "Style — Short (a sentence or two) / With suggestions"
+check "review voice: terminal output keeps both axes" 0 0 "$out" 'under `## Standards` and `## Spec` exactly as the reviewer ranked them'
+grep -qE 'Terse|Conventional Comments' "$RC/SKILL.md"; rc=$?
+check "review voice: SKILL.md drops the old styles" 1 "$rc"
+out=$(cat "$RC/references/output-format.md")
+check "review voice: output-format.md points to Voice" 0 0 "$out" 'references/posting.md` § Voice'
+check "review voice: printed findings keep severity" 0 0 "$out" "path/to/file.go:42: 🔴 CRITICAL: [OWASP A03]"
+grep -qF '[SEVERITY]' "$RC/references/output-format.md"; rc=$?
+check "review voice: output-format.md drops the [SEVERITY] template" 1 "$rc"
+
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
