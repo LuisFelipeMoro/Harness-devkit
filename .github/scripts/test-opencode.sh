@@ -747,6 +747,66 @@ PY
     [ -z "$msg" ]; check "test_commands_sample_is_valid_json_despite_embedded_quotes" "$msg" $?
 }
 
+# mk_fixture_plugins <root> <skill description value> — the smallest plugins tree generate-opencode.py
+# accepts, with one synthetic skill whose frontmatter description is the given raw YAML value.
+mk_fixture_plugins() {
+    local root="$1" desc="$2"
+    mkdir -p "$root/coding-pipeline/git-hooks" "$root/coding-pipeline/agents" \
+        "$root/coding-pipeline/scripts/verify" "$root/devtools/skills/fixture"
+    printf '# Standards\n' >"$root/coding-pipeline/CLAUDE.md"
+    printf -- '---\nname: coder\ndescription: core\nmodel: sonnet\n---\nbody\n' >"$root/coding-pipeline/agents/coder.md"
+    printf 'x = 1\n' >"$root/coding-pipeline/scripts/estimate-run.py"
+    printf 'x = 1\n' >"$root/coding-pipeline/scripts/harness-metrics.py"
+    printf -- '---\nname: fixture\ndescription: %s\n---\nbody\n' "$desc" >"$root/devtools/skills/fixture/SKILL.md"
+}
+
+# gen_fixture <target> <plugins root> — the generator run against a synthetic tree (AC12 fixtures).
+gen_fixture() {
+    python3 -I "$GEN" --target "$1" --plugins-root "$2" --model-cheap "test-provider/cheap-model" \
+        --model-standard "test-provider/standard-model" --model-deep "test-provider/deep-model"
+}
+
+test_commands_sample_unescapes_double_quoted_yaml_scalar() {
+    local dir="$WORK/cmds-unescape" rc=0 msg
+    mkdir -p "$dir"
+    mk_fixture_plugins "$dir/pr" '"foo \"bar\" baz"'
+    gen_fixture "$dir/out" "$dir/pr" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_unescapes_double_quoted_yaml_scalar" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import json, pathlib, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+out = pathlib.Path(sys.argv[1])
+got = json.loads((out / "devkit/commands.json.sample").read_text(encoding="utf-8"))["command"]["fixture"]["description"]
+want = 'foo "bar" baz'
+if got != want:
+    print(f"sample description {got!r} != {want!r}")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_unescapes_double_quoted_yaml_scalar" "$msg" $?
+}
+
+test_commands_sample_preserves_non_ascii_literally() {
+    local dir="$WORK/cmds-nonascii" rc=0 msg
+    mkdir -p "$dir"
+    mk_fixture_plugins "$dir/pr" 'café résumé 日本語'
+    gen_fixture "$dir/out" "$dir/pr" >/dev/null 2>"$dir/stderr.txt" || rc=$?
+    [ "$rc" -eq 0 ]; check "test_commands_sample_preserves_non_ascii_literally" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
+import pathlib, sys
+sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
+text = (pathlib.Path(sys.argv[1]) / "devkit/commands.json.sample").read_text(encoding="utf-8")
+if "\\u" in text:
+    print("sample holds \\uXXXX escapes instead of the literal UTF-8 characters")
+    sys.exit(1)
+if "café résumé 日本語" not in text:
+    print("sample lacks the literal non-ASCII description")
+    sys.exit(1)
+PY
+)"
+    [ -z "$msg" ]; check "test_commands_sample_preserves_non_ascii_literally" "$msg" $?
+}
+
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
 test_opencode_json_mtime_unchanged
@@ -764,6 +824,8 @@ test_dotdot_with_preexisting_dir_still_caught_by_walk
 test_commands_sample_covers_every_generated_skill
 test_commands_sample_description_matches_frontmatter_dequoted
 test_commands_sample_is_valid_json_despite_embedded_quotes
+test_commands_sample_unescapes_double_quoted_yaml_scalar
+test_commands_sample_preserves_non_ascii_literally
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

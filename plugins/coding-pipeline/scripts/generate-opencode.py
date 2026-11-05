@@ -352,11 +352,17 @@ def _first_symlink_ancestor(target: Path) -> Path | None:
 def _unquote_yaml_scalar(value: str) -> str:
     """Strip exactly one matching pair of outer quotes; leave a bare scalar unchanged (AC12).
 
-    A doubled '' escape inside a single-quoted scalar is not unescaped: no current skill description
-    uses one, so the case is not built speculatively.
+    A double-quoted scalar also decodes its backslash escapes for the two that can occur inside a
+    description (\\" and \\\\), in one pass so an escaped backslash is never re-read. A single-quoted
+    scalar has no backslash escapes, so its body is kept verbatim. A doubled '' escape inside a
+    single-quoted scalar is not unescaped: no current skill description uses one, so the case is not
+    built speculatively.
     """
     if len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
-        return value[1:-1]
+        body = value[1:-1]
+        if value[0] == '"':
+            return re.sub(r'\\(["\\])', r"\1", body)
+        return body
     return value
 
 
@@ -518,7 +524,7 @@ def commands_sample(descriptions: list[tuple[str, str]]) -> str:
             for name, description in descriptions
         }
     }
-    return json.dumps(doc, indent=2) + "\n"
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
 
 def generate_devkit(
