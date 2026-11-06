@@ -24,7 +24,7 @@ disable-model-invocation: true
    | Integrations | `rote`, `rote-adapter` |
    | Meta | `write-a-skill`, `devkit-help` |
 
-   A table row whose skill is in no group goes under **Other**, so nothing is hidden; a group name with no row in the table is skipped silently. Then step 3, then one line: what is enforced (spec-first tests proven by falsification, CD1–CD7, quality gates, security defaults, the 80% context ceiling) lives in the same standards file — give the path that was read.
+   A table row whose skill is in no group goes under **Other**, so nothing is hidden; a group name with no row in the table is skipped silently. Then step 3, then one line: what is enforced (spec-first tests proven by falsification, CD1–CD8, quality gates, security defaults, the 80% context ceiling) lives in the same standards file — give the path that was read.
 3. **Flows.** Print:
    ```
    Feature:      /planning → /code → /validate-code → /review-code → /pr → /pr-fix
