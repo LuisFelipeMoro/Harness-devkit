@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.1.4] — 2026-11-06
+
+OpenCode joins Claude Code and Codex as a third installable harness target, generated statically
+from the same skills, agents and references source: `install-opencode.sh` (CLI wrapper) and
+`generate-opencode.py` write OpenCode-shaped `skills/<name>/SKILL.md`, `agents/<name>.md` and a
+canonical `AGENTS.md` into the operator's OpenCode config directory, requiring all three model
+tiers (`--model-cheap`/`--model-standard`/`--model-deep`) to be named explicitly. New CI coverage
+(`validate-opencode.py`, `test-opencode.sh`) checks manifest integrity, model-mapping and
+env/secret/network wiring on every push. `bash install.sh --opencode`/`--codex` now dispatch
+straight to the matching installer, skipping the Claude-specific flow, instead of requiring the
+nested script path to be known. Gaps documented, not silently absorbed: no slash-command
+generation (a `commands.json.sample` snippet is printed for manual merge instead), the
+manual-skill-invocation rule is unenforceable under OpenCode as installed, and the parallel
+`/code` orchestrator is cut from this delivery pending a re-spike of the SDK's session client.
+
 ## [3.1.3] — 2026-11-05
 
 ### Changed

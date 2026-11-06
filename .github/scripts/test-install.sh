@@ -333,5 +333,100 @@ case "$out" in *"kept (not the devkit's): $H/.claude/skills/task"*) ;; *) rc=1 ;
 check "keeps_user_file_with_retired_name_prints_kept" "the kept file was not reported" $rc
 rm -rf "$H" "$WORK"
 
+# ── install.sh --opencode/--codex dispatch ────────────────────────────────────
+
+OC="$PLUGIN/scripts/install-opencode.sh"
+
+# dispatches_opencode — install-opencode.sh does not exist yet on main (this change lands
+# there first), so a stub proves the dispatch mechanism itself: forwarding, skip-the-Claude-
+# flow, exit-code passthrough — independent of whichever real target script exists. The real
+# script's own behavior is covered by its own test suite once it lands.
+OC_PRE_EXISTED=0
+[ -f "$OC" ] && OC_PRE_EXISTED=1
+OC_BACKUP="$(newhome)/install-opencode.sh.bak"
+[ "$OC_PRE_EXISTED" = "1" ] && cp "$OC" "$OC_BACKUP"
+mkdir -p "$(dirname "$OC")"
+printf '#!/usr/bin/env bash\necho "STUB received: $*"\nexit 7\n' > "$OC"
+chmod +x "$OC"
+WORK="$(newhome)"
+out=$( cd "$WORK" && bash "$REPO/install.sh" --opencode foo --bar=baz 2>&1 )
+rc=$?
+if [ "$OC_PRE_EXISTED" = "1" ]; then cp "$OC_BACKUP" "$OC"; else rm -f "$OC"; fi
+rm -rf "$WORK" "$OC_BACKUP"
+
+ok=0
+[ "$rc" = "7" ] || ok=1
+case "$out" in *"STUB received: foo --bar=baz"*) : ;; *) ok=1 ;; esac
+case "$out" in *"claude-devkit installer"*) ok=1 ;; *) : ;; esac
+check "test_install_sh_dispatches_opencode" "rc=$rc out=$out" "$ok"
+
+# dispatches_codex — install-codex.sh already exists on main: this row verifies real
+# end-to-end integration, including that AGENTS_HOME (an env var, not a forwarded arg)
+# survives the dispatch's exec unchanged.
+CX_HOME="$(newhome)"
+WORK="$(newhome)"
+out=$( cd "$WORK" && AGENTS_HOME="$CX_HOME" bash "$REPO/install.sh" --codex 2>&1 )
+ok=0
+[ -d "$CX_HOME/skills" ] || ok=1
+[ -d "$CX_HOME/agents-reference" ] || ok=1
+case "$out" in *"claude-devkit installer"*) ok=1 ;; *) : ;; esac
+check "test_install_sh_dispatches_codex" "out=$out" "$ok"
+rm -rf "$CX_HOME" "$WORK"
+
+# default_flow_unregressed — the pre-existing flow (first argument is not --opencode/--codex)
+# must be byte-for-byte unaffected: the banner, OS line and dependency report all still appear.
+H="$(newhome)"; WORK="$(newhome)"
+out=$( cd "$WORK" && bash "$REPO/install.sh" --check --home "$H" 2>&1 )
+ok=0
+case "$out" in *"claude-devkit installer"*) : ;; *) ok=1 ;; esac
+case "$out" in *"dependencies (check only)"*) : ;; *) ok=1 ;; esac
+[ ! -d "$H/.claude" ] || ok=1
+check "test_install_sh_default_flow_unregressed" "out=$out" "$ok"
+rm -rf "$H" "$WORK"
+
+# help_documents_dispatch — discoverability is the entire point of this change.
+out=$(bash "$REPO/install.sh" --help 2>&1)
+ok=0
+case "$out" in *"--opencode"*) : ;; *) ok=1 ;; esac
+case "$out" in *"--codex"*) : ;; *) ok=1 ;; esac
+check "test_install_sh_help_documents_dispatch" "out=$out" "$ok"
+
+# dispatch_args_safe_under_nounset_empty_array — a bare "${DISPATCH_ARGS[@]}" aborts with
+# "unbound variable" under set -u on bash < 4.4 (macOS's default system bash) when the array
+# is empty, which no bash available in this sandbox or CI can reproduce live (fixed upstream
+# in 4.4; every runner here is >= 5.2). This is a static check of the source pattern instead.
+exec_line=$(grep -n 'exec bash "\$SOURCE_DIR/plugins/\$PLUGIN_NAME/scripts/install-\$DISPATCH_TARGET.sh"' "$REPO/install.sh")
+case "$exec_line" in *'${DISPATCH_ARGS[@]+"${DISPATCH_ARGS[@]}"}'*) ok=0 ;; *) ok=1 ;; esac
+check "test_install_sh_dispatch_args_safe_under_nounset_empty_array" "exec line=$exec_line" "$ok"
+
+# sync_source_merge_failure_does_not_abort_uncleanly — every other git call in sync_source()
+# is guarded (|| warn / || true / || echo 0); the fast-forward merge line was not. Under bash's
+# AND-OR-list errexit exemption, a failing "git merge ... && ok ..." doesn't itself abort — it
+# makes sync_source's own return value the failed merge's exit status, and the bare top-level
+# call to sync_source (under install.sh's own set -euo pipefail) is what then aborts the whole
+# process before install-opencode.sh/install-codex.sh is ever exec'd. Reproduced here with a
+# real git lock, not a stub, through the real function (sourced via DEVKIT_LIB_ONLY=1 above).
+UP="$(newhome)/upstream.git"
+git init --quiet --bare "$UP"
+CLONE="$(newhome)/clone"
+git clone --quiet "$UP" "$CLONE" >/dev/null 2>&1
+git -C "$CLONE" -c user.email=t@t -c user.name=t commit --quiet --allow-empty -m init
+BR="$(git -C "$CLONE" rev-parse --abbrev-ref HEAD)"
+git -C "$CLONE" push --quiet -u origin "$BR" >/dev/null 2>&1
+OTHER="$(newhome)/other"
+git clone --quiet "$UP" "$OTHER" >/dev/null 2>&1
+git -C "$OTHER" -c user.email=t@t -c user.name=t commit --quiet --allow-empty -m advance
+git -C "$OTHER" push --quiet origin "$BR" >/dev/null 2>&1
+git -C "$CLONE" fetch --quiet origin >/dev/null 2>&1
+touch "$CLONE/.git/index.lock"
+out=$( ( SOURCE_DIR="$CLONE"; SOURCE_KIND="managed clone"; DRY_RUN=0; set -euo pipefail; sync_source ) 2>&1 )
+rc=$?
+rm -f "$CLONE/.git/index.lock"
+ok=0
+[ "$rc" = "0" ] || ok=1
+case "$out" in *"fast-forward failed"*) : ;; *) ok=1 ;; esac
+check "test_sync_source_merge_failure_does_not_abort_uncleanly" "rc=$rc out=$out" "$ok"
+rm -rf "$UP" "$CLONE" "$OTHER"
+
 echo "install tests: $pass passed, exit=$fail"
 exit $fail

@@ -15,6 +15,8 @@
 #   bash install.sh --no-deps    # skip package installation
 #   bash install.sh --no-claude-mem   # skip the claude-mem memory layer
 #   bash install.sh --dry-run    # print what would happen
+#   bash install.sh --opencode [args...]   # forward to install-opencode.sh, skip the Claude flow
+#   bash install.sh --codex [args...]      # forward to install-codex.sh, skip the Claude flow
 #
 # Deliberately does NOT pipe a downloaded script into a shell — the devkit's own
 # destructive-guard blocks that shape, and an installer that breaks its own rule
@@ -33,6 +35,18 @@ SKIP_DEPS=0
 DRY_RUN=0
 SKIP_CLAUDE_MEM=0
 
+# --opencode/--codex, as the first argument, forward every remaining argument untouched to the
+# matching installer — never parsed by the case below, since several of its own flags (e.g.
+# --model-cheap) would otherwise hit the "unknown argument" branch.
+DISPATCH_TARGET=""
+DISPATCH_ARGS=()
+if [ "${1-}" = "--opencode" ] || [ "${1-}" = "--codex" ]; then
+    DISPATCH_TARGET="${1#--}"
+    shift
+    DISPATCH_ARGS=("$@")
+    set --
+fi
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --yes|-y)    ASSUME_YES=1 ;;
@@ -43,7 +57,7 @@ while [ "$#" -gt 0 ]; do
         --home)      [ "$#" -ge 2 ] || { echo "--home needs a directory" >&2; exit 2; }
                      shift; TARGET_HOME="$1" ;;
         --home=*)    TARGET_HOME="${1#--home=}" ;;
-        --help|-h)   sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --help|-h)   sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac
     shift
@@ -330,7 +344,8 @@ sync_source() {
     fi
     if [ "$SOURCE_KIND" = "managed clone" ] || confirm "fast-forward $branch to $upstream ($behind behind)?"; then
         [ "$DRY_RUN" = "1" ] && { say "  would fast-forward $branch"; return 0; }
-        git -C "$SOURCE_DIR" merge --ff-only "$upstream" --quiet && ok "fast-forwarded $branch to $upstream"
+        git -C "$SOURCE_DIR" merge --ff-only "$upstream" --quiet && ok "fast-forwarded $branch to $upstream" \
+            || warn "fast-forward failed; left $branch as-is"
     else
         warn "left $branch $behind commit(s) behind"
     fi
@@ -407,6 +422,19 @@ PY
 # running an install. Nothing else sets DEVKIT_LIB_ONLY.
 if [ "${DEVKIT_LIB_ONLY:-0}" = "1" ]; then
     return 0
+fi
+
+# --opencode/--codex dispatch — resolve/sync the source checkout the same way the main flow
+# does, then exec straight into the matching installer. exec replaces this process, so none of
+# the Claude-specific steps below (OS-support check, dependency install, ~/.claude wiring,
+# claude-mem) ever run, and the delegated script's exit code becomes this script's exit code.
+if [ -n "$DISPATCH_TARGET" ]; then
+    resolve_source
+    sync_source
+    # The pre-4.4-safe idiom: a bare "${DISPATCH_ARGS[@]}" aborts with "unbound variable" under
+    # set -u on bash < 4.4 (macOS's default system bash) when the array has zero elements — the
+    # most common real invocation shape (e.g. "install.sh --codex" with no further arguments).
+    exec bash "$SOURCE_DIR/plugins/$PLUGIN_NAME/scripts/install-$DISPATCH_TARGET.sh" "${DISPATCH_ARGS[@]+"${DISPATCH_ARGS[@]}"}"
 fi
 
 # ── main ─────────────────────────────────────────────────────────────────────

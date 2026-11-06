@@ -1677,6 +1677,18 @@ check "estimate-run: a file matched by a claimed glob clashes" 0 "$rc" "$out" "T
 check "estimate-run: a directory without trailing slash still contains its files" 0 "$rc" "$out" "T7 — shares docs/x.md with T6"
 check "estimate-run: a directory claimed after a file inside it clashes" 0 "$rc" "$out" "T9 — shares pkg/ with T8"
 check "estimate-run: a name-prefix sibling (src/ vs srcx/) stays parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T3, T5, T6, T8"
+# Every row from T11 on carries a trailing "*(added, fix round N — ...)*" annotation on its ID cell, so a
+# bare-ID dependency must still resolve against an annotated row. Before the fix the ID kept the
+# annotation, T3's "T2" hit "unknown task" and the run exited 2.
+cat > "$W/est-annot.md" <<'MD'
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a.go` | TestA | Go 1.26 | Backend | — |
+| T2 *(added, fix round 8 — probe)* | coupon | `b.go` | TestB | Go 1.26 | Backend | T1 |
+| T3 | totals | `c.go` | TestC | Go 1.26 | Backend | T2 |
+MD
+out=$(python3 "$ER" --plan "$W/est-annot.md" 2>&1); rc=$?
+check "test_estimate_run_resolves_annotated_task_id_dependency" 0 "$rc" "$out" "not parallel-safe: T3 — depends on T2"
 
 # ── estimate-run.py --guides: guide token cost, measured from the files ──────
 # The devkit's guide-cost measurement. A fixture tree with files of a
@@ -1850,7 +1862,7 @@ check "new-file discipline: CLAUDE.md no longer says PR1–PR10" 1 "$rc"
 grep -rlq 'CD1–CD7' "$ROOT/plugins"; rc=$?
 check "new-file discipline: no guide still says CD1–CD7" 1 "$rc"
 n=$(grep -r --include='*.md' 'CD1–CD8' "$ROOT/plugins" | wc -l | tr -d ' ')
-check "new-file discipline: guides state CD1–CD8 at all 5 mentions" 5 "$n"
+check "new-file discipline: guides state CD1–CD8 at all 6 mentions" 6 "$n"
 
 latest=$(grep -m1 -oE '^## \[[0-9.]+\]' "$ROOT/CHANGELOG.md" | tr -d '#[] ')
 rc=0

@@ -134,7 +134,10 @@ def parse(path):
             continue
         if len(c) != len(header):
             fail(f"malformed Tasks row ({len(c)} cells, header has {len(header)}): {line.strip()}")
-        rid = re.sub(r"[`*]", "", c[idx["id"]]).strip()
+        # The ID cell may carry a trailing "*(added, fix round N — ...)*" annotation
+        # (every row from T11 on does); the ID itself is always the first token.
+        rid_cell = re.sub(r"[`*]", "", c[idx["id"]]).strip()
+        rid = rid_cell.split()[0] if rid_cell else rid_cell
         if not rid:
             fail(f"Tasks row without an ID: {line.strip()}")
         rows.append({

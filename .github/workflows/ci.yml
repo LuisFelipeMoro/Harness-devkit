@@ -101,3 +101,21 @@ jobs:
         # The settings merge edits a file holding the operator's permissions and
         # model config; a bad merge destroys work that is not recoverable from git.
         run: bash .github/scripts/test-install.sh
+
+  opencode:
+    name: opencode — generation, installer and validator tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: sanctioned-edits behaviour tests
+        # The two sensor edits that wire opencode/ into the devkit must keep matching
+        # the existing prefixes; nothing else exercises the widened path regex.
+        run: bash .github/scripts/test-sanctioned-edits.sh
+      - name: opencode generator and installer tests
+        # The generator and installer are the only producers of the opencode tree;
+        # a regression here ships a broken harness with no other check behind it.
+        run: bash .github/scripts/test-opencode.sh
+      - name: opencode manifest validator
+        # Manifest integrity, model mapping, and env/secret/network checks run only
+        # here; a false PASS would reach users with no reviewer behind it.
+        run: python3 .github/scripts/validate-opencode.py
