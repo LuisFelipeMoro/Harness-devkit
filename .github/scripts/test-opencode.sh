@@ -75,8 +75,8 @@ test_generate_writes_all_24_skills() {
 
 test_generate_writes_12_agents_with_coder_merge() {
     local n
-    n="$(find "$OUT/agents" -maxdepth 1 -name '*.md' | wc -l)"
-    [ "$n" -eq 12 ]; check "test_generate_writes_12_agents_with_coder_merge" "found $n agent files (want 12)" $?
+    n="$(find "$OUT/agents" -maxdepth 1 -name '*.md' ! -name 'devkit.md' | wc -l)"
+    [ "$n" -eq 12 ]; check "test_generate_writes_12_agents_with_coder_merge" "found $n source-derived agent files (want 12)" $?
     grep -qF "## Scope Discipline" "$OUT/agents/coder-backend.md"; check "test_generate_writes_12_agents_with_coder_merge" "coder-backend.md lacks the shared coder.md body" $?
     grep -qF "## Scope Discipline" "$OUT/agents/coder-frontend.md"; check "test_generate_writes_12_agents_with_coder_merge" "coder-frontend.md lacks the shared coder.md body" $?
 }
@@ -769,6 +769,8 @@ mk_fixture_plugins() {
         "$root/coding-pipeline/scripts/verify" "$root/devtools/skills/fixture"
     printf '# Standards\n' >"$root/coding-pipeline/CLAUDE.md"
     printf -- '---\nname: coder\ndescription: core\nmodel: sonnet\n---\nbody\n' >"$root/coding-pipeline/agents/coder.md"
+    mkdir -p "$root/coding-pipeline/opencode/agents"
+    printf 'devkit body\n' >"$root/coding-pipeline/opencode/agents/devkit.md"
     printf 'x = 1\n' >"$root/coding-pipeline/scripts/estimate-run.py"
     printf 'x = 1\n' >"$root/coding-pipeline/scripts/harness-metrics.py"
     printf -- '---\nname: fixture\ndescription: %s\n---\nbody\n' "$desc" >"$root/devtools/skills/fixture/SKILL.md"
@@ -872,6 +874,43 @@ test_unresolvable_bare_reference_fails_loudly() {
     check "test_unresolvable_bare_reference_fails_loudly" "target holds files despite the unresolvable reference: $(ls -RA "$dir/out" 2>/dev/null)" $?
 }
 
+test_devkit_agent_generated_with_primary_mode() {
+    local f="$OUT/agents/devkit.md"
+    [ -f "$f" ]; check "test_devkit_agent_generated_with_primary_mode" "agents/devkit.md was not generated" $?
+    grep -qxF 'mode: "primary"' "$f"; check "test_devkit_agent_generated_with_primary_mode" "devkit.md lacks mode: \"primary\"" $?
+    grep -qxF 'mode: "subagent"' "$OUT/agents/coder-backend.md"; check "test_devkit_agent_generated_with_primary_mode" "control: coder-backend.md is not mode subagent" $?
+}
+
+test_devkit_agent_has_name_and_description() {
+    local f="$OUT/agents/devkit.md"
+    grep -qxF 'name: "devkit"' "$f"; check "test_devkit_agent_has_name_and_description" "devkit.md lacks name: \"devkit\"" $?
+    grep -qxF "description: \"The devkit's entry point — orients you to the right skill, suggests the next step after a checkpoint, never starts one itself; a capable general assistant otherwise.\"" "$f"
+    check "test_devkit_agent_has_name_and_description" "devkit.md description is not the frozen sentence" $?
+}
+
+test_devkit_agent_has_full_tool_permissions() {
+    local f="$OUT/agents/devkit.md" line
+    for line in 'permission:' '  edit: "allow"' '  bash: "allow"' 'tools:' '  edit: true' '  write: true' '  patch: true'; do
+        grep -qxF -- "$line" "$f"; check "test_devkit_agent_has_full_tool_permissions" "devkit.md lacks line: $line" $?
+    done
+}
+
+test_devkit_agent_points_to_devkit_help_not_a_hardcoded_list() {
+    has "$(cat "$OUT/agents/devkit.md")" '/devkit-help'
+    check "test_devkit_agent_points_to_devkit_help_not_a_hardcoded_list" "devkit.md does not point to /devkit-help" $?
+}
+
+test_devkit_agent_states_name_and_wait_rule_explicitly() {
+    has "$(cat "$OUT/agents/devkit.md")" 'Never start, call, or chain a skill yourself'
+    check "test_devkit_agent_states_name_and_wait_rule_explicitly" "devkit.md lacks the pinned wait-rule sentence" $?
+}
+
+test_generate_writes_12_source_derived_agents_excluding_devkit() {
+    local n
+    n="$(find "$OUT/agents" -maxdepth 1 -name '*.md' ! -name 'devkit.md' | wc -l)"
+    [ "$n" -eq 12 ]; check "test_generate_writes_12_source_derived_agents_excluding_devkit" "found $n source-derived agent files (want 12)" $?
+}
+
 test_missing_model_tier_exits_nonzero_naming_tier
 test_malformed_model_string_rejected
 test_generator_direct_invocation_empty_tier_writes_nothing
@@ -896,6 +935,12 @@ test_commands_sample_template_explicitly_invokes_skill_tool
 test_bare_plugin_root_reference_rewritten_to_devkit_path
 test_skill_local_reference_mention_left_unrewritten
 test_unresolvable_bare_reference_fails_loudly
+test_devkit_agent_generated_with_primary_mode
+test_devkit_agent_has_name_and_description
+test_devkit_agent_has_full_tool_permissions
+test_devkit_agent_points_to_devkit_help_not_a_hardcoded_list
+test_devkit_agent_states_name_and_wait_rule_explicitly
+test_generate_writes_12_source_derived_agents_excluding_devkit
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]

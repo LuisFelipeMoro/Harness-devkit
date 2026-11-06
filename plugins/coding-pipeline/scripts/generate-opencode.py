@@ -47,6 +47,13 @@ from pathlib import Path
 DEFAULT_PLUGINS_ROOT = Path(__file__).resolve().parents[2]
 OVERRIDES_SUBDIR = Path("coding-pipeline") / "opencode" / "overrides"
 AGENTS_SUBDIR = Path("coding-pipeline") / "agents"
+# AC15: the devkit primary agent has no Claude Code source; its body is this static, frontmatter-less file.
+DEVKIT_AGENT_SOURCE = Path("coding-pipeline") / "opencode" / "agents" / "devkit.md"
+DEVKIT_AGENT_NAME = "devkit"
+DEVKIT_AGENT_DESCRIPTION = (
+    "The devkit's entry point — orients you to the right skill, suggests the next step after a checkpoint, "
+    "never starts one itself; a capable general assistant otherwise."
+)
 CORE_AGENT = "coder"
 OVERLAY_AGENTS = ("coder-backend", "coder-frontend")
 TIERS = ("cheap", "standard", "deep")
@@ -561,6 +568,27 @@ def generate_agents(agents_dir: Path, guard: WriteGuard, model_map: dict[str, st
     return entries
 
 
+def generate_devkit_agent(plugins_root: Path, guard: WriteGuard, model_map: dict[str, str]) -> list[ManifestEntry]:
+    """The devkit primary agent (AC15). It has no Claude Code source, so its six frontmatter fields are fixed here
+    and only its body is read from the static, frontmatter-less source file, verbatim."""
+    source = plugins_root / DEVKIT_AGENT_SOURCE
+    if not source.is_file():
+        raise ValueError(f"devkit agent source {source} not found")
+    front = render_frontmatter(
+        {
+            "name": DEVKIT_AGENT_NAME,
+            "description": DEVKIT_AGENT_DESCRIPTION,
+            "mode": "primary",
+            "model": model_map["standard"],
+            "permission": {"edit": "allow", "bash": "allow"},
+            "tools": {"edit": True, "write": True, "patch": True},
+        }
+    )
+    entries: list[ManifestEntry] = []
+    _emit(guard, entries, f"agents/{DEVKIT_AGENT_NAME}.md", front + "\n" + source.read_text(encoding="utf-8"))
+    return entries
+
+
 def _copy_source(guard: WriteGuard, entries: list[ManifestEntry], src: Path, rel: str) -> None:
     if not src.is_file():
         raise ValueError(f"devkit source file missing: {src}")
@@ -692,6 +720,7 @@ def main(argv: list[str]) -> int:
                 )
                 entries += skill_entries
                 entries += generate_agents(args.plugins_root / AGENTS_SUBDIR, guard, model_map)
+                entries += generate_devkit_agent(args.plugins_root, guard, model_map)
                 entries += generate_devkit(args.plugins_root, guard, descriptions)
             finally:
                 # Record every file actually written, even on a failed run, so the next run still owns them.
