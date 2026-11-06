@@ -1862,7 +1862,7 @@ check "new-file discipline: CLAUDE.md no longer says PR1–PR10" 1 "$rc"
 grep -rlq 'CD1–CD7' "$ROOT/plugins"; rc=$?
 check "new-file discipline: no guide still says CD1–CD7" 1 "$rc"
 n=$(grep -r --include='*.md' 'CD1–CD8' "$ROOT/plugins" | wc -l | tr -d ' ')
-check "new-file discipline: guides state CD1–CD8 at all 5 mentions" 5 "$n"
+check "new-file discipline: guides state CD1–CD8 at all 6 mentions" 6 "$n"
 
 latest=$(grep -m1 -oE '^## \[[0-9.]+\]' "$ROOT/CHANGELOG.md" | tr -d '#[] ')
 rc=0

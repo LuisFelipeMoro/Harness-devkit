@@ -399,5 +399,34 @@ exec_line=$(grep -n 'exec bash "\$SOURCE_DIR/plugins/\$PLUGIN_NAME/scripts/insta
 case "$exec_line" in *'${DISPATCH_ARGS[@]+"${DISPATCH_ARGS[@]}"}'*) ok=0 ;; *) ok=1 ;; esac
 check "test_install_sh_dispatch_args_safe_under_nounset_empty_array" "exec line=$exec_line" "$ok"
 
+# sync_source_merge_failure_does_not_abort_uncleanly — every other git call in sync_source()
+# is guarded (|| warn / || true / || echo 0); the fast-forward merge line was not. Under bash's
+# AND-OR-list errexit exemption, a failing "git merge ... && ok ..." doesn't itself abort — it
+# makes sync_source's own return value the failed merge's exit status, and the bare top-level
+# call to sync_source (under install.sh's own set -euo pipefail) is what then aborts the whole
+# process before install-opencode.sh/install-codex.sh is ever exec'd. Reproduced here with a
+# real git lock, not a stub, through the real function (sourced via DEVKIT_LIB_ONLY=1 above).
+UP="$(newhome)/upstream.git"
+git init --quiet --bare "$UP"
+CLONE="$(newhome)/clone"
+git clone --quiet "$UP" "$CLONE" >/dev/null 2>&1
+git -C "$CLONE" -c user.email=t@t -c user.name=t commit --quiet --allow-empty -m init
+BR="$(git -C "$CLONE" rev-parse --abbrev-ref HEAD)"
+git -C "$CLONE" push --quiet -u origin "$BR" >/dev/null 2>&1
+OTHER="$(newhome)/other"
+git clone --quiet "$UP" "$OTHER" >/dev/null 2>&1
+git -C "$OTHER" -c user.email=t@t -c user.name=t commit --quiet --allow-empty -m advance
+git -C "$OTHER" push --quiet origin "$BR" >/dev/null 2>&1
+git -C "$CLONE" fetch --quiet origin >/dev/null 2>&1
+touch "$CLONE/.git/index.lock"
+out=$( ( SOURCE_DIR="$CLONE"; SOURCE_KIND="managed clone"; DRY_RUN=0; set -euo pipefail; sync_source ) 2>&1 )
+rc=$?
+rm -f "$CLONE/.git/index.lock"
+ok=0
+[ "$rc" = "0" ] || ok=1
+case "$out" in *"fast-forward failed"*) : ;; *) ok=1 ;; esac
+check "test_sync_source_merge_failure_does_not_abort_uncleanly" "rc=$rc out=$out" "$ok"
+rm -rf "$UP" "$CLONE" "$OTHER"
+
 echo "install tests: $pass passed, exit=$fail"
 exit $fail

@@ -344,7 +344,8 @@ sync_source() {
     fi
     if [ "$SOURCE_KIND" = "managed clone" ] || confirm "fast-forward $branch to $upstream ($behind behind)?"; then
         [ "$DRY_RUN" = "1" ] && { say "  would fast-forward $branch"; return 0; }
-        git -C "$SOURCE_DIR" merge --ff-only "$upstream" --quiet && ok "fast-forwarded $branch to $upstream"
+        git -C "$SOURCE_DIR" merge --ff-only "$upstream" --quiet && ok "fast-forwarded $branch to $upstream" \
+            || warn "fast-forward failed; left $branch as-is"
     else
         warn "left $branch $behind commit(s) behind"
     fi
