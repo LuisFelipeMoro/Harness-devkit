@@ -682,7 +682,8 @@ test_commands_sample_covers_every_generated_skill() {
     local dir="$WORK/cmds-cover" rc=0 msg
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_covers_every_generated_skill" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_covers_every_generated_skill" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import json, pathlib, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -701,7 +702,8 @@ test_commands_sample_description_matches_frontmatter_dequoted() {
     local dir="$WORK/cmds-desc" rc=0 msg
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_description_matches_frontmatter_dequoted" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_description_matches_frontmatter_dequoted" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import json, pathlib, re, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -735,7 +737,8 @@ test_commands_sample_is_valid_json_despite_embedded_quotes() {
     local dir="$WORK/cmds-json" rc=0 msg
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_is_valid_json_despite_embedded_quotes" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_is_valid_json_despite_embedded_quotes" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import json, pathlib, re, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -787,7 +790,8 @@ test_commands_sample_unescapes_double_quoted_yaml_scalar() {
     mkdir -p "$dir"
     mk_fixture_plugins "$dir/pr" '"foo \"bar\" baz"'
     gen_fixture "$dir/out" "$dir/pr" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_unescapes_double_quoted_yaml_scalar" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_unescapes_double_quoted_yaml_scalar" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import json, pathlib, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -807,7 +811,8 @@ test_commands_sample_preserves_non_ascii_literally() {
     mkdir -p "$dir"
     mk_fixture_plugins "$dir/pr" 'café résumé 日本語'
     gen_fixture "$dir/out" "$dir/pr" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_preserves_non_ascii_literally" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_preserves_non_ascii_literally" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import pathlib, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -827,7 +832,8 @@ test_commands_sample_template_explicitly_invokes_skill_tool() {
     local dir="$WORK/cmds-skill-tool" rc=0 msg
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_commands_sample_template_explicitly_invokes_skill_tool" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_commands_sample_template_explicitly_invokes_skill_tool" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     msg="$(python3 -I - "$dir/out" 2>&1 <<'PY'
 import json, pathlib, sys
 sys.excepthook = lambda kind, exc, tb: (print(f"{kind.__name__}: {exc}"), sys.exit(1))
@@ -846,7 +852,8 @@ test_bare_plugin_root_reference_rewritten_to_devkit_path() {
     local dir="$WORK/bare-ref-rewrite" rc=0
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_bare_plugin_root_reference_rewritten_to_devkit_path" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_bare_plugin_root_reference_rewritten_to_devkit_path" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     has "$(cat "$dir/out/skills/planning/SKILL.md")" '`<devkit>/references/branching.md`'
     check "test_bare_plugin_root_reference_rewritten_to_devkit_path" "planning/SKILL.md still has the bare, unresolvable \`references/branching.md\` mention" $?
 }
@@ -855,23 +862,33 @@ test_skill_local_reference_mention_left_unrewritten() {
     local dir="$WORK/skill-local-ref-unrewritten" rc=0
     mkdir -p "$dir"
     gen "$dir/out" >/dev/null 2>"$dir/stderr.txt" || rc=$?
-    [ "$rc" -eq 0 ]; check "test_skill_local_reference_mention_left_unrewritten" "generator exit $rc: $(cat "$dir/stderr.txt")" $?
+    [ "$rc" -eq 0 ]; ok=$?
+    check "test_skill_local_reference_mention_left_unrewritten" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
     has "$(cat "$dir/out/skills/code/SKILL.md")" '`references/loop.md`'
     check "test_skill_local_reference_mention_left_unrewritten" "code/SKILL.md's own skill-local \`references/loop.md\` mention was rewritten (should be untouched)" $?
 }
 
 test_unresolvable_bare_reference_fails_loudly() {
-    local dir="$WORK/unresolvable-ref" rc=0
+    local dir="$WORK/unresolvable-ref" rc=0 ok listing entries
     mkdir -p "$dir/pr"
     mk_fixture_plugins "$dir/pr" "fixture skill"
     printf -- '---\nname: fixture\ndescription: fixture skill\n---\nSee `references/does-not-exist.md` for details.\n' \
         >"$dir/pr/devtools/skills/fixture/SKILL.md"
     gen_fixture "$dir/out" "$dir/pr" >"$dir/stdout.txt" 2>"$dir/stderr.txt" || rc=$?
     [ "$rc" -eq 1 ]; check "test_unresolvable_bare_reference_fails_loudly" "generator exit $rc (want 1)" $?
-    has "$(cat "$dir/stderr.txt")" "does-not-exist.md"
-    check "test_unresolvable_bare_reference_fails_loudly" "stderr does not name the unresolved reference: $(cat "$dir/stderr.txt")" $?
-    [ ! -d "$dir/out" ] || [ -z "$(ls -A "$dir/out" 2>/dev/null)" ]
-    check "test_unresolvable_bare_reference_fails_loudly" "target holds files despite the unresolvable reference: $(ls -RA "$dir/out" 2>/dev/null)" $?
+    has "$(cat "$dir/stderr.txt")" "does-not-exist.md"; ok=$?
+    check "test_unresolvable_bare_reference_fails_loudly" "stderr does not name the unresolved reference: $(cat "$dir/stderr.txt")" "$ok"
+    # No skill/agent/reference content is written — but the target may still hold an empty
+    # .devkit-opencode-manifest.json, since write_manifest() runs unconditionally in main()'s
+    # finally block (T11/SEC-5's own "record every file actually written, even on a failed run"
+    # design). So: at most that one file, and its own entries list must be empty.
+    listing="$(cd "$dir/out" 2>/dev/null && find . -mindepth 1 | sed 's#^\./##' | sort || true)"
+    [ -z "$listing" ] || [ "$listing" = ".devkit-opencode-manifest.json" ]; ok=$?
+    check "test_unresolvable_bare_reference_fails_loudly" "target holds unexpected content despite the unresolvable reference: $listing" "$ok"
+    if [ -f "$dir/out/.devkit-opencode-manifest.json" ]; then
+        entries="$(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["entries"]))' "$dir/out/.devkit-opencode-manifest.json" 2>/dev/null)"
+        [ "$entries" = "0" ]; check "test_unresolvable_bare_reference_fails_loudly" "manifest records $entries entries despite the unresolvable reference (want 0)" $?
+    fi
 }
 
 test_devkit_agent_generated_with_primary_mode() {
@@ -941,6 +958,36 @@ test_devkit_agent_has_full_tool_permissions
 test_devkit_agent_points_to_devkit_help_not_a_hardcoded_list
 test_devkit_agent_states_name_and_wait_rule_explicitly
 test_generate_writes_12_source_derived_agents_excluding_devkit
+
+# check_calls_never_mask_exit_code_with_inline_substitution — a check call whose message argument
+# contains a command substitution and whose result argument is a bare trailing $? is broken: bash
+# evaluates arguments left to right while constructing them, so the substitution's own exit status
+# (near-always 0) silently overwrites whatever $? meant before the statement, making the check
+# unconditionally pass regardless of the real result. Fixed everywhere in this file (fix round 14);
+# this is the regression guard against it reappearing.
+test_check_calls_never_mask_exit_code_with_inline_substitution() {
+    local found_at
+    found_at="$(grep -nE 'check "[^"]*" "[^"]*\$\([^)]*\)[^"]*" \$\?$' "$ROOT/.github/scripts/test-opencode.sh" || true)"
+    [ -z "$found_at" ]; check "test_check_calls_never_mask_exit_code_with_inline_substitution" "a call masking a real exit code via inline substitution: $found_at" $?
+}
+
+# check_catches_a_real_generator_failure — direct behavioral proof the fix round 14 pattern
+# actually changes behavior, not just satisfies a grep: a real rc=1 must register as a failure.
+# Uses a locally-scoped simulated check (sim_pass/sim_fail), isolated from the suite's own
+# counters, so this repro's deliberately-simulated failure never pollutes the real tally.
+test_check_catches_a_real_generator_failure() {
+    local dir="$WORK/check-catches-failure" rc=1 ok sim_pass=0 sim_fail=0
+    mkdir -p "$dir"
+    printf 'boom\n' >"$dir/stderr.txt"
+    sim_check() { if [ "$3" -eq 0 ]; then sim_pass=$((sim_pass + 1)); else sim_fail=$((sim_fail + 1)); fi; }
+    [ "$rc" -eq 0 ]; ok=$?
+    sim_check "inner" "generator exit $rc: $(cat "$dir/stderr.txt")" "$ok"
+    [ "$sim_fail" -eq 1 ]
+    check "test_check_catches_a_real_generator_failure" "a simulated non-zero exit (rc=1) did not register as a failure (sim_pass=$sim_pass sim_fail=$sim_fail)" $?
+}
+
+test_check_calls_never_mask_exit_code_with_inline_substitution
+test_check_catches_a_real_generator_failure
 
 echo "opencode tests: $pass passed, exit=$fail"
 [ "$fail" -eq 0 ]
