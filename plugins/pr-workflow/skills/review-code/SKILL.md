@@ -5,10 +5,10 @@ disable-model-invocation: true
 ---
 
 **Input**: a PR number, a branch, or nothing (= the current diff vs `git merge-base HEAD main`, falling back to `master`, uncommitted work included); `--spec path` names the spec to review against; `--split` reviews each axis in its own parallel dispatch; `--stress` adds the reviewer's stress lens for a PR you cannot run `/validate-code` on (someone else's branch); on your own change, stress belongs to `/validate-code`. With a plan for the branch, its ACs, Test Case table, Reuse Map and codebase map travel with the diff.
-**Output**: every finding printed (severity · `file:line` · cost · fix) under `## Standards` and `## Spec` side by side, score, hard gates, the summary block with the worst finding per axis and — with a plan — the Gaps block; optionally the same posted to the PR.
+**Output**: every finding printed (severity · `file:line` · cost · fix) under `## Standards` and `## Spec` side by side, score, hard gates, the summary block with the worst finding per axis and — with a plan — the Gaps block; optionally posted to the PR as plain comments, with no severity labels, emoji, axis tags or score.
 **Boundary**: one `reviewer` dispatch (`sonnet`) producing both axes; `--split` makes it two parallel `reviewer` dispatches, one per axis — about twice the tokens, for an isolated read of each axis on a large diff. Never edits code, merges, closes, changes CI config, approves on your behalf, or posts before you answer step 6. Not the full 10-point OWASP audit — that is `/security-review`.
 
-**Rules**: the two axes are never merged or reranked against each other — a change can pass one and fail the other; a CRITICAL security finding always blocks; size is measured first because it calibrates how much the review is worth; without a plan or request, CD1/CD3/CD7 are skipped and the summary says so — intent is never inferred from the diff under review. Load each reference only at the step that names it.
+**Rules**: in the printed review, the two axes are never merged or reranked against each other — a change can pass one and fail the other; a CRITICAL security finding always blocks; size is measured first because it calibrates how much the review is worth; without a plan or request, CD1/CD3/CD7 are skipped and the summary says so — intent is never inferred from the diff under review. Load each reference only at the step that names it.
 
 ## Steps
 
@@ -24,7 +24,7 @@ disable-model-invocation: true
 6. **Print everything first** — every finding in the line format of `references/output-format.md`, under `## Standards` and `## Spec` exactly as the reviewer ranked them (never merged), the score, hard gates, the summary block, and (with a plan) the **Gaps block**: unimplemented ACs · spec drift · missing Test Case rows · Reuse Map departures · duplication · untraced changes. Then one AskUserQuestion call with three questions:
    - Post to the PR? — Yes, inline comments / Yes, one summary comment / No. (No PR for this target → ask only whether to save the review to `$TMPDIR/review-{slug}.md`.)
    - Language — English / Português (BR) / Other.
-   - Style — Terse (one line per finding) / Detailed (with suggestion blocks) / Conventional Comments.
-7. **Post only after the answers.** At this step, read `references/posting.md`: translate and format, show the exact bodies, post with `gh` (the Gaps block as one general comment), set the event (`REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`; never `APPROVE` unless asked), print the review URL.
+   - Style — Short (a sentence or two) / With suggestions (adds a GitHub suggestion block when the fix is a concrete edit).
+7. **Post only after the answers.** At this step, read `references/posting.md`: write each comment in its § Voice, translate, show the exact bodies, post with `gh` (what the Gaps block found as one general comment), set the event (`REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`; never `APPROVE` unless asked), print the review URL.
 
 Next: `/pr-fix` once comments are posted, or `/code` to fix locally. The score above is this review's own gate; `/validate-code` gives the separate verdict on gates, tests and stress.

@@ -85,7 +85,7 @@ Rules:
   decided **Reuse Map** row — `reuse:` / `extend:` / `new:` with the closest existing thing named.
   A `new` with no citation is unjustified.
 - **The plan is reviewed before the human sees it.** `agents/plan-reviewer.md` reads the plan
-  with the repository open and blocks on PR1–PR10 (already exists · reuse not declared ·
+  with the repository open and blocks on PR1–PR11 (already exists · reuse not declared ·
   contradicts existing code · ambiguous AC · unfalsifiable row · untraced requirement · deferred
   decision · …). grill-me interrogates the plan from inside the context that wrote it — it looks facts
   up, never audits the plan against the repo; this is the reader that does both.
@@ -177,7 +177,7 @@ Skills never run each other. Claude may suggest the next skill; only the user st
 
 ## Coding Discipline (12 rules — non-negotiable)
 
-These rules are enforced, not aspirational: the reviewer checks them as the CD1–CD7 rows in
+These rules are enforced, not aspirational: the reviewer checks them as the CD1–CD8 rows in
 `references/change-discipline.md`, which carries the severities and worked ❌/✅ examples.
 
 1. **Think before coding**: State assumptions, ask questions, stop when confused. Never guess.
@@ -190,7 +190,7 @@ These rules are enforced, not aspirational: the reviewer checks them as the CD1�
 8. **Checkpoint frequently**: After each phase, state: what's done, what's verified, what remains.
 9. **Tests verify intent**: Tests encode the *why* of behavioral requirements, not just the *what*.
 10. **Do not guess**: State limitations explicitly if code cannot be tested or verified immediately.
-11. **One topic per file**: Split guidelines into focused files — never combine unrelated rules.
+11. **One topic per file**: Split guidelines into focused files — never combine unrelated rules. A topic an existing file owns goes in that file; any new file, source included, states why it cannot (CD8).
 12. **Fail loudly**: Surface uncertainty and errors. Never hide them.
 
 ## Proportionality (what scales with size — and what never does)
@@ -200,7 +200,7 @@ the wrong one on a typo, so **ceremony scales with the change; the standards do 
 
 **Never scales — applies to a one-line change exactly as to an epic:**
 Security Defaults · the quality-gate table (duplication included) · Spec-First Test Discipline for
-any behaviour change · Change Discipline (CD1–CD7) · the principal-engineer bar (correct →
+any behaviour change · Change Discipline (CD1–CD8) · the principal-engineer bar (correct →
 legible → durable → small, with every finding naming its cost) · never commit or merge to `main` ·
 the session hooks.
 There is no "too small to test" and no "too small to gate."

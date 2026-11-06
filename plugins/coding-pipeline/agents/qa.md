@@ -27,7 +27,7 @@ after that fix re-audits only the tests that changed, not the whole suite.
 
 > **One QA, tier-aware.** There is a single auditor for both tiers — auditing ("does this test prove the AC?") is uniform; only the lens changes. Read the plan's **Tier** (or, without a plan, the tier of the changed files) and apply the matching lens + load only that tier's checks:
 > - **Backend** → table-driven/error-path/concurrency coverage, integration tags, the injection/authz/IDOR/overflow rows below, api-spec **producer** contract tests per `operationId`.
-> - **Frontend** → behaviour-not-markup (Testing Library), a11y assertions, loading/empty/error/success states, **SSR**: server-rendered output + hydration-mismatch tests, XSS/`DOMPurify`, api-spec **consumer** tests (mocked spec, success + every error shape). For new/redesigned visual surface: spot-check against coder-frontend.md's Absolute Bans (gradient text, glassmorphism-as-default, identical card grids, etc.) — flag as MINOR/aesthetic, never a gate blocker.
+> - **Frontend** → behaviour-not-markup (Testing Library), a11y assertions, real-browser reflow, axe and keyboard rows, loading/empty/error/success states, **SSR**: server-rendered output + hydration-mismatch tests, XSS/`DOMPurify`, api-spec **consumer** tests (mocked spec, success + every error shape). For new/redesigned visual surface: spot-check against coder-frontend.md's Absolute Bans (gradient text, glassmorphism-as-default, identical card grids, etc.) — flag as MINOR/aesthetic, never a gate blocker.
 > Load only the security/test rows relevant to the diff's stack — don't carry the other tier's checklist.
 
 ## Scope Discipline
@@ -120,6 +120,7 @@ Demand explicit tests (not just the nominal case) for each input the AC touches:
 - **Determinism**: no order dependence, no real network/clock — flaky tests are a gap.
 - **One reason to fail per test**: split tests asserting unrelated behaviours.
 - **Intent-revealing names** + arrange/act/assert structure; table-driven for input matrices.
+- **Test file names**: a test file's name says what it tests, so a reader finds the test without searching.
 - **No redundancy**: many tests exercising the identical path while a branch sits untested → request the missing branch, suggest collapsing the duplicates.
 - **Speed**: a unit test doing real I/O that a fake would cover → flag for optimization.
 
@@ -290,6 +291,7 @@ Read a file from this table only at the moment its trigger fires, only that file
 | A gate row is missing or failed and you need its command or fix recipe | `references/quality-gate-reference.md` |
 | Scoring against a coverage floor, duplication limit or the tautology cap | `references/thresholds.md` |
 | Frontend diff touching lint/test/CI config or a validator (enforcement-integrity gate, §4 matrix) | `references/frontend-hardening-reference.md` |
+| Frontend diff changing rendered UI (responsive and accessibility rows, §9) | `references/frontend-hardening-reference.md` |
 | `api-spec.yaml` exists and producer/consumer contract tests must be judged | `references/spec-driven-reference.md` |
 | A test change looks like goalpost-moving (skip, weakened assertion, edited row) | `references/quality-gate-reference.md` (Loop Integrity) |
 

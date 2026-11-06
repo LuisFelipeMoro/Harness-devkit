@@ -28,7 +28,7 @@ Required sections: Blast radius (symbols · callers · test files · non-code ca
 ## docs/plans/{slug}/plan.md
 Produced by: `/planning` (or a mini-plan by `/code`) | Consumed by: `plan-reviewer`, `coder` (via Task ID), `qa`, `/validate-code`
 
-Required sections, in order: header (Status · Branch · Language · Tier) · Goal · Requirements & ACs (incl. **Security ACs**) · Out of scope · Codebase context · Reuse Map · Design (components and interfaces, Mermaid optional, decisions with rejected alternatives; auth checked and input validated shown in the data flow) · **Test Case table** (one row per AC/edge/security control — Test Name · Input / Precondition · Expected Observable Result · AC · Why It Matters · Falsified By; this is the frozen test contract, since tests are written after the implementation) · Tasks · Open questions · Review log.
+Required sections, in order: header (Status · Branch · Language · Tier) · Goal · Requirements & ACs (incl. **Security ACs**) · Out of scope · Codebase context · Reuse Map · Design (components and interfaces, Mermaid optional, decisions with rejected alternatives; auth checked and input validated shown in the data flow) · **Test Case table** (one row per AC/edge/security control — Test Name · Input / Precondition · Expected Observable Result · AC · Why It Matters · Falsified By; this is the frozen test contract, since tests are written after the implementation) · Tasks (with its `### New files` table) · Open questions · Review log.
 
 Key rules: every functional requirement has ≥ 2 binary ACs · NFRs have measurable targets · ACs reference error/edge cases · security ACs are mandatory for auth/input/external-API work.
 

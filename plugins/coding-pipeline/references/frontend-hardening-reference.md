@@ -216,6 +216,38 @@ flags reproduces this class of defect instead of preventing it.
 
 ---
 
+## 9. Responsive layout and accessibility need a test that can fail
+
+**The defect**: a component test runs in jsdom, which computes no layout, so a suite stays green while
+a page scrolls sideways on a phone. A linter reads markup, so it cannot tell that a dialog traps the
+keyboard. Both controls look enforced and neither can fail on these defects.
+
+**Rule**: WCAG 2.2 AA is the floor for every web stack.
+
+| Rule | Requirement | WCAG |
+|------|-------------|------|
+| Reflow | Usable at 320 CSS px wide with no horizontal page scroll. Only content that needs two dimensions (data table, map, code block) scrolls, inside its own container | 1.4.10 |
+| Breakpoints | Mobile-first with `min-width`, set where the content breaks, not by device name | — |
+| Zoom | `<meta name="viewport" content="width=device-width, initial-scale=1">`; never `user-scalable=no` or a `maximum-scale` below 2 | 1.4.4 |
+| Text | Text at 200% loses no content; user spacing overrides clip nothing, so no fixed height on a text container | 1.4.4, 1.4.12 |
+| Orientation | Works in portrait and landscape unless one is essential | 1.3.4 |
+| Target size | Pointer targets at least 24×24 CSS px, or the spacing exception applies | 2.5.8 |
+| Keyboard | Every action works by keyboard. No action only on hover; dragging has a single-pointer alternative | 2.1.1, 2.5.7 |
+| Focus | Visible, in logical order, and not hidden by sticky headers or banners; moved deliberately when a route change or swap removes the focused element | 2.4.3, 2.4.7, 2.4.11 |
+| Contrast | Text 4.5:1, large text 3:1; controls and focus indicators 3:1 | 1.4.3, 1.4.11 |
+| Meaning | Never by color alone; a form error is identified in text | 1.4.1, 3.3.1 |
+| Status | Status messages use `role="status"` or a live region, without moving focus | 4.1.3 |
+
+**Test Case rows for any change to rendered UI**, run in a real browser (Playwright):
+
+- **Reflow**: at 320 CSS px and at a desktop width, assert `scrollWidth <= clientWidth` on the root element, and that no visible element outside a scroll container passes the viewport's right edge. `overflow-x: hidden` on the root clips content without changing the first assertion, which is why the second exists. A 600px fixed-width child makes it fail.
+- **Scan**: `@axe-core/playwright` with no violations. `jest-axe` and `vitest-axe` add component coverage but run in jsdom, so they cannot check contrast. A clean scan does not prove keyboard operation.
+- **Keyboard**: drive the primary flow with Tab, Enter and Escape, asserting where focus lands.
+
+**Enforced by `checkpoint-m.sh`**: `M: FAIL viewport-zoom` on an added line that blocks zoom, and `M: FAIL ui-rows` when rendered UI changes and the Test Case table names no `320`, `axe` or `keyboard` row. It checks that the rows exist; the suite and review check that they hold.
+
+---
+
 ## Review flags — frontend hardening *(add to the language tables)*
 
 | Issue | Severity |
@@ -231,6 +263,13 @@ flags reproduces this class of defect instead of preventing it.
 | Architecture doc claims a CI gate that no runner executes | MAJOR |
 | No pre-commit lint on staged files (`lint-staged` absent) | MINOR |
 | Pre-commit lint command weaker than the CI lint command | MAJOR |
+| Horizontal page scroll at 320 CSS px | MAJOR |
+| `user-scalable=no` or a `maximum-scale` below 2 in the viewport meta | MAJOR |
+| Action reachable only by hover, or not by keyboard | MAJOR |
+| `outline: none` with no replacement focus style | MAJOR |
+| Meaning conveyed by color alone | MAJOR |
+| Rendered UI change with no real-browser reflow, scan or keyboard row | MAJOR |
+| Pointer target under 24×24 CSS px outside the WCAG 2.5.8 exceptions | MINOR |
 
 ## Where each check lives
 
@@ -244,3 +283,4 @@ flags reproduces this class of defect instead of preventing it.
 | Dead CI files | — | `ls .github/workflows/` | cross-ref architecture doc | "CI system matches file" |
 | Coverage config | `no-restricted-syntax` on config | same | `.filter(coverageConfigDefaults` | — |
 | Import boundary | `lint-staged` | CI eslint | import paths in moved files | — |
+| Responsive and accessibility | `eslint-plugin-jsx-a11y`, `checkpoint-m.sh` | Playwright + `@axe-core/playwright` | §9 table | "no page overflow at 320 CSS px" · "axe clean" · "primary flow by keyboard" |

@@ -26,19 +26,7 @@ The `reviewer` agent reports CRITICAL / MAJOR / MINOR / NIT; map them as CRITICA
 
 ## Posting a finding as an inline comment
 
-```bash
-gh pr review <PR_NUMBER> --comment --body "$(cat <<'EOF'
-**[SEVERITY]** [description]
-
-[explanation of why this is a problem]
-
-Suggested fix:
-\`\`\`go
-// corrected code
-\`\`\`
-EOF
-)"
-```
+Everything in this file is what gets printed. Posted text follows `references/posting.md` § Voice, without these labels.
 
 ## Setting the review verdict
 
@@ -81,7 +69,7 @@ Action: [REQUEST CHANGES | APPROVED | COMMENTED]
 
 Findings say what is wrong with the code that is there. Gaps say what is **missing** relative to
 the plan — the class of defect an inline diff comment structurally cannot carry, because it has
-no line to attach to. Post it as one general PR comment as well as printing it.
+no line to attach to. Print it as below; `references/posting.md` § Gaps says how it is posted.
 
 ```text
 Gaps vs. plan (docs/plans/{slug}/plan.md)

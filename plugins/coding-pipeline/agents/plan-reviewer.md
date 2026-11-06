@@ -44,6 +44,8 @@ This is the single highest-value finding class — it is where duplicated code o
 **PR2 — Reuse not declared** (MAJOR): a Component Design entry marked `new:` when the codebase map
 lists something that covers it, or a `new:` entry with no justification for why the existing thing
 does not fit. Every component must be `reuse:` or `new:` with a reason.
+Also a Tasks `Files` path not yet in the repo with no `### New files` row, or a row whose closest
+existing file or reason does not hold against the repo (CD8 at plan time).
 
 **PR3 — Contradicts existing code** (MAJOR): declared interface, signature, type, error shape,
 config key, or table/column disagrees with what is in the repo. Cite both sides.
@@ -144,7 +146,7 @@ Read a file from this table only at the moment its trigger fires, only that file
 
 | Load when… | File |
 |---|---|
-| Judging whether a planned change is in scope or speculative (PR7 inverse, CD3/CD7 at plan time) | `references/change-discipline.md` |
+| Judging whether a planned change is in scope or speculative (PR7 inverse, CD3/CD7/CD8 at plan time) | `references/change-discipline.md` |
 | A Test Case row looks unfalsifiable or tautological (PR6) | `references/test-audit-reference.md` |
 | The plan adds or changes HTTP endpoints / `api-spec.yaml` | `references/spec-driven-reference.md` |
 | The plan introduces a datastore or changes a schema | `references/db-selection-reference.md` |
