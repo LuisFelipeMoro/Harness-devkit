@@ -41,6 +41,8 @@ Dart 3+ sound null safety — no `!` operator; `const` constructors everywhere p
 | Layout | Feature-first folders; internals under `lib/src/`, public surface via a single library file |
 | Errors | Repositories return typed failures; a `dynamic` catch that hides a programming bug is a defect |
 | Immutability | `final` fields on widgets; value equality via `==`/`hashCode` or a codegen package — never by identity |
+| Responsive | `LayoutBuilder` or `MediaQuery.sizeOf` for the space available, never a device-type check; works in portrait and landscape; layouts hold at 200% `MediaQuery.textScalerOf` |
+| Accessibility | Every interactive widget has a label (`Semantics`, `tooltip` or `semanticLabel`); widget tests assert `meetsGuideline` with `androidTapTargetGuideline`, `labeledTapTargetGuideline` and `textContrastGuideline`. The Android tap-target guideline enforces 48dp, stricter than the 24 CSS px web floor, and the stricter one applies here |
 | Performance | `ListView.builder` over materialising all children; keys on reorderable lists |
 
 ## Linting Commands
@@ -56,6 +58,8 @@ Dart 3+ sound null safety — no `!` operator; `const` constructors everywhere p
 | Expensive computation inside `build()` method | MAJOR |
 | Stateful logic in UI layer (should be in ViewModel/BLoC/Provider) | MAJOR |
 | Missing `flutter analyze` passing (zero errors/warnings) | MAJOR |
+| Icon-only control with no semantic label | MAJOR |
+| Overflow at the smallest supported width or at 200% text scale | MAJOR |
 | Missing `const` on constructors/widgets that could be const | MINOR |
 | Missing `integration_test` for at least one user-facing flow | MINOR |
 | coverage < 80% | BLOCK (score ≤ 5) |

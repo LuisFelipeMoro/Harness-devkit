@@ -1151,14 +1151,14 @@ cd - >/dev/null || exit
 cp9="$W/cp9"
 mkrepo "$cp9"
 cd "$cp9" || exit
-printf 'func TestN(t *testing.T) {}\n' > n_test.go
+printf 'func TestN(t *testing.T) {}\n' > filler_test.go
 write_dup_filler filler.go
 cat > "$W/cp9-spec.md" <<'MD'
 | Test Name | Input | Expected |
 |---|---|---|
 | `TestN` | a | b |
 MD
-out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp9-spec.md" --tests n_test.go --expect n_test.go filler.go never_here.go --gates false 2>&1); rc=$?
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp9-spec.md" --tests filler_test.go --expect filler_test.go filler.go never_here.go --gates false 2>&1); rc=$?
 check "checkpoint-m: reports every failure at once" 1 "$rc" "$out" "M: FAIL (2)"
 # The summary line "M: FAIL (2)" itself starts with "M: FAIL " — matched
 # separately (a check name followed by an em-dash) so it is never counted
@@ -1185,14 +1185,14 @@ cd - >/dev/null || exit
 cp11="$W/cp11"
 mkrepo "$cp11"
 cd "$cp11" || exit
-printf 'func TestOK(t *testing.T) {}\n' > ok_test.go
+printf 'func TestOK(t *testing.T) {}\n' > filler_test.go
 write_dup_filler filler.go
 cat > "$W/cp11-spec.md" <<'MD'
 | Test Name | Input | Expected |
 |---|---|---|
 | `TestOK` | a | b |
 MD
-out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp11-spec.md" --tests ok_test.go --expect ok_test.go filler.go --gates true 2>&1); rc=$?
+out=$(bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp11-spec.md" --tests filler_test.go --expect filler_test.go filler.go --gates true 2>&1); rc=$?
 check "checkpoint-m: all green passes" 0 "$rc" "$out" "M: PASS"
 cd - >/dev/null || exit
 
@@ -1805,6 +1805,313 @@ mkdir -p "$W/hm-not-git"
 out=$(cd "$W/hm-not-git" && GIT_CEILING_DIRECTORIES="$W" python3 "$HM" 2>&1); rc=$?
 check "harness-metrics: outside a git repository is UNMEASURED" 2 "$rc" "$out" "not a git repository"
 
+# ── new-file discipline: the rule text the validators read, and the parser beside it ──
+# The rule has no mechanical sensor (the plan's decision), so these rows pin that
+# the text stays in every mirror. They prove the rule is stated, not that it is obeyed.
+PT="$ROOT/plugins/coding-pipeline/references/plan-template.md"
+CDF="$ROOT/plugins/coding-pipeline/references/change-discipline.md"
+RVW="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+RCK="$ROOT/plugins/pr-workflow/skills/review-code/references/review-checklist.md"
+STD="$ROOT/plugins/coding-pipeline/CLAUDE.md"
+
+out=$(cat "$PT")
+check "new-file discipline: plan template declares the New files table" 0 0 "$out" "| New path | Closest existing file | Why it cannot live there |"
+check "new-file discipline: Tasks rule covers mini-plans" 0 0 "$out" 'gets a `### New files` row, in a mini-plan too'
+check "new-file discipline: plan template exempts only tests beside new source" 0 0 "$out" "Exempt, no row: a test file beside a new source file"
+
+cat > "$W/nf-plan.md" <<'MD'
+## Tasks
+| ID | Task | Files | Test rows | Language | Tier | Depends on |
+|---|---|---|---|---|---|---|
+| T1 | money | `a/money.go` | TestA | Go 1.26 | Backend | — |
+
+### New files
+| New path | Closest existing file | Why it cannot live there |
+|---|---|---|
+| `a/money.go` | none | nothing comparable exists |
+MD
+out=$(python3 "$ER" --plan "$W/nf-plan.md" 2>&1); rc=$?
+check "new-file discipline: estimate-run stops before the New files table" 0 "$rc" "$out" "T1"
+
+out=$(cat "$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md")
+check "new-file discipline: planning phase 4 asks for New files" 0 0 "$out" 'A path not yet in the repo gets a `### New files` row.'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/plan-reviewer.md")
+check "new-file discipline: PR2 reviews new paths" 0 0 "$out" "(CD8 at plan time)"
+
+out=$(cat "$CDF")
+check "new-file discipline: CD8 row sets its severities" 0 0 "$out" "a reason that does not hold | MAJOR | HIGH |"
+check "new-file discipline: CD8 example holds without a plan" 0 0 "$out" "stays in force without a plan"
+check "new-file discipline: CD8 finding cites both paths" 0 0 "$out" "cites both the new path and the closest existing file"
+check "new-file discipline: CD8 exempts only tests beside new source" 0 0 "$out" "Exempt: a test file beside a new source file"
+check "new-file discipline: change-discipline title names rule 11" 0 0 "$out" "rules 1–3, 5, 6, 11"
+
+out=$(cat "$RVW")
+check "new-file discipline: reviewer mirrors CD8 as MAJOR" 0 0 "$out" "citing both paths (MAJOR)"
+check "new-file discipline: reviewer puts CD8 on the Standards axis" 0 0 "$out" "CD2 / CD4 / CD5 / CD6 / CD8"
+out=$(cat "$RCK")
+check "new-file discipline: checklist mirrors CD8 as HIGH" 0 0 "$out" "cite both paths → HIGH"
+check "new-file discipline: checklist puts CD8 on the Standards axis" 0 0 "$out" "CD2/CD4/CD5/CD6/CD8"
+out=$(cat "$ROOT/plugins/pr-workflow/skills/review-code/references/diff-verdict-and-rules.md")
+check "new-file discipline: diff verdict lists CD8 as MAJOR" 0 0 "$out" "could hold (CD8) are MAJOR"
+
+out=$(cat "$STD")
+check "new-file discipline: rule 11 states the rule" 0 0 "$out" "any new file, source included, states why it cannot (CD8)"
+check "new-file discipline: CLAUDE.md range matches plan-reviewer" 0 0 "$out" "PR1–PR11"
+grep -q 'PR1–PR10' "$STD"; rc=$?
+check "new-file discipline: CLAUDE.md no longer says PR1–PR10" 1 "$rc"
+grep -rlq 'CD1–CD7' "$ROOT/plugins"; rc=$?
+check "new-file discipline: no guide still says CD1–CD7" 1 "$rc"
+n=$(grep -r --include='*.md' 'CD1–CD8' "$ROOT/plugins" | wc -l | tr -d ' ')
+check "new-file discipline: guides state CD1–CD8 at all 5 mentions" 5 "$n"
+
+latest=$(grep -m1 -oE '^## \[[0-9.]+\]' "$ROOT/CHANGELOG.md" | tr -d '#[] ')
+rc=0
+for m in "$ROOT"/plugins/*/.claude-plugin/plugin.json; do
+    [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$m")" = "$latest" ] || rc=1
+done
+check "release: every plugin manifest matches the newest CHANGELOG heading" 0 "$rc"
+out=$(cat "$ROOT/README.md")
+check "new-file discipline: README states the rule" 0 0 "$out" "**New files are justified.**"
+out=$(awk '/^## \[3\.1\.0\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+check "new-file discipline: CHANGELOG 3.1.0 names CD8" 0 0 "$out" "CD8"
+
+# ── checkpoint-m.sh: a new Go test file names the source file it tests ──────
+cat > "$W/tfn-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestRow` | a | b |
+MD
+# These fixtures are one-liners, too small for dup-gate to measure, and duplication is not what they test.
+printf 'exit 0\n' > "$W/tfn-dup-ok.sh"
+tfn_run() {  # tfn_run <fixture> <commit|worktree> <path>... — creates each path, then runs the checkpoint
+    local dir="$W/tfn-$1" mode="$2" p
+    shift 2
+    mkrepo "$dir"
+    cd "$dir" || exit
+    for p in "$@"; do
+        mkdir -p "$(dirname "$p")"
+        printf 'func TestRow(t *testing.T) {}\n' > "$p"
+    done
+    if [ "$mode" = commit ]; then
+        git -c user.email=t@t -c user.name=t add -A
+        git -c user.email=t@t -c user.name=t commit -q -m "fixture"
+    fi
+    out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/tfn-spec.md" --tests "$@" --expect "$@" --allow-commits 2>&1); rc=$?
+    cd "$ROOT" || exit
+}
+tfn_run orphan commit other.go orphan_test.go
+check "checkpoint-m: new test file with no same-name source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_run pair commit cart.go cart_test.go
+check "checkpoint-m: new test file beside its source passes" 0 "$rc" "$out" "M: PASS"
+tfn_run otherdir commit a/cart.go b/other.go b/cart_test.go
+check "checkpoint-m: same name in another directory does not count" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_run benchfuzz commit other.go bench_test.go fuzz_test.go
+check "checkpoint-m: bench file fails" 1 "$rc" "$out" "bench_test.go — no bench.go"
+check "checkpoint-m: fuzz file fails" 1 "$rc" "$out" "fuzz_test.go — no fuzz.go"
+tfn_run exempt commit other.go main_test.go export_test.go example_test.go
+check "checkpoint-m: main export and example test files are exempt" 0 "$rc" "$out" "M: PASS"
+tfn_run integration commit store.go store_integration_test.go
+check "checkpoint-m: integration suffix pairs with its source" 0 "$rc" "$out" "M: PASS"
+tfn_run ghost commit other.go ghost_integration_test.go
+check "checkpoint-m: integration suffix with no source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+# Each tree holds a source file too, so only the path skip can pass them, not the test-only exemption.
+tfn_run ignored commit testdata/other.go testdata/orphan_test.go vendor/x/other.go vendor/x/orphan_test.go
+check "checkpoint-m: testdata and vendor are ignored" 0 "$rc" "$out" "M: PASS"
+tfn_run testonly commit stress/stress_test.go
+check "checkpoint-m: test-only directory is exempt" 0 "$rc" "$out" "M: PASS"
+tfn_run uncommitted worktree other.go orphan_test.go
+check "checkpoint-m: uncommitted new test file is checked" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_pre="$W/tfn-pre"
+mkrepo "$tfn_pre"
+cd "$tfn_pre" || exit
+printf 'func TestRow(t *testing.T) {}\n' > old_test.go
+printf 'package x\n' > other.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "misnamed before this change"
+printf '// edited\n' >> old_test.go
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/tfn-spec.md" --tests old_test.go --expect old_test.go 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: pre-existing misnamed test file is not flagged" 0 "$rc" "$out" "M: PASS"
+
+# ── Go test rules: the guides state one pattern ─────────────────────────────
+GO="$ROOT/plugins/coding-pipeline/references/languages/go.md"
+out=$(cat "$GO")
+check "go rules: test file pairing stated" 0 0 "$out" '`foo.go` is tested by `foo_test.go`'
+check "go rules: test function form stated" 0 0 "$out" 'TestMyFunction_WhatIsBeingTested'
+check "go rules: table variables stated" 0 0 "$out" '`tests`, each case `tt`'
+check "go rules: loop copy uses tt" 0 0 "$out" '`tt := tt`'
+grep -q 'tc := tc' "$GO"; rc=$?
+check "go rules: no tc copy left" 1 "$rc"
+check "go rules: table limits stated" 0 0 "$out" 'no `shouldCallX`, no `setupMocks func`'
+check "go rules: subtest name stated" 0 0 "$out" 't.Run(tt.give'
+check "go rules: setup failure stated" 0 0 "$out" '`t.Fatal`/`t.FailNow`, never `panic`'
+check "go rules: review flags stated" 0 0 "$out" 'not named after its source file (`bench_test.go`, `wiring_test.go`) | MAJOR |'
+check "go rules: priority order stated" 0 0 "$out" 'correctness → readability → simplification → optimization'
+grep -rqE --include='*.md' 'Test_CreateOrder|for _, tc := range tests' "$ROOT/plugins"; rc=$?
+check "guides: no conflicting Go test examples" 1 "$rc"
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/qa.md")
+check "qa: test file name rule stated" 0 0 "$out" "a test file's name says what it tests"
+out=$(awk '/^## \[3\.1\.1\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+check "release: 3.1.1 entry names the test file rule" 0 0 "$out" '`foo_test.go`'
+out=$(cat "$ROOT/README.md")
+check "release: README states the test file rule" 0 0 "$out" '**Go test files are paired.**'
+
+# ── Responsive and accessibility: rules exist and each stack points at them ──
+FH="$ROOT/plugins/coding-pipeline/references/frontend-hardening-reference.md"
+out=$(cat "$FH")
+check "frontend: reflow floor stated" 0 0 "$out" 'Usable at 320 CSS px wide with no horizontal page scroll'
+check "frontend: zoom may not be disabled" 0 0 "$out" 'never `user-scalable=no` or a `maximum-scale` below 2'
+check "frontend: target size stated" 0 0 "$out" 'at least 24×24 CSS px'
+check "frontend: keyboard and focus stated" 0 0 "$out" 'not hidden by sticky headers or banners'
+check "frontend: status messages stated" 0 0 "$out" '`role="status"`'
+check "frontend: jsdom cannot prove layout" 0 0 "$out" 'jsdom, which computes no layout'
+check "frontend: scan does not replace keyboard row" 0 0 "$out" 'A clean scan does not prove keyboard operation'
+check "frontend: review flags set severity" 0 0 "$out" 'Horizontal page scroll at 320 CSS px | MAJOR |'
+out=$(cat "$ROOT/plugins/coding-pipeline/references/plan-template.md")
+check "frontend: plans require UI rows" 0 0 "$out" '**Rendered UI gets responsive and accessibility rows**'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder-frontend.md")
+check "frontend: coder must test in a real browser" 0 0 "$out" '**Responsive is a real-browser test**'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/qa.md")
+check "frontend: qa audits the rows" 0 0 "$out" 'real-browser reflow, axe and keyboard rows'
+LG="$ROOT/plugins/coding-pipeline/references/languages"
+out=$(cat "$LG/html-css.md")
+check "frontend: html-css states responsive rule" 0 0 "$out" '| Responsive | Mobile-first `min-width` breakpoints'
+out=$(cat "$LG/react.md")
+check "frontend: react states focus rule" 0 0 "$out" '| Focus | A client route change'
+check "frontend: react div onClick is MAJOR" 0 0 "$out" '(`div onClick` instead of `button`) | MAJOR |'
+out=$(cat "$LG/nextjs.md")
+check "frontend: nextjs bans zoom-blocking viewport" 0 0 "$out" '`userScalable: false` or a `maximumScale` below 2 in `viewport` | MAJOR |'
+out=$(cat "$LG/htmx.md")
+check "frontend: htmx states focus after swap" 0 0 "$out" '| Focus after swap | htmx keeps focus only on inputs with an `id`'
+out=$(cat "$LG/flutter.md")
+check "frontend: flutter states responsive rule" 0 0 "$out" '| Responsive | `LayoutBuilder` or `MediaQuery.sizeOf`'
+check "frontend: flutter states accessibility rule" 0 0 "$out" '`androidTapTargetGuideline`, `labeledTapTargetGuideline` and `textContrastGuideline`'
+out=$(awk '/^## \[3\.1\.1\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+check "release: 3.1.1 entry names the front-end floor" 0 0 "$out" 'WCAG 2.2 AA'
+out=$(cat "$ROOT/README.md")
+check "release: README states the front-end floor" 0 0 "$out" '**Front-end work is tested for reach.**'
+
+# ── 3.1.2: review findings on the test file check ───────────────────────────
+tfn_run platform commit foo_linux.go foo_windows.go foo_test.go
+check "checkpoint-m: test file pairs with a platform-split source" 0 "$rc" "$out" "M: PASS"
+tfn_run e2e commit store.go store_e2e_test.go
+check "checkpoint-m: e2e suffix pairs with its source" 0 "$rc" "$out" "M: PASS"
+tfn_run e2eghost commit other.go ghost_e2e_test.go
+check "checkpoint-m: e2e suffix with no source fails" 1 "$rc" "$out" "M: FAIL test-file-name"
+tfn_mv="$W/tfn-mv"
+mkrepo "$tfn_mv"
+cd "$tfn_mv" || exit
+printf 'func TestRow(t *testing.T) {}\nfunc helperA() {}\nfunc helperB() {}\nfunc helperC() {}\n' > old_test.go
+printf 'package x\n' > other.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "misnamed before this change"
+git mv old_test.go moved_test.go
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/tfn-spec.md" --tests moved_test.go --expect old_test.go moved_test.go 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: renamed test file is not judged as new" 0 "$rc" "$out" "M: PASS"
+
+# ── checkpoint-m.sh: zoom blocking and rendered UI rows ─────────────────────
+cat > "$W/ui-full.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestRow_320_axe_keyboard` | a | b |
+MD
+ui_run() {  # ui_run <fixture> <spec> <path|content>... — writes each file, then runs the checkpoint
+    local dir="$W/ui-$1" spec="$2" item path paths
+    shift 2
+    mkrepo "$dir"
+    cd "$dir" || exit
+    printf 'func TestRow(t *testing.T) {}\nfunc TestRow_320_axe_keyboard(t *testing.T) {}\n' > main_test.go
+    paths=(main_test.go)
+    for item in "$@"; do
+        path="${item%%|*}"
+        mkdir -p "$(dirname "$path")"
+        printf '%s\n' "${item#*|}" > "$path"
+        paths+=("$path")
+    done
+    out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$spec" --tests main_test.go --expect "${paths[@]}" 2>&1); rc=$?
+    cd "$ROOT" || exit
+}
+ui_run zoomno "$W/ui-full.md" 'index.html|<meta name="viewport" content="width=device-width, user-scalable=no">'
+check "checkpoint-m: user-scalable=no fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomone "$W/ui-full.md" 'index.html|<meta name="viewport" content="maximum-scale=1">'
+check "checkpoint-m: maximum-scale below 2 fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomfive "$W/ui-full.md" 'index.html|<meta name="viewport" content="maximum-scale=5">'
+check "checkpoint-m: maximum-scale of 5 passes" 0 "$rc" "$out" "M: PASS"
+ui_run zoomnext "$W/ui-full.md" 'app/layout.tsx|export const viewport = { userScalable: false }'
+check "checkpoint-m: nextjs userScalable false fails" 1 "$rc" "$out" "M: FAIL viewport-zoom"
+ui_run zoomtest "$W/ui-full.md" 'page.test.tsx|const blocked = "user-scalable=no"'
+check "checkpoint-m: zoom string in a test file is not flagged" 0 "$rc" "$out" "M: PASS"
+zoom_old="$W/ui-zoomold"
+mkrepo "$zoom_old"
+cd "$zoom_old" || exit
+printf 'func TestRow_320_axe_keyboard(t *testing.T) {}\n' > main_test.go
+printf '<meta name="viewport" content="user-scalable=no">\n<p>old</p>\n' > index.html
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "zoom blocked before this change"
+printf '<p>new</p>\n' >> index.html
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base HEAD --spec "$W/ui-full.md" --tests main_test.go --expect index.html 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: zoom block already at base is not flagged" 0 "$rc" "$out" "M: PASS"
+ui_run uimissing "$W/tfn-spec.md" 'ui/button.css|button { color: red; }'
+check "checkpoint-m: rendered UI with no reach rows fails" 1 "$rc" "$out" "M: FAIL ui-rows"
+check "checkpoint-m: ui-rows names each missing word" 1 "$rc" "$out" "names 'keyboard'"
+ui_run uifull "$W/ui-full.md" 'ui/button.css|button { color: red; }'
+check "checkpoint-m: rendered UI with reach rows passes" 0 "$rc" "$out" "M: PASS"
+# The test file sits before the base: a cosmetic diff holds the stylesheet alone, or the roster check escalates it.
+ui_cos="$W/ui-cosmetic"
+mkrepo "$ui_cos"
+cd "$ui_cos" || exit
+printf 'func TestRow(t *testing.T) {}\n' > main_test.go
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "test file before the base"
+ui_cos_base=$(git rev-parse HEAD)
+mkdir -p ui
+printf 'button { color: red; }\n' > ui/button.css
+git -c user.email=t@t -c user.name=t add -A
+git -c user.email=t@t -c user.name=t commit -q -m "style only"
+out=$(DEVKIT_DUP_GATE="$W/tfn-dup-ok.sh" bash "$V/checkpoint-m.sh" --base "$ui_cos_base" --spec "$W/tfn-spec.md" --tests main_test.go --expect ui/button.css --declared cosmetic --allow-commits 2>&1); rc=$?
+cd "$ROOT" || exit
+check "checkpoint-m: cosmetic depth skips ui-rows" 0 "$rc" "$out" "M: PASS"
+ui_run uigo "$W/tfn-spec.md" 'cart.go|package cart'
+check "checkpoint-m: non-UI change needs no reach rows" 0 "$rc" "$out" "M: PASS"
+
+# ── 3.1.2: guide corrections ────────────────────────────────────────────────
+out=$(cat "$FH")
+check "frontend: scale floor is 2" 0 0 "$out" 'a `maximum-scale` below 2 |'
+check "frontend: reflow catches clipped overflow" 0 0 "$out" 'no visible element outside a scroll container'
+check "frontend: enforcement is stated" 0 0 "$out" 'M: FAIL ui-rows'
+out=$(cat "$LG/htmx.md")
+check "frontend: htmx non-semantic HTML is MAJOR" 0 0 "$out" '| Non-semantic HTML (div-soup, missing landmarks) | MAJOR |'
+out=$(cat "$LG/flutter.md")
+check "frontend: flutter tap target floor is stated" 0 0 "$out" 'enforces 48dp'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder-backend.md")
+check "guides: coder-backend limits tables" 0 0 "$out" 'table-driven where the logic repeats'
+check "go rules: platform and e2e pairing stated" 0 0 "$(cat "$GO")" 'such as `foo_linux.go`'
+out=$(awk '/^## \[3\.1\.2\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+check "release: 3.1.2 entry names the new checks" 0 0 "$out" 'M: FAIL ui-rows'
+check "release: README states the enforcement" 0 0 "$(cat "$ROOT/README.md")" 'fails a change that omits them or blocks zoom'
+
 rm -rf "$W"
+# --- /review-code: posted comments read like a person wrote them
+RC="$ROOT/plugins/pr-workflow/skills/review-code"
+out=$(cat "$RC/references/posting.md")
+check "review voice: posting.md leads with what breaks" 0 0 "$out" "Start with what actually breaks, then say how to fix it."
+check "review voice: seriousness is carried by wording" 0 0 "$out" "this needs to change before merge because"
+check "review voice: a skipped sensor is still stated in the summary" 0 0 "$out" "a sensor that did not run or a review with no spec is always stated"
+check "review voice: severity still decides the review event" 0 0 "$out" '`event`: `REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`'
+LC_ALL=C grep -qE '\[Standards\]|\[Spec\]|\[OWASP|Terse|Conventional Comments|score \{X\}|CRITICAL \{a\}|\xF0\x9F\x9F|\xF0\x9F\x94\xB4' "$RC/references/posting.md"; rc=$?
+check "review voice: posting.md has no label, emoji, old style or score template" 1 "$rc"
+out=$(cat "$RC/SKILL.md")
+check "review voice: the style question offers the two styles" 0 0 "$out" "Style — Short (a sentence or two) / With suggestions"
+check "review voice: terminal output keeps both axes" 0 0 "$out" 'under `## Standards` and `## Spec` exactly as the reviewer ranked them'
+grep -qE 'Terse|Conventional Comments' "$RC/SKILL.md"; rc=$?
+check "review voice: SKILL.md drops the old styles" 1 "$rc"
+out=$(cat "$RC/references/output-format.md")
+check "review voice: output-format.md points to Voice" 0 0 "$out" 'references/posting.md` § Voice'
+check "review voice: printed findings keep severity" 0 0 "$out" "path/to/file.go:42: 🔴 CRITICAL: [OWASP A03]"
+grep -qF '[SEVERITY]' "$RC/references/output-format.md"; rc=$?
+check "review voice: output-format.md drops the [SEVERITY] template" 1 "$rc"
+
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

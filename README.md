@@ -36,7 +36,7 @@ from the diff (for a change like this, typically `light`: `qa` only) and the ver
 `/planning` maps the codebase, drafts the plan, **asks whether to grill it**, has `plan-reviewer` check
 it, then **asks you each open question** and **asks you to approve**. `/code` **asks for a run mode**
 (parallel coders are offered only when rows are independent). `/validate-code` asks nothing; it reports.
-`/review-code` prints its findings, then **asks whether to post them**, in which language and style.
+`/review-code` prints its findings, then **asks whether to post them**, in which language and style. Posted comments read like a person wrote them; severities, axes and the score stay in the terminal.
 `/pr` **asks you to approve the commit list and the PR body** before anything is pushed.
 
 **3. A bug**
@@ -61,7 +61,7 @@ Invoke by name. Each skill has `disable-model-invocation: true`, so Claude never
 | `/planning [notes.md]` | Reviewed plan in `docs/plans/{slug}/plan.md`. With a base file it normalizes your notes into the template; without, it builds one. Map, draft, optional grill, `plan-reviewer`, approval. Writes no code. |
 | `/code [plan.md or task text]` | Implements. One `coder` dispatch per Tasks row: spec, implement, test, falsify, then format, lint and existing tests. No plan given: writes a mini-plan and asks for a one-line OK first. |
 | `/validate-code [--full]` | Read-only check of the current diff: all gates and sensors, then `qa` and `stress` at the depth the diff needs, then the verdict. Reports, never fixes. |
-| `/review-code [PR# or branch]` | Reviews a diff or PR with `reviewer` on two separate axes — Standards (repo standards, devkit rules, code smells) and Spec (does it do what the plan or issue asked). Prints all findings, then asks whether to post, in which language and in which style. `--split` reviews each axis in its own dispatch. |
+| `/review-code [PR# or branch]` | Reviews a diff or PR with `reviewer` on two separate axes — Standards (repo standards, devkit rules, code smells) and Spec (does it do what the plan or issue asked). Prints all findings, then asks whether to post, in which language and in which style (Short or With suggestions). Posted comments carry no severity labels, emoji or tags. `--split` reviews each axis in its own dispatch. |
 | `/pr [base]` | Commits the branch as atomic conventional commits, then pushes and opens a PR (Summary · Evidence · Merge Danger) — only after you approve the commits and the body. |
 | `/pr-fix` | Triages open PR comments into a table, you pick which to fix, `coder` fixes them, gates run, replies are drafted. Asks before posting or pushing. `--list` only lists. |
 | `/bugfix` | Asks symptom, repro, fix depth and branch; `bug-investigator` builds a feedback loop that goes red on the bug, minimises it, shows you ranked hypotheses, confirms the root cause and writes a RED test; `coder` makes the minimal fix. |
@@ -133,6 +133,12 @@ agent pointed at the agent file (`plugins/coding-pipeline/agents/<name>.md`) ins
   Tautology is the blocking defect, not low coverage.
 - **Plans are checked against the real repo.** Every plan carries a codebase map and a Reuse Map
   (`reuse:` / `extend:` / `new:`, cited `file:line`). `plan-reviewer` reads it with the repository open.
+- **New files are justified.** Every new file names the closest existing file and why it cannot
+  live there; `plan-reviewer` and `reviewer` flag a weak reason.
+- **Go test files are paired.** `foo.go` is tested by `foo_test.go`; `checkpoint-m.sh` fails a new test
+  file that breaks this.
+- **Front-end work is tested for reach.** Rendered UI needs real-browser reflow, axe and keyboard rows,
+  with WCAG 2.2 AA as the floor; `checkpoint-m.sh` fails a change that omits them or blocks zoom.
 - **Implementer is not the validator.** `coder` builds; `qa`, `reviewer` and `stress` cannot edit files.
 - **Duplication is measured and attributed.** `jscpd` gates at 3% *introduced*; pre-existing debt is
   reported, never blocking (`git-hooks/dup-attribution.py`).

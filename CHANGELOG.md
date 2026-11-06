@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.1.0] — 2026-11-04
+## [3.1.4] — 2026-11-06
 
 OpenCode joins Claude Code and Codex as a third installable harness target, generated statically
 from the same skills, agents and references source: `install-opencode.sh` (CLI wrapper) and
@@ -8,10 +8,72 @@ from the same skills, agents and references source: `install-opencode.sh` (CLI w
 canonical `AGENTS.md` into the operator's OpenCode config directory, requiring all three model
 tiers (`--model-cheap`/`--model-standard`/`--model-deep`) to be named explicitly. New CI coverage
 (`validate-opencode.py`, `test-opencode.sh`) checks manifest integrity, model-mapping and
-env/secret/network wiring on every push. Three gaps are documented, not silently absorbed: no
-slash-command generation (a `commands.json.sample` snippet is printed for manual merge instead),
-the manual-skill-invocation rule is unenforceable under OpenCode as installed, and the parallel
+env/secret/network wiring on every push. `bash install.sh --opencode`/`--codex` now dispatch
+straight to the matching installer, skipping the Claude-specific flow, instead of requiring the
+nested script path to be known. Gaps documented, not silently absorbed: no slash-command
+generation (a `commands.json.sample` snippet is printed for manual merge instead), the
+manual-skill-invocation rule is unenforceable under OpenCode as installed, and the parallel
 `/code` orchestrator is cut from this delivery pending a re-spike of the SDK's session client.
+
+## [3.1.3] — 2026-11-05
+
+### Changed
+
+- `/review-code` posts comments that read like a person wrote them. Severity labels, emoji and axis or OWASP tags no longer appear in anything posted to GitHub. The terminal review is unchanged, and severity still decides between "request changes" and a comment.
+- `posting.md` has a new Voice section: start with what breaks, then the fix, in one to three sentences with one point per comment, and let the wording carry how serious it is.
+- The style question now offers Short and With suggestions. Terse, Detailed and Conventional Comments are gone.
+- The posted summary is a short paragraph: what has to change, what is worth a look, what couldn't be checked. It no longer has the score, severity counts or gate table. Plan gaps are also posted as a short paragraph, and only when something is missing.
+
+### Fixed
+
+- `output-format.md` no longer carries an inline-comment template starting with `[SEVERITY]`, which contradicted the new rules.
+
+## [3.1.2] — 2026-11-04
+
+### Added
+
+- `checkpoint-m.sh` now enforces two front-end rules: `M: FAIL viewport-zoom` on an added line that blocks zoom, and `M: FAIL ui-rows` when rendered UI changes and the Test Case table names no `320`, `axe` or `keyboard` row. Cosmetic depth skips `ui-rows`.
+
+### Changed
+
+- `maximum-scale` is only a defect below 2, because WCAG 1.4.4 asks for 200%. The earlier rule also flagged `maximum-scale=5`.
+- The reflow test also asserts that no visible element passes the viewport's right edge, since `overflow-x: hidden` on the root hid overflow from the first assertion.
+- `coder-backend.md` says table-driven only where the logic repeats, matching the Go table limits.
+- HTMX non-semantic HTML is now MAJOR, matching React and HTML/CSS.
+- `flutter.md` states that Flutter's 48dp tap-target guideline is stricter than the web floor.
+
+### Fixed
+
+- The Go test file check wrongly failed `foo_test.go` in a platform-split package (`foo_linux.go`, no `foo.go`), `foo_e2e_test.go`, and an existing test file that was only renamed.
+- `test-git-hooks.sh` failed on any machine with the devkit installed, because `dup-gate.sh` found the installed `base-lib.sh` in `~/.claude`.
+
+## [3.1.1] — 2026-11-04
+
+### Added
+
+- Go test files are paired with their source: `foo.go` is tested by `foo_test.go` in the same directory, benchmarks and fuzz targets included. `checkpoint-m.sh` fails a new test file that breaks this; existing files are never flagged.
+- Go rules from the Uber Go Style Guide: `TestMyFunction_WhatIsBeingTested` names, `tests`/`tt`/`give`/`want` in tables, no branching tables, `t.Fatal` instead of `panic` in test setup, with matching review flags.
+- `go.md` states the order for all Go code: correctness, readability, simplification, optimization.
+- `qa` checks that a test file's name says what it tests, in every language.
+- Responsive layout and accessibility rules for front-end work, with WCAG 2.2 AA as the floor: `frontend-hardening-reference.md` §9 sets the rules and review flags, and plans for rendered UI now need real-browser reflow, axe and keyboard rows. The React, Next.js, HTMX, HTML/CSS and Flutter guides gain stack-specific rows.
+
+### Changed
+
+- `div onClick` in React is now MAJOR, because a keyboard cannot reach it.
+
+### Fixed
+
+- `plan-template.md` and `bug-investigator.md` gave two conflicting Go test-name examples. Both now use the one form.
+
+## [3.1.0] — 2026-11-04
+
+### Added
+
+- A new file now needs a reason. Plans carry a `### New files` table under Tasks, mini-plans included: each new path names the closest existing file and why it cannot live there. `plan-reviewer` checks it under PR2, and `reviewer` and `/review-code` check the diff under the new CD8 row. Test files beside new source files, migrations, manifests and generated code are exempt.
+
+### Fixed
+
+- `CLAUDE.md` said `plan-reviewer` blocks on PR1–PR10; the agent defines PR1–PR11.
 
 ## [3.0.0] — 2026-10-24
 

@@ -1,4 +1,4 @@
-# Change Discipline — review rows for CLAUDE.md rules 1–3, 5, 6
+# Change Discipline — review rows for CLAUDE.md rules 1–3, 5, 6, 11
 
 **Single source of truth** for the change-discipline findings. `agents/reviewer.md` and
 `/review-code` both check these rows; on conflict this
@@ -26,10 +26,12 @@ under test.
 | CD5 | Pre-existing dead code deleted without being asked | MAJOR | HIGH |
 | CD6 | Orphan left by the change itself — import, variable, or function this diff made unused | MINOR | MEDIUM |
 | CD7 | Ambiguity in the request silently resolved in code, where two or more readings existed and none was stated | MAJOR | HIGH |
+| CD8 | New file an existing file could hold — no closest existing file named, or a reason that does not hold | MAJOR | HIGH |
 
 CD3 and CD5 are MAJOR because they change what ships: CD3 adds surface that must now be
 maintained, tested, and secured; CD5 removes code whose callers were never surveyed.
 CD7 is MAJOR because a wrong silent choice is discovered only after the work is built.
+CD8 is MAJOR because no other row or gate questions a file the plan listed.
 
 ## CD1 — untraceable change
 
@@ -94,3 +96,20 @@ records'* owner timezone — is never mentioned. Both are plausible; one is wron
 
 ✅ Both readings stated before implementing, one recommended, and the answer recorded in
 the task's AC so a reviewer can check the code against it.
+
+## CD8 — new file an existing file could hold
+
+Request: *"validate the `retries` config value."*
+
+❌ `config/retries_validator.go` added beside `config/validate.go`, which validates every other
+field. The stated reason is "keeps things clean."
+
+✅ One function added to `config/validate.go`. A new file holds up only for a different topic, a
+load-on-demand boundary, or when nothing comparable exists.
+
+Exempt: a test file beside a new source file, a migration, a manifest its tool requires (such as
+`package.json` or `plugin.json`), generated code.
+
+Every CD8 finding cites both the new path and the closest existing file; with no comparable file
+there is no finding. CD8 reads the repo, not the request, so it stays in force without a plan or
+request text.

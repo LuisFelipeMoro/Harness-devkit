@@ -47,6 +47,7 @@ Functional components + hooks only; `eslint-plugin-react-hooks` zero violations;
 | Components | Presentational components take data as props; fetching lives at the route/container edge |
 | Context | Low-frequency values only, split by concern — one god-context re-renders the tree on every change |
 | Refs | `useRef` for imperative handles and mutable non-render values — never as a state substitute |
+| Focus | A client route change or closing dialog moves focus deliberately; React does not manage it. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
 | Testing | Query by role and accessible name as a user would; a test id is a last resort when no role exists |
 
 ## Linting Commands
@@ -71,7 +72,7 @@ integration test rather than assuming.
 | `Math.random()` for keys or IDs — use `crypto.randomUUID()` | MAJOR |
 | Class components in new code | MINOR |
 | Missing `eslint-plugin-jsx-a11y` zero-warning requirement | MINOR |
-| Non-semantic HTML (`div onClick` instead of `button`) | MINOR |
+| Non-semantic HTML (`div onClick` instead of `button`) | MAJOR |
 | `useMemo`/`useCallback`/`memo` added without profiling evidence | MINOR |
 | Tailwind arbitrary values (e.g. `w-[347px]`) without justification | MINOR |
 | Missing loading/error state for async data | MINOR |

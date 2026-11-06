@@ -21,7 +21,7 @@ The row's Test Cases table should already include a row per category below. If o
 missing, flag it as a gap in `CODER DONE` rather than inventing the case yourself — the plan's
 Test Case table is the source of test design, not the Coder's judgment. Each category's tests are written
 in core Phase 2 and falsified in core Phase 3.
-- **Unit**: table-driven; every exported function — happy path, boundary, type edge, every `return err` / rejected promise / raised exception.
+- **Unit**: table-driven where the logic repeats; every exported function — happy path, boundary, type edge, every `return err` / rejected promise / raised exception.
 - **Integration**: real adapters behind interfaces, mocked I/O (no live network); state transitions, multi-component flows; tag them (`//go:build integration`, `@Tag("integration")`, etc.).
 - **Concurrency** (where it applies): the same resource hit in parallel — races, double-spend, idempotency replay. Go: assert under `-race`.
 - **Security** (falsify by deleting the guard, never by trusting a green run): rejected injection, 401/403 for missing/expired token + wrong role + IDOR, oversized/overflow/null input, and "no secret/stack-trace in error response or logs". Remove the control, confirm the test goes red, restore — a security test that passes with the guard gone is a false assurance.

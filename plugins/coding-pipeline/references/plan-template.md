@@ -124,6 +124,11 @@ Disposition `Preserve` · `Change` · `Drop`. Greenfield → `n/a — no existin
 | ID | Task | Files | Test rows | Language | Tier | Depends on |
 |---|---|---|---|---|---|---|
 
+### New files
+| New path | Closest existing file | Why it cannot live there |
+|---|---|---|
+Or `none — every Files path already exists`.
+
 ## Open questions
 - {question} — {who decides} — {status / answer}
 
@@ -139,7 +144,7 @@ AC, edge case, and non-N/A OWASP mitigation. The coder writes these tests as giv
 or redesign them. Missing a case here means it doesn't get tested — be exhaustive.
 
 - **Test Name**: a literal identifier in the language's test-naming convention (Go
-  `Test_CreateOrder_RejectsNegativeQuantity`, Jest `it("rejects negative quantity")`). The coder copies it
+  `TestCreateOrder_RejectsNegativeQuantity`, Jest `it("rejects negative quantity")`). The coder copies it
   verbatim; `scripts/verify/spec-coverage.sh` matches it by exact string.
 - **Expected Observable Result**: a return value, persisted state, HTTP status + body field, rendered
   output, or emitted error. Never "the method is called", never "no exception is thrown" alone. If you
@@ -155,6 +160,8 @@ or redesign them. Missing a case here means it doesn't get tested — be exhaust
 - **Validators get a format matrix**: canonical input · format variants (spaced, hyphenated, surrounding
   whitespace, mixed case) · empty and junk · both off-by-one length boundaries · and the **exact string the
   real caller passes** (`references/frontend-hardening-reference.md` §4).
+- **Rendered UI gets responsive and accessibility rows**: no page overflow at 320 CSS px and at a desktop
+  width in a real browser, an axe scan, and the primary flow by keyboard (`references/frontend-hardening-reference.md` §9).
 - **Brownfield**: every `Preserve` row in Existing behaviour becomes a characterization row (Falsified By
   names a break in the *existing* code); every `Change` row gets two rows — old behaviour gone, new holds;
   every `Drop` row names the caller search that found nothing.
@@ -185,6 +192,7 @@ One row = one unit `/code` executes (inline, by one coder, or in parallel — th
   and independently reviewable.
 - `Files` lists every file the row touches. It becomes the checkpoint's `--expect` set, and rows with no
   `Depends on` and disjoint `Files` are the ones that may run in parallel.
+- Every `Files` path not yet in the repo gets a `### New files` row, in a mini-plan too: the closest existing file and the specific reason it cannot hold this. Reasons that hold: a different topic (one topic per file), a load-on-demand boundary, or nothing comparable exists (closest file `none`). Exempt, no row: a test file beside a new source file, migration, a manifest its tool requires (such as `package.json` or `plugin.json`), generated code.
 - `Test rows` names the Test Case rows the task implements; every Test Case row belongs to exactly one task.
 - `Language` comes from the header / Technology decisions, never guessed; `Tier` picks the coder overlay
   (`Backend` → `coder-backend`, `Frontend` → `coder-frontend`, `—` → `coder`).
