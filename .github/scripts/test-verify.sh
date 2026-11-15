@@ -2937,6 +2937,33 @@ same=$(python3 -c 'import json,sys; a=json.load(open(sys.argv[1]))["stages"][0];
 [ "$DS_RC" = 0 ] && [ "$(ds_calls)" = 2 ] && [ "$same" = same ]; rc=$?
 check "drive: resume-from validate" 0 "$rc" "$DS_OUT $(ds_facts) code_record=$same" "calls=2 stages=validate,review resume=0 grant=ok answers=ok state=done recs=3 code_record=same"
 
+# AC12b: a resume past the code stage needs a code commit, a code record, and (for review) a validate record.
+ds_new nothing feat/x; rm -f "$DS_FIX/code.write"
+ds_go --plan docs/plans/alpha/plan.md
+setup=$(ds_stop)
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+[ "$setup" = "code stage changed nothing" ] && [ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: resume refused when code committed nothing" 0 "$rc" "$DS_OUT" "--resume-from validate: HEAD is still the recorded base; the code stage committed nothing"
+
+ds_happy
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["stages"]=[]; json.dump(d, open(p,"w"))' "$DS_R/docs/plans/alpha/run-state.json"
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: resume refused without code record" 0 "$rc" "$DS_OUT" "--resume-from validate: the recorded run has no code stage record"
+
+ds_happy
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["stages"]=[s for s in d["stages"] if s["stage"]=="code"]; json.dump(d, open(p,"w"))' "$DS_R/docs/plans/alpha/run-state.json"
+ds_go --plan docs/plans/alpha/plan.md --resume-from review
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: resume-from review refused without validate record" 0 "$rc" "$DS_OUT" "--resume-from review: the recorded run has no validate stage record"
+
+ds_new conditions feat/x; ds_fix "$DS_FIX" validate "VERDICT_LINE: READY WITH CONDITIONS 7.6"
+ds_go --plan docs/plans/alpha/plan.md
+setup=$(ds_stop)
+ds_go --plan docs/plans/alpha/plan.md --resume-from review
+[ "$setup" = "validate verdict READY WITH CONDITIONS 7.6" ] && [ "$DS_RC" = 0 ] && [ "$(ds_calls)" = 1 ]; rc=$?
+check "drive: resume-from review after conditions" 0 "$rc" "$DS_OUT $(ds_facts)" "calls=1 stages=review resume=0 grant=ok answers=ok state=done recs=3"
+
 ds_new happy feat/x; c0=$(ds_commits); ds_go --plan docs/plans/alpha/plan.md
 [ "$DS_RC" = 0 ] && [ "$(ds_commits)" = $((c0 + 1)) ] && [ "$(ds_calls)" = 3 ]; rc=$?
 check "drive: happy path three fresh stages" 0 "$rc" "$DS_OUT $(ds_facts)" "calls=3 stages=code,validate,review resume=0 grant=ok answers=ok state=done recs=3"

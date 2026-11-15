@@ -252,10 +252,12 @@ def check_preconditions(opts: Options, git: GitFn) -> Context:
     return Context(root=root, branch=branch, base=base.strip(), slug=slug, plan_dir=plan_dir)
 
 
-def load_prior(opts: Options, ctx: Context) -> RunState | None:
+def load_prior(opts: Options, ctx: Context, git: GitFn) -> RunState | None:
     """The recorded run for this slug, read through headless.load_runs (the one run-state parser).
 
     A missing or schema-invalid file yields None; load_runs reports an invalid one on stderr.
+    A resume past the code stage is refused unless the code stage ran and committed (AC12b):
+    validating an empty diff must not reach /pr.
     """
     state_path = os.path.join(ctx.plan_dir, "run-state.json")
     prior = next((run for run in load_runs(ctx.root) if run.slug == ctx.slug), None)
@@ -263,7 +265,23 @@ def load_prior(opts: Options, ctx: Context) -> RunState | None:
         if not os.path.exists(state_path):
             raise Refused(f"--resume-from {opts.resume_from}: no run-state.json at {state_path}; nothing to resume from")
         raise Refused(f"--resume-from {opts.resume_from}: run-state.json at {state_path} is not a schema-valid record")
+    if opts.resume_from in ("validate", "review") and prior is not None:
+        _check_resume_record(opts.resume_from, prior, ctx, git)
     return prior
+
+
+def _check_resume_record(stage: str, prior: RunState, ctx: Context, git: GitFn) -> None:
+    """Refuse a resume whose recorded run shows the code stage did not run and commit, or no validate."""
+    recorded = {run.stage for run in prior.stages}
+    if "code" not in recorded:
+        raise Refused(f"--resume-from {stage}: the recorded run has no code stage record; the code stage never ran")
+    rc, head, _err = git(["rev-parse", "HEAD"], ctx.root)
+    if rc != 0 or not head.strip():
+        raise Refused("cannot read the HEAD commit")
+    if head.strip() == prior.base:
+        raise Refused(f"--resume-from {stage}: HEAD is still the recorded base; the code stage committed nothing")
+    if stage == "review" and "validate" not in recorded:
+        raise Refused("--resume-from review: the recorded run has no validate stage record; review would skip validation")
 
 
 def build_prompt(stage: str, opts: Options, ctx: Context) -> str:
@@ -443,7 +461,7 @@ def main(argv: list[str], *, git: GitFn | None = None, runner: Runner | None = N
     git_fn = git or _git
     try:
         ctx = check_preconditions(opts, git_fn)
-        prior = load_prior(opts, ctx)
+        prior = load_prior(opts, ctx, git_fn)
     except Refused as exc:
         print(f"drive: REFUSED — {exc}", file=sys.stderr)
         return 2

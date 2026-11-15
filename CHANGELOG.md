@@ -21,6 +21,7 @@
 
 - `dup-gate.sh` no longer fails a tree with no scannable source.
 - `git-hooks/install.sh` copies `go-test-name.sh`.
+- `drive.py --resume-from validate|review` refuses with exit 2 before any stage runs when the recorded run has no code record, when HEAD still equals the recorded base (the code stage committed nothing), or, for `review`, when there is no validate record.
 
 ### Measured
 
