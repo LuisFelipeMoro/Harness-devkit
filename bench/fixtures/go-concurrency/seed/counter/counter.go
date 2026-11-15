@@ -1,0 +1,2 @@
+// counter.go
+package counter

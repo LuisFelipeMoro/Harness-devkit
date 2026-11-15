@@ -18,6 +18,8 @@ counts what is countable and prints `n/a — needs judgement` for what is not:
 | Sensor escape | gate failures first caught at pre-push or CI instead of locally | falling — a failure caught late cost a full loop |
 | Test honesty | QA MAJORs for tautological or unfalsified tests | zero, *with* coverage steady — zero findings plus climbing coverage is a red flag, not a win |
 
+Also counted: **Cache hit (driven stages)** — Σcache_read ÷ Σ(input + cache_read + cache_creation) over the `run-state.json` stages in the `--since` window; prefix stability of driven runs, `n/a` when no driven run is recorded.
+
 **These are diagnostics, never targets.** Every one is trivially gamed by suppressing its
 signal — ask fewer questions, soften the review, squash the rework away — and an agent told to
 optimise them will do exactly that. They are read by a human, from `PROGRESS.md` and the

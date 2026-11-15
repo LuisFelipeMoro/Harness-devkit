@@ -21,9 +21,21 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/gate-filter.sh\"", "timeout": 3 }
+        ]
+      },
+      {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/secret-write-guard.sh\"", "timeout": 3 }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/go-test-name-guard.sh\"", "timeout": 3 }
         ]
       },
       {

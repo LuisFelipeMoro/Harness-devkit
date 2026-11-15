@@ -18,6 +18,10 @@ rule is that an addition earns its tokens, and this is the check. Token counts a
 estimated at CHARS_PER_TOKEN, not tokenized: compare runs against each other (before vs
 after a change), where a constant bias cancels; treat absolute figures as ±10%.
 
+The Measured $ column is the median cost of this repo's recorded code stages in the same run mode
+(docs/plans/*/run-state.json, read by headless.load_runs from the working directory); `— (n=0)`
+when no run of that mode is recorded.
+
 Usage: estimate-run.py --plan <docs/plans/{slug}/plan.md>
        estimate-run.py --guides [--root DIR] [--json] [--baseline FILE]
 Exit 0 — table printed.
@@ -28,8 +32,12 @@ Exit 2 — plan missing, no Tasks table, a malformed row, a duplicate ID or an u
 import json
 import os
 import re
+import statistics
 import sys
 from collections import namedtuple
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import headless  # noqa: E402 — the one run-state reader, shared with harness-metrics.py
 
 Const = namedtuple("Const", "value n")  # n == 0 → assumed; n >= 1 → measured (n samples)
 
@@ -204,6 +212,19 @@ def parallel_plan(rows):
     return safe, reasons
 
 
+MODE_OF_ROW = {"Inline": "inline", "Single coder": "single",
+               "Sequential coders": "sequential", "Parallel coders": "parallel"}
+
+
+def measured_cost(row_name, runs):
+    """Median cost_usd of recorded code stages whose run used this row's mode; `— (n=0)` when none."""
+    mode = MODE_OF_ROW[row_name]
+    costs = [s.cost_usd for r in runs if r.mode == mode for s in r.stages if s.stage == "code"]
+    if not costs:
+        return "— (n=0)"
+    return f"${statistics.median(costs):.2f} (n={len(costs)})"
+
+
 def fmt(n):
     return f"{n / 1000:.0f}k"
 
@@ -257,11 +278,12 @@ def estimate(argv):
 
     print(f"Plan: {argv[1]} · {n} rows · {files} files · {tests} test rows")
     print()
-    print("| Mode | Coder dispatches | Tokens | Basis | Notes |")
-    print("|---|---|---|---|---|")
+    runs = headless.load_runs(".")
+    print("| Mode | Coder dispatches | Tokens | Basis | Measured $ | Notes |")
+    print("|---|---|---|---|---|---|")
     for name, d, t, spread, used, note in options:
         mark = " (recommended)" if name == rec else ""
-        print(f"| {name}{mark} | {d} | {rng(t, spread)} | {basis(used)} | {note} |")
+        print(f"| {name}{mark} | {d} | {rng(t, spread)} | {basis(used)} | {measured_cost(name, runs)} | {note} |")
     print()
     print("Parallel-safe: " + (", ".join(safe) if safe else "none"))
     for rid, why in reasons.items():

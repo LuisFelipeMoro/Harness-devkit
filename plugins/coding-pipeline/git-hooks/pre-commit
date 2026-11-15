@@ -23,6 +23,22 @@ else
     bash "$guard" --staged || exit 1
 fi
 
+# ── Go test naming: a staged new *_test.go is named after its source file ──
+# Added paths only: a modified or renamed test keeps the name it already had.
+gtn="$(dirname "$0")/go-test-name.sh"
+[ -f "$gtn" ] || gtn="$HOME/.claude/git-hooks/go-test-name.sh"
+if [ ! -f "$gtn" ]; then
+    echo "WARN: go-test-name.sh not found beside the hook — Go test file naming UNENFORCED. Re-run: bash ~/.claude/git-hooks/install.sh"
+else
+    staged_go_tests=()
+    while IFS= read -r staged_path; do
+        staged_go_tests+=("$staged_path")
+    done < <(git diff --cached --name-only --diff-filter=A | grep '_test\.go$' || true)
+    if [ ${#staged_go_tests[@]} -gt 0 ]; then
+        bash "$gtn" "${staged_go_tests[@]}" || exit 1
+    fi
+fi
+
 # Go
 if [ -f go.mod ]; then
     echo "→ Go: format"

@@ -1,0 +1,2 @@
+// clamp.go
+package clamp

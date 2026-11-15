@@ -1678,6 +1678,40 @@ check "estimate-run: a directory without trailing slash still contains its files
 check "estimate-run: a directory claimed after a file inside it clashes" 0 "$rc" "$out" "T9 — shares pkg/ with T8"
 check "estimate-run: a name-prefix sibling (src/ vs srcx/) stays parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T3, T5, T6, T8"
 
+# ── Measured $ column: median code cost per run mode, from run-state.json ──
+# The run-state reader is headless.load_runs, read from the working directory. A fixture
+# run-state.json is written in the schema headless.py checks, so the reader is the real one.
+mkrun() {  # mkrun <repo> <slug> <mode> <json list of stage overrides> — writes docs/plans/<slug>/run-state.json
+    mkdir -p "$1/docs/plans/$2" || return 1
+    python3 - "$1/docs/plans/$2/run-state.json" "$3" "$4" <<'PY'
+import datetime, json, os, sys
+path, mode, overrides = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+base_stage = dict(stage="code", status="ok", exit_code=0, subtype="success", model="sonnet", cost_usd=0.0,
+                  input_tokens=0, output_tokens=0, cache_read=0, cache_creation=0, turns=1,
+                  session_id="s", sentinel=None, wall_s=1, finished_at=now)
+stages = [{**base_stage, **o} for o in overrides]
+slug = os.path.basename(os.path.dirname(path))
+state = dict(schema=1, plan=f"docs/plans/{slug}/plan.md", slug=slug, branch=f"feat/{slug}", base="main",
+             mode=mode, stages=stages, status="done", stop_reason=None)
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(state, fh)
+PY
+}
+
+mc1="$W/mc1"; mkrun "$mc1" run-a sequential '[{"cost_usd": 0.30}]' && mkrun "$mc1" run-b sequential '[{"cost_usd": 0.40}, {"stage": "validate", "cost_usd": 5.00}]'
+out=$(cd "$mc1" && python3 "$ER" --plan "$W/est-plan.md" 2>&1); rc=$?
+seq_row=$(printf '%s\n' "$out" | grep '^| Sequential coders' || true)
+check "estimate-run: measured column from run-state" 0 "$rc" "$seq_row" '| $0.35 (n=2) |'
+dash=$(printf '%s\n' "$out" | grep -E '^\| (Inline|Single coder|Parallel coders)' | grep -c '| — (n=0) |' || true)
+[ "$dash" = 3 ] && pass=$((pass + 1)) || { echo "FAIL: estimate-run: measured column from run-state — other modes did not read '— (n=0)' ($dash of 3)"; fail=1; }
+
+mc0="$W/mc0"; mkdir -p "$mc0"
+out=$(cd "$mc0" && python3 "$ER" --plan "$W/est-plan.md" 2>&1); rc=$?
+check "estimate-run: measured column absent runs" 0 "$rc" "$out" "| Mode | Coder dispatches | Tokens | Basis | Measured $ | Notes |"
+dash=$(printf '%s\n' "$out" | grep -E '^\| (Inline|Single coder|Sequential coders|Parallel coders)' | grep -c '| — (n=0) |' || true)
+[ "$dash" = 4 ] && pass=$((pass + 1)) || { echo "FAIL: estimate-run: measured column absent runs — rows not all '— (n=0)' ($dash of 4)"; fail=1; }
+
 # ── estimate-run.py --guides: guide token cost, measured from the files ──────
 # The devkit's guide-cost measurement. A fixture tree with files of a
 # known size pins the arithmetic (360 chars = 100 tokens at 3.6 chars/token); the
@@ -1792,6 +1826,15 @@ cd - >/dev/null || exit
 mkdir -p "$W/hm-not-git"
 out=$(cd "$W/hm-not-git" && GIT_CEILING_DIRECTORIES="$W" python3 "$HM" 2>&1); rc=$?
 check "harness-metrics: outside a git repository is UNMEASURED" 2 "$rc" "$out" "not a git repository"
+
+# ── Cache hit row: prefix stability over the run-state stages in the window ──
+hmc1="$W/hmc1"; mkdir -p "$hmc1" && (cd "$hmc1" && git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base)
+mkrun "$hmc1" run-c sequential '[{"input_tokens": 10, "cache_read": 900, "cache_creation": 90}]'
+out=$(cd "$hmc1" && python3 "$HM" 2>&1); rc=$?
+check "harness-metrics: cache hit from run-state" 0 "$rc" "$out" "| Cache hit (driven stages) | 90.0% (n=1 stages) |"
+hmc0="$W/hmc0"; mkdir -p "$hmc0" && (cd "$hmc0" && git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base)
+out=$(cd "$hmc0" && python3 "$HM" 2>&1); rc=$?
+check "harness-metrics: cache hit no runs" 0 "$rc" "$out" "| Cache hit (driven stages) | n/a — no driven runs |"
 
 # ── new-file discipline: the rule text the validators read, and the parser beside it ──
 # The rule has no mechanical sensor (the plan's decision), so these rows pin that
@@ -2100,6 +2143,865 @@ check "review voice: output-format.md points to Voice" 0 0 "$out" 'references/po
 check "review voice: printed findings keep severity" 0 0 "$out" "path/to/file.go:42: 🔴 CRITICAL: [OWASP A03]"
 grep -qF '[SEVERITY]' "$RC/references/output-format.md"; rc=$?
 check "review voice: output-format.md drops the [SEVERITY] template" 1 "$rc"
+
+# ── gate-filter contract: the opt-in rewrite hook is wired and documented ──
+out=$(python3 - "$ROOT" <<'PY'
+import json, os, sys
+root = sys.argv[1]
+hj = os.path.join(root, "plugins", "coding-pipeline", "hooks", "hooks.json")
+sh = os.path.join(root, "plugins", "coding-pipeline", "hooks", "gate-filter.sh")
+with open(hj, encoding="utf-8") as fh:
+    groups = json.load(fh).get("hooks", {}).get("PreToolUse", [])
+wired = any(
+    g.get("matcher") == "Bash"
+    and any("gate-filter.sh" in h.get("command", "") and h.get("timeout") == 3 for h in g.get("hooks", []))
+    for g in groups
+)
+if wired and os.access(sh, os.X_OK):
+    print("gate-filter wired: Bash matcher, timeout 3, executable")
+    sys.exit(0)
+print("gate-filter not wired: needs a Bash PreToolUse entry with timeout 3, and an executable script")
+sys.exit(1)
+PY
+); rc=$?
+check "gate-filter: wired in hooks.json" 0 "$rc" "$out" "gate-filter wired"
+
+out=$(python3 - "$ROOT" <<'PY'
+import os, sys
+root = sys.argv[1]
+with open(os.path.join(root, "README.md"), encoding="utf-8") as fh:
+    lines = fh.read().splitlines()
+row = any(l.startswith("| `gate-filter.sh` |") and "PreToolUse(Bash)" in l for l in lines)
+off = any("DEVKIT_DISABLED_HOOKS" in l and "pre:bash:gate-filter" in l for l in lines)
+if row and off:
+    print("readme gate-filter ok: hook-table row and off-switch id present")
+    sys.exit(0)
+print("readme gate-filter missing: hook-table row or pre:bash:gate-filter off-switch id")
+sys.exit(1)
+PY
+); rc=$?
+check "readme: gate-filter id listed" 0 "$rc" "$out" "readme gate-filter ok"
+
+# ── go-test-guard contract: the Write guard is wired and its off-switch is documented ──
+out=$(python3 - "$ROOT" <<'PY'
+import json, os, sys
+root = sys.argv[1]
+hj = os.path.join(root, "plugins", "coding-pipeline", "hooks", "hooks.json")
+sh = os.path.join(root, "plugins", "coding-pipeline", "hooks", "go-test-name-guard.sh")
+with open(hj, encoding="utf-8") as fh:
+    groups = json.load(fh).get("hooks", {}).get("PreToolUse", [])
+wired = any(
+    g.get("matcher") == "Write"
+    and any("go-test-name-guard.sh" in h.get("command", "") and h.get("timeout") == 3 for h in g.get("hooks", []))
+    for g in groups
+)
+if wired and os.access(sh, os.X_OK):
+    print("go-test-guard wired: Write matcher, timeout 3, executable")
+    sys.exit(0)
+print("go-test-guard not wired: needs a Write PreToolUse entry with timeout 3, and an executable script")
+sys.exit(1)
+PY
+); rc=$?
+check "go-test-guard: wired in hooks.json" 0 "$rc" "$out" "go-test-guard wired"
+
+out=$(python3 - "$ROOT" <<'PY'
+import os, sys
+root = sys.argv[1]
+with open(os.path.join(root, "README.md"), encoding="utf-8") as fh:
+    lines = fh.read().splitlines()
+row = any(l.startswith("| `go-test-name-guard.sh` |") and "PreToolUse(Write)" in l for l in lines)
+off = any("DEVKIT_DISABLED_HOOKS" in l and "pre:write:go-test-name" in l for l in lines)
+if row and off:
+    print("readme go-test-guard ok: hook-table row and off-switch id present")
+    sys.exit(0)
+print("readme go-test-guard missing: hook-table row or pre:write:go-test-name off-switch id")
+sys.exit(1)
+PY
+); rc=$?
+check "readme: go-test-guard id listed" 0 "$rc" "$out" "readme go-test-guard ok"
+
+# ── headless contract: answers clause, sentinels, keys, report paths ─────────
+HC_CODE="$ROOT/plugins/coding-pipeline/skills/code/SKILL.md"
+HC_VLOOP="$ROOT/plugins/coding-pipeline/skills/validate-code/references/validation-loop.md"
+HC_VSKILL="$ROOT/plugins/coding-pipeline/skills/validate-code/SKILL.md"
+HC_REVIEW="$ROOT/plugins/pr-workflow/skills/review-code/SKILL.md"
+HC_RUNS="$ROOT/plugins/coding-pipeline/references/headless-runs.md"
+HC_RELEX="$ROOT/.devkit/release-exclude"
+HC_PA="$ROOT/plugins/coding-pipeline/references/pipeline-artifacts.md"
+
+hc_clause=1
+for hc_f in "$HC_CODE" "$HC_VLOOP" "$HC_REVIEW"; do
+    grep -qF 'references/headless-runs.md' "$hc_f" && grep -qF 'NEEDS_USER:' "$hc_f" || hc_clause=0
+done
+[ "$hc_clause" = 1 ]; rc=$?
+check "headless-runs: answers clause in skills" 0 "$rc"
+
+grep -qF 'VERDICT_LINE:' "$HC_RUNS" && grep -qF 'REVIEW_SCORE:' "$HC_RUNS" \
+    && grep -qF 'VERDICT_LINE:' "$HC_VSKILL" && grep -qF 'REVIEW_SCORE:' "$HC_REVIEW"; rc=$?
+check "headless-runs: sentinels pinned" 0 "$rc"
+
+hc_keys=0
+for hc_k in plan_not_approved uncommitted run_mode fix_rounds_exhausted validate_low_score \
+        review_post review_language review_style review_low_score; do
+    grep -qF "\`$hc_k\`" "$HC_RUNS" && hc_keys=$((hc_keys + 1))
+done
+[ "$hc_keys" = 9 ] && grep -qF 'PRODUCTION READY' "$HC_RUNS"; rc=$?
+check "headless-runs: every key mapped" 0 "$rc"
+
+grep -qF 'plain last line' "$HC_RUNS" && grep -qF 'no markdown' "$HC_RUNS" \
+    && grep -qF 'plain last line' "$HC_VSKILL" && grep -qF 'no markdown' "$HC_VSKILL" \
+    && grep -qF 'plain last line' "$HC_REVIEW" && grep -qF 'no markdown' "$HC_REVIEW"; rc=$?
+check "headless-runs: sentinel is a plain last line" 0 "$rc"
+
+grep -qF 'docs/plans/{slug}/validation/' "$HC_VSKILL" && grep -qF 'top 3' "$HC_VSKILL"; rc=$?
+check "validate-code: reports written to plan dir" 0 "$rc"
+
+grep -qxF 'docs/plans/*/validation/**' "$HC_RELEX" && grep -qxF 'bench/results/**' "$HC_RELEX" \
+    && grep -qxF '**/run-state.json' "$HC_RELEX"; rc=$?
+check "release-exclude: validation and bench results" 0 "$rc"
+
+grep -qF 'validation/' "$HC_PA" && grep -qF 'run-state.json' "$HC_PA"; rc=$?
+check "pipeline-artifacts: validation and run-state listed" 0 "$rc"
+
+# ── headless runner: classify, argv, sentinels, state ───────────────────────
+# headless.py is driven through python3 with an injected fake runner — the real
+# `claude` is never called. Each snippet prints the observed values on one line;
+# the needle is that exact line, so a wrong status fails by its own row name.
+HL_DIR="$ROOT/plugins/coding-pipeline/scripts"
+hl_py() {  # hl_py — reads a snippet on stdin; headless.py is importable from HL_DIR
+    PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); exec(sys.stdin.read())' "$HL_DIR" 2>&1
+}
+
+out=$(hl_py <<'PY'
+from headless import classify
+payload = {'subtype': 'success', 'result': "You've hit your 5-hour limit"}
+print(f"status={classify(1, payload)}")
+PY
+); rc=$?
+check "headless: classify limit" 0 "$rc" "$out" "status=limit"
+
+out=$(hl_py <<'PY'
+from headless import classify
+payload = {'subtype': 'success', 'result': "You've hit your weekly limit"}
+print(f"status={classify(0, payload)}")
+PY
+); rc=$?
+check "headless: classify limit on exit 0" 0 "$rc" "$out" "status=limit"
+
+out=$(hl_py <<'PY'
+from headless import classify
+print(f"status={classify(1, {'subtype': 'success', 'result': 'boom'})}")
+PY
+); rc=$?
+check "headless: exit 1 without limit text" 0 "$rc" "$out" "status=error"
+
+out=$(hl_py <<'PY'
+from headless import classify
+result = "Working on it.\nYou've hit your 5-hour limit\nNEEDS_USER: x"
+print(f"status={classify(0, {'subtype': 'success', 'result': result})}")
+PY
+); rc=$?
+check "headless: limit beats needs_user" 0 "$rc" "$out" "status=limit"
+
+out=$(hl_py <<'PY'
+from headless import classify, last_sentinel
+result = "Two plans are open.\nNEEDS_USER: which plan?"
+status = classify(0, {'subtype': 'success', 'result': result})
+print(f"status={status} sentinel={last_sentinel(result, 'NEEDS_USER')}")
+PY
+); rc=$?
+check "headless: classify needs_user" 0 "$rc" "$out" "status=needs_user sentinel=NEEDS_USER: which plan?"
+
+out=$(hl_py <<'PY'
+from headless import classify
+print(f"status={classify(1, {'subtype': 'error_max_budget_usd', 'result': ''})}")
+PY
+); rc=$?
+check "headless: classify budget" 0 "$rc" "$out" "status=budget"
+
+out=$(hl_py <<'PY'
+import subprocess
+from headless import run_stage
+def timed_out(argv, cwd):
+    raise subprocess.TimeoutExpired(argv, 1800)
+def missing(argv, cwd):
+    raise FileNotFoundError(2, "No such file or directory", "claude")
+kw = dict(budget_usd=3.0, tmp_dir=".", allowed_tools="Bash")
+t = run_stage("code", "P", "sonnet", ".", runner=timed_out, **kw)
+m = run_stage("code", "P", "sonnet", ".", runner=missing, **kw)
+print(f"timeout={t.status}:{t.subtype} missing={m.status}:{m.subtype}")
+PY
+); rc=$?
+check "headless: timeout and missing binary" 0 "$rc" "$out" "timeout=error:timeout after 1800s missing=error:claude not found"
+
+out=$(hl_py <<'PY'
+from headless import build_argv
+a = build_argv("P", "sonnet", 3.0, "/t", "Bash,Read", None)
+print(f"argv2={a[2]} allowed_after={a.index('--allowedTools') > 2}")
+PY
+); rc=$?
+check "headless: prompt before flags" 0 "$rc" "$out" "argv2=P allowed_after=True"
+
+out=$(hl_py <<'PY'
+from headless import last_sentinel
+result = "VERDICT_LINE: NOT READY 4.0\nfix the gap\nVERDICT_LINE: PRODUCTION READY 8.9"
+print(f"last={last_sentinel(result, 'VERDICT_LINE')}")
+PY
+); rc=$?
+check "headless: last sentinel wins" 0 "$rc" "$out" "last=VERDICT_LINE: PRODUCTION READY 8.9"
+
+out=$(hl_py <<'PY'
+from headless import last_sentinel
+results = [
+    "done\n`VERDICT_LINE: PRODUCTION READY 8.5`",
+    "done\n**VERDICT_LINE: NOT READY 4.0**",
+    "done\n> VERDICT_LINE: READY WITH CONDITIONS 7.6",
+]
+print("|".join(str(last_sentinel(r, 'VERDICT_LINE')) for r in results))
+PY
+); rc=$?
+check "headless: sentinel tolerates markdown wrapping" 0 "$rc" "$out" "VERDICT_LINE: PRODUCTION READY 8.5|VERDICT_LINE: NOT READY 4.0|VERDICT_LINE: READY WITH CONDITIONS 7.6"
+
+out=$(hl_py <<'PY'
+import os, shutil, sys, tempfile
+from unittest import mock
+from headless import RunState, StageResult, load_runs, write_state
+def state(status):
+    stage = StageResult(stage="code", status=status, exit_code=0, subtype="success", model="sonnet",
+                        cost_usd=1.5, input_tokens=10, output_tokens=20, cache_read=30, cache_creation=40,
+                        turns=3, session_id="s1", sentinel=None, wall_s=12, finished_at="2026-11-12T00:00:00+00:00")
+    return RunState(plan="docs/plans/x/plan.md", slug="x", branch="feat/x-s1", base="abc",
+                    mode="sequential", stages=[stage], status="running", stop_reason=None)
+root = tempfile.mkdtemp(prefix="hl-atomic-")
+try:
+    plan_dir = os.path.join(root, "docs", "plans", "x")
+    os.makedirs(plan_dir)
+    path = os.path.join(plan_dir, "run-state.json")
+    a, b = state("ok"), state("limit")
+    try:
+        write_state(path, a)
+        first = load_runs(root) == [a]
+    except OSError:
+        first = False
+    crashed = False
+    with mock.patch("headless.os.replace", side_effect=OSError("simulated crash")):
+        try:
+            write_state(path, b)
+        except OSError:
+            crashed = True
+    kept = load_runs(root) == [a]
+    try:
+        write_state(path, b)
+        replaced = load_runs(root) == [b]
+    except OSError:
+        replaced = False
+    leftovers = [n for n in os.listdir(plan_dir) if n.endswith(".tmp")]
+    ok = first and crashed and kept and replaced and not leftovers
+    print("atomic=ok" if ok else f"atomic=FAIL first={first} crashed={crashed} kept={kept} replaced={replaced} leftovers={leftovers}")
+    sys.exit(0 if ok else 1)
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: atomic state write" 0 "$rc" "$out" "atomic=ok"
+
+out=$(hl_py <<'PY'
+import contextlib, io, os, shutil, tempfile
+from headless import load_runs
+root = tempfile.mkdtemp(prefix="hl-malformed-")
+try:
+    plan_dir = os.path.join(root, "docs", "plans", "x")
+    os.makedirs(plan_dir)
+    with open(os.path.join(plan_dir, "run-state.json"), "w", encoding="utf-8") as fh:
+        fh.write('{"schema":2}')
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        runs = load_runs(root)
+    print(f"loaded={len(runs)} unmeasured={'UNMEASURED — ' in err.getvalue() and 'schema' in err.getvalue()}")
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: rejects malformed state" 0 "$rc" "$out" "loaded=0 unmeasured=True"
+
+out=$(hl_py <<'PY'
+import json, os, shutil, tempfile
+from headless import RunState, run_stage, write_state
+payload = json.dumps({"subtype": "success", "result": "Did the work. SECRET-x in the log.",
+                      "total_cost_usd": 0.5, "num_turns": 2, "session_id": "s1"})
+stage = run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+                  runner=lambda argv, cwd: (0, payload, ""))
+state = RunState(plan="p", slug="x", branch="b", base="m", mode="sequential",
+                 stages=[stage], status="running", stop_reason=None)
+root = tempfile.mkdtemp(prefix="hl-fields-")
+try:
+    path = os.path.join(root, "run-state.json")
+    write_state(path, state)
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    rec = json.loads(text)
+    top = {"schema", "plan", "slug", "branch", "base", "mode", "stages", "status", "stop_reason"}
+    per_stage = {"stage", "status", "exit_code", "subtype", "model", "cost_usd", "input_tokens",
+                 "output_tokens", "cache_read", "cache_creation", "turns", "session_id", "sentinel",
+                 "wall_s", "finished_at"}
+    keys_ok = set(rec) == top and all(set(s) == per_stage for s in rec["stages"])
+    print(f"keys={'declared' if keys_ok else 'MISMATCH'} secret={'absent' if 'SECRET-x' not in text else 'LEAKED'}")
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: state holds only declared fields" 0 "$rc" "$out" "keys=declared secret=absent"
+
+# The default runner's stage PATH carries $(go env GOPATH)/bin when go is on PATH
+# and the directory exists, because golangci-lint and govulncheck live there. A
+# fake go prints a real GOPATH; with no go on PATH the PATH passes through unchanged.
+out=$(hl_py <<'PY'
+import os, shlex, shutil, tempfile
+from unittest import mock
+import headless
+
+root = tempfile.mkdtemp(prefix="hl-gopath-")
+try:
+    gopath = os.path.join(root, "gp")
+    os.makedirs(os.path.join(gopath, "bin"))
+    stubs = os.path.join(root, "stubs")
+    empty = os.path.join(root, "empty")
+    os.makedirs(stubs)
+    os.makedirs(empty)
+    go = os.path.join(stubs, "go")
+    with open(go, "w", encoding="utf-8") as fh:
+        fh.write("#!/bin/sh\necho " + shlex.quote(gopath) + "\n")
+    os.chmod(go, 0o755)
+    seen = []
+
+    def capture(argv, cwd, *, timeout_s, env):
+        seen.append(env["PATH"])
+        return 0, "{}", ""
+
+    with mock.patch.object(headless, "_subprocess_runner", capture):
+        os.environ["PATH"] = stubs + os.pathsep + empty
+        headless.run_stage("code", "P", "sonnet", root, budget_usd=1.0, tmp_dir=root,
+                           allowed_tools="Bash")
+        os.environ["PATH"] = empty
+        headless.run_stage("code", "P", "sonnet", root, budget_usd=1.0, tmp_dir=root,
+                           allowed_tools="Bash")
+    with_go = seen[0].split(os.pathsep)[0] == os.path.join(gopath, "bin")
+    no_go = seen[1] == empty
+    print(f"gopath={'ok' if with_go else 'MISSING'} nogo={'ok' if no_go else 'CHANGED'}")
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: stage PATH includes GOPATH bin" 0 "$rc" "$out" "gopath=ok nogo=ok"
+
+# ── go test naming guidance: plan, reviewer, coder and go.md name the rule ──
+out=$(cat "$ROOT/plugins/coding-pipeline/references/plan-template.md")
+check "go-test-name: plan-template rule" 0 0 "$out" "never a second test file for the same source"
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/plan-reviewer.md")
+check "go-test-name: plan-reviewer flags unpaired test path" 0 0 "$out" 'MAJOR breach of the rule in `references/languages/go.md:119`'
+out=$(cat "$ROOT/plugins/coding-pipeline/agents/coder.md")
+check "go-test-name: coder pairs before writing" 0 0 "$out" "extend the existing one instead of creating another"
+out=$(cat "$ROOT/plugins/coding-pipeline/references/languages/go.md")
+check "go-test-name: go.md names the gates" 0 0 "$out" 'the `pre:write:go-test-name` guard hook and git pre-commit'
+
+# ── go-test-name.sh: the shared pairing rule, judged per path ───────────────
+# Every fixture is a real directory under $W, so the script's find/test/-f calls
+# judge the tree the way checkpoint-m and pre-commit will see it.
+GTN="$ROOT/plugins/coding-pipeline/git-hooks/go-test-name.sh"
+
+g1="$W/gtn-paired"; mkdir -p "$g1"
+printf 'package x\n' > "$g1/foo.go"; printf 'package x\n' > "$g1/foo_test.go"
+out=$(cd "$g1" && bash "$GTN" foo_test.go 2>&1); rc=$?
+silent=no; [ -z "$out" ] && silent=yes
+check "go-test-name: paired file passes" 0 "$rc" "silent=$silent" "silent=yes"
+
+g2="$W/gtn-unpaired"; mkdir -p "$g2"
+printf 'package x\n' > "$g2/foo.go"; printf 'package x\n' > "$g2/foo_test.go"
+printf 'package x\n' > "$g2/bar.go"; printf 'package x\n' > "$g2/baz_test.go"
+out=$(cd "$g2" && bash "$GTN" baz_test.go 2>&1); rc=$?
+check "go-test-name: unpaired file fails with candidates" 1 "$rc" "$out" "no baz.go in .; rename it after the source it tests or add the tests to foo_test.go"
+
+g3="$W/gtn-exempt"; mkdir -p "$g3/plat" "$g3/stress" "$g3/testdata" "$g3/vendor/x"
+printf 'package x\n' > "$g3/foo.go"
+for f in main_test.go export_test.go example_test.go foo_integration_test.go; do printf 'package x\n' > "$g3/$f"; done
+printf 'package x\n' > "$g3/plat/foo_linux.go"; printf 'package x\n' > "$g3/plat/foo_test.go"
+printf 'package x\n' > "$g3/stress/stress_test.go"
+printf 'package x\n' > "$g3/testdata/other.go"; printf 'package x\n' > "$g3/testdata/x_test.go"
+printf 'package x\n' > "$g3/vendor/x/other.go"; printf 'package x\n' > "$g3/vendor/x/x_test.go"
+out=$(cd "$g3" && bash "$GTN" main_test.go export_test.go example_test.go foo_integration_test.go plat/foo_test.go stress/stress_test.go testdata/x_test.go vendor/x/x_test.go 2>&1); rc=$?
+check "go-test-name: exemptions pass" 0 "$rc" "$out"
+
+g4="$W/gtn-suffix"; mkdir -p "$g4"
+printf 'package x\n' > "$g4/foo.go"; printf 'package x\n' > "$g4/bar_integration_test.go"
+out=$(cd "$g4" && bash "$GTN" bar_integration_test.go 2>&1); rc=$?
+check "go-test-name: integration suffix needs source" 1 "$rc" "$out" "bar_integration_test.go — no bar.go"
+
+out=$(bash "$GTN" 2>&1); rc=$?
+check "go-test-name: no path argument is unmeasured" 2 "$rc" "$out" "usage: go-test-name.sh"
+
+# ── bench ───────────────────────────────────────────────────────────────────
+# bench/run.py is loaded from its file and driven with an injected fake runner,
+# so the real `claude` is never called. Results go to a temp directory.
+br_py() {  # br_py <root> — snippet on stdin; run.py is loaded by file path
+    PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; exec(sys.stdin.read())' "$1" 2>&1
+}
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, io, os, re, sys, tempfile
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+calls = []
+def fake(argv, cwd):
+    calls.append(argv)
+    return 0, "", ""
+buf, err = io.StringIO(), io.StringIO()
+with tempfile.TemporaryDirectory() as tmp:
+    out = os.path.join(tmp, "results")
+    rc = mod.main(["--arms", "B-haiku", "--reps", "1", "--fixtures", "go-gap", "--out", out],
+                  runner=fake, stdout=buf, stderr=err)
+    runs = re.search(r"runs=(\d+)", buf.getvalue())
+    usd = re.search(r"estimated cost: USD ([0-9.]+)", buf.getvalue())
+    print(f"exit={rc} runs={runs.group(1) if runs else 'none'} cost={usd.group(1) if usd else 'none'} "
+          f"calls={len(calls)} written={os.path.exists(out)}")
+PY
+); rc=$?
+check "bench: refuses without yes" 0 "$rc" "$out" "exit=2 runs=1 cost=0.28 calls=0 written=False"
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, io, json, os, sys, tempfile
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+PAYLOAD = {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.1,
+           "num_turns": 1, "session_id": "s",
+           "usage": {"input_tokens": 1, "output_tokens": 1, "cache_read_input_tokens": 0,
+                     "cache_creation_input_tokens": 0}}
+def fake(argv, cwd):
+    # Rep 2 of go-gap fails its code stage; rep 1 writes a file so the stage changed something.
+    stage = argv[2].split(" ", 1)[0]
+    if stage == "/code":
+        if "/go-gap-r2/" in cwd:
+            return 1, "", "simulated failure"
+        open(os.path.join(cwd, "marker.txt"), "w").write("code stage output\n")
+        text = "CODER DONE"
+    elif stage == "/validate-code":
+        text = "VERDICT_LINE: READY 8.80"
+    else:
+        text = "REVIEW_SCORE: 9.0 pass"
+    return 0, json.dumps({**PAYLOAD, "result": text}), ""
+buf, err = io.StringIO(), io.StringIO()
+with tempfile.TemporaryDirectory() as tmp:
+    out = os.path.join(tmp, "results")
+    rc = mod.main(["--arms", "B-haiku", "--reps", "2", "--yes", "--fixtures", "go-gap", "--out", out],
+                  runner=fake, stdout=buf, stderr=err)
+    if rc != 0:
+        print(f"rc={rc} {err.getvalue().strip()}")
+    else:
+        with open(os.path.join(out, "B-haiku.summary.json"), encoding="utf-8") as fh:
+            agg = json.load(fh)["aggregates"]
+        sc = agg["score"]
+        print(f"pass_rate={agg['pass_rate']:.2f} score={sc['median']:.2f}/{sc['min']:.2f}/{sc['max']:.2f} "
+              f"flipped={json.dumps(agg['flipped'])}")
+PY
+); rc=$?
+check "bench: aggregates and flips" 0 "$rc" "$out" 'pass_rate=0.50 score=8.80/8.80/8.80 flipped=["go-gap"]'
+
+out=$(br_py "$ROOT" <<'PY'
+import json, os, re, sys
+root = sys.argv[1]
+fx = os.path.join(root, "bench", "fixtures")
+dirs = sorted(d for d in os.listdir(fx) if os.path.isdir(os.path.join(fx, d)))
+bad = [] if len(dirs) == 6 else [f"count={len(dirs)}"]
+for d in dirs:
+    p = os.path.join(fx, d)
+    if not os.path.isdir(os.path.join(p, "seed")):
+        bad.append(f"{d}: no seed/")
+    with open(os.path.join(p, "plan.md"), encoding="utf-8") as fh:
+        if not re.search(r"^Status: approved\b", fh.read(), re.M):
+            bad.append(f"{d}: plan.md not approved")
+    try:
+        with open(os.path.join(p, "expected.json"), encoding="utf-8") as fh:
+            exp = json.load(fh)
+    except (OSError, ValueError):
+        bad.append(f"{d}: expected.json unreadable")
+        continue
+    if not isinstance(exp, dict) or set(exp) != {"gates_green", "plan_gap", "depth"}:
+        bad.append(f"{d}: expected.json fields")
+    elif (not isinstance(exp["gates_green"], bool) or not isinstance(exp["plan_gap"], bool)
+          or exp["depth"] not in ("cosmetic", "light", "standard", "full")):
+        bad.append(f"{d}: expected.json values")
+print("fixtures=6 ok" if not bad else "bad: " + "; ".join(bad))
+PY
+); rc=$?
+check "bench: fixtures complete" 0 "$rc" "$out" "fixtures=6 ok"
+
+# Real node and git, real temp-dir seeds: the TS gate must run node's test runner
+# for a passing and a failing suite, the doc gate must read the diff against main,
+# and a non-markdown change or a missing node must stay UNMEASURED (None).
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, os, pathlib, subprocess, sys, tempfile
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+PASS_T = 'import { it } from "node:test";\nimport assert from "node:assert/strict";\n\nit("adds", () => { assert.equal(1 + 1, 2); });\n'
+FAIL_T = PASS_T.replace("assert.equal(1 + 1, 2)", "assert.equal(1 + 1, 3)")
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+def git(repo, *args):
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", *args],
+                   cwd=repo, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+def ts_seed(base, test_text):
+    write(os.path.join(base, "package.json"), '{"name": "seed", "private": true, "type": "module"}\n')
+    write(os.path.join(base, "src", "x.test.ts"), test_text)
+    return pathlib.Path(base)
+def repo_on_branch(base, files):
+    os.makedirs(base, exist_ok=True)
+    git(base, "init", "-q", "-b", "main")
+    write(os.path.join(base, "README.md"), "seed\n")
+    git(base, "add", "-A"); git(base, "commit", "-q", "-m", "seed")
+    git(base, "checkout", "-q", "-b", "feat/x")
+    for name, text in files.items():
+        write(os.path.join(base, name), text)
+    git(base, "add", "-A"); git(base, "commit", "-q", "-m", "change")
+    return pathlib.Path(base)
+with tempfile.TemporaryDirectory() as tmp:
+    ts_ok = mod.gate_green(ts_seed(os.path.join(tmp, "ts-ok"), PASS_T))
+    ts_red = mod.gate_green(ts_seed(os.path.join(tmp, "ts-red"), FAIL_T))
+    doc = mod.gate_green(repo_on_branch(os.path.join(tmp, "doc"), {"NOTES.md": "# notes\n"}))
+    third = mod.gate_green(repo_on_branch(os.path.join(tmp, "third"), {"x.go": "package x\n"}))
+    saved = os.environ["PATH"]
+    os.environ["PATH"] = os.path.join(tmp, "no-bin")  # node cannot be found
+    try:
+        no_node = mod.gate_green(ts_seed(os.path.join(tmp, "ts-nonode"), PASS_T))
+    finally:
+        os.environ["PATH"] = saved
+    print(f"ts={ts_ok} ts_red={ts_red} doc={doc} third={third} no_node={no_node}")
+PY
+); rc=$?
+check "bench: scores ts and doc seeds" 0 "$rc" "$out" "ts=True ts_red=False doc=True third=None no_node=None"
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, os, sys
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+s = "VERDICT_LINE: NOT READY 4.0/10"
+print(f"score={mod.verdict_score(s)} verdict={mod.verdict_name(s)}")
+PY
+); rc=$?
+check "bench: verdict score tolerates /10" 0 "$rc" "$out" "score=4.0 verdict=NOT READY"
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, io, json, os, sys, tempfile
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+PAYLOAD = {"type": "result", "subtype": "success", "is_error": False, "total_cost_usd": 0.1,
+           "num_turns": 1, "session_id": "s",
+           "usage": {"input_tokens": 1, "output_tokens": 1, "cache_read_input_tokens": 0,
+                     "cache_creation_input_tokens": 0}}
+BIG = "".join(str(i % 10) for i in range(2000))
+TEXTS = {"code": BIG, "validate": BIG[:1960] + "\nVERDICT_LINE: PRODUCTION READY 8.80",
+         "review": BIG[:1500] + "\nREVIEW_SCORE: 9.0 pass"}
+def fake(argv, cwd):
+    stage = argv[2].split(" ", 1)[0]
+    if stage == "/code":
+        open(os.path.join(cwd, "marker.txt"), "w").write("code stage output\n")
+        text = TEXTS["code"]
+    elif stage == "/validate-code":
+        text = TEXTS["validate"]
+    else:
+        text = TEXTS["review"]
+    return 0, json.dumps({**PAYLOAD, "result": text}), ""
+buf, err = io.StringIO(), io.StringIO()
+with tempfile.TemporaryDirectory() as tmp:
+    out = os.path.join(tmp, "results")
+    rc = mod.main(["--arms", "B-haiku", "--reps", "1", "--yes", "--fixtures", "go-gap", "--out", out],
+                  runner=fake, stdout=buf, stderr=err)
+    if rc != 0:
+        print(f"rc={rc} {err.getvalue().strip()}")
+    else:
+        with open(os.path.join(out, "B-haiku.summary.json"), encoding="utf-8") as fh:
+            run = json.load(fh)["runs"][0]
+        tails_ok = all(st.get("result_tail") == TEXTS[st["stage"]][-500:] for st in run["stages"])
+        longest = max(len(st.get("result_tail", "")) for st in run["stages"])
+        print(f"verdict={run.get('verdict')} tails={'ok' if tails_ok else 'bad'} max={longest}")
+PY
+); rc=$?
+check "bench: run records verdict and result tail" 0 "$rc" "$out" "verdict=PRODUCTION READY tails=ok max=500"
+
+# ── drive: refusals before any stage, and --resume-from state ───────────────
+# drive.py runs in temp git repos. `claude` is a fake on PATH that leaves a
+# marker if it is ever called, so "no runner call" is observed, not assumed.
+# DR_RC is 99 when the marker exists, so a refused row that called claude fails.
+DR_PY="$ROOT/plugins/coding-pipeline/scripts/drive.py"
+DR_BIN="$W/drive-bin"
+mkdir -p "$DR_BIN"
+printf '#!/usr/bin/env bash\ntouch "$DRIVE_MARK"\nexit 9\n' > "$DR_BIN/claude"
+chmod +x "$DR_BIN/claude"
+
+dr_repo() {  # dr_repo <dir> <branch> — a repo with one commit on <branch>
+    mkdir -p "$1" && cd "$1" || exit
+    git init -q -b "$2"
+    printf 'base\n' > base.txt
+    git -c user.email=t@t -c user.name=t add base.txt
+    git -c user.email=t@t -c user.name=t commit -q -m base
+    cd - >/dev/null || exit
+}
+dr_plan() {  # dr_plan <repo> <slug> <status> — an untracked plan under docs/plans/<slug>/
+    mkdir -p "$1/docs/plans/$2"
+    printf '# Plan — fixture\n\nStatus: %s · Branch: feat/x\n' "$3" > "$1/docs/plans/$2/plan.md"
+}
+dr_go() {  # dr_go <repo> <drive args...> — sets DR_OUT and DR_RC
+    local repo="$1" mark="$W/claude-called"
+    shift
+    rm -f "$mark"
+    DR_OUT=$(cd "$repo" && PYTHONDONTWRITEBYTECODE=1 DRIVE_MARK="$mark" PATH="$DR_BIN:$PATH" \
+        python3 "$DR_PY" "$@" 2>&1); DR_RC=$?
+    [ -e "$mark" ] && DR_RC=99
+    return 0
+}
+
+r="$W/dr-draft"; dr_repo "$r" feat/x; dr_plan "$r" alpha draft
+dr_go "$r" --plan docs/plans/alpha/plan.md
+check "drive: refuses unapproved plan" 2 "$DR_RC" "$DR_OUT" "drive: REFUSED — plan Status is 'draft'"
+
+r="$W/dr-main"; dr_repo "$r" main; dr_plan "$r" alpha approved
+dr_go "$r" --plan docs/plans/alpha/plan.md
+dr_rc_main=$DR_RC; dr_out_main=$DR_OUT
+r="$W/dr-master"; dr_repo "$r" master; dr_plan "$r" alpha approved
+dr_go "$r" --plan docs/plans/alpha/plan.md
+[ "$dr_rc_main" = 2 ] && [ "$DR_RC" = 2 ]; rc=$?
+check "drive: refuses main and master" 0 "$rc" "$dr_out_main$DR_OUT" "drive: REFUSED — branch 'main' is a mainline"
+case "$DR_OUT" in *"branch 'master' is a mainline"*) ;; *) rc=1 ;; esac
+check "drive: refuses main and master" 0 "$rc" "$DR_OUT" "branch 'master' is a mainline"
+
+r="$W/dr-dirty"; dr_repo "$r" feat/x; dr_plan "$r" alpha approved
+mkdir -p "$r/src" && printf 'package x\n' > "$r/src/x.go"
+dr_go "$r" --plan docs/plans/alpha/plan.md
+check "drive: refuses dirty tree" 2 "$DR_RC" "$DR_OUT" "drive: REFUSED — uncommitted paths outside docs/: src/x.go"
+
+r="$W/dr-slug"; dr_repo "$r" feat/x; dr_plan "$r" "Bad Slug" approved
+dr_go "$r" --plan "docs/plans/Bad Slug/plan.md"
+check "drive: refuses bad slug" 2 "$DR_RC" "$DR_OUT" "drive: REFUSED — plan slug 'Bad Slug' does not match"
+
+r="$W/dr-bad-state"; dr_repo "$r" feat/x; dr_plan "$r" alpha approved
+printf '{"schema":2}\n' > "$r/docs/plans/alpha/run-state.json"
+dr_go "$r" --plan docs/plans/alpha/plan.md --resume-from validate
+check "drive: resume-from malformed state" 2 "$DR_RC" "$DR_OUT" "is not a schema-valid record"
+
+r="$W/dr-no-state"; dr_repo "$r" feat/x; dr_plan "$r" alpha approved
+dr_go "$r" --plan docs/plans/alpha/plan.md --resume-from validate
+check "drive: resume-from missing state" 2 "$DR_RC" "$DR_OUT" "nothing to resume from"
+
+# ── drive: stage loop, commit, stops, never pushes ──────────────────────────
+# The stages run through the real headless.run_stage path. `claude` on PATH is a fake: it logs
+# each call's argv (NUL-separated) and replays the canned payload for its stage. `git` on PATH is
+# a spy: it logs every git call and makes `commit` fail with DRIVE_GIT_FAIL_COMMIT on stderr when
+# set; otherwise it runs the real git. The real claude is never run.
+DS_BIN="$W/drive-spy-bin"
+DS_REAL_GIT="$(command -v git)"
+mkdir -p "$DS_BIN"
+cat > "$DS_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+# fake claude: log this call's argv, write the stage's change if asked, replay its canned payload
+n=$(( $(cat "$DRIVE_SPY/count" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$DRIVE_SPY/count"
+printf '%s\0' "$@" > "$DRIVE_SPY/call-$n.argv"
+case "$2" in
+    /validate-code*) stage=validate ;;
+    /review-code*) stage=review ;;
+    *) stage=code ;;
+esac
+if [ -f "$DRIVE_FIX/$stage.write" ]; then
+    while IFS= read -r p; do
+        mkdir -p "$(dirname "$p")" && echo "change" > "$p"
+    done < "$DRIVE_FIX/$stage.write"
+fi
+cat "$DRIVE_FIX/$stage.json"
+EOF
+cat > "$DS_BIN/git" <<'EOF'
+#!/usr/bin/env bash
+# git spy: log every call; a commit fails with hook output when DRIVE_GIT_FAIL_COMMIT is set
+printf '%s\n' "$*" >> "$DRIVE_GIT_LOG"
+if [ "$1" = commit ] && [ -n "${DRIVE_GIT_FAIL_COMMIT:-}" ]; then
+    echo "$DRIVE_GIT_FAIL_COMMIT" >&2
+    exit 1
+fi
+exec "$DRIVE_REAL_GIT" "$@"
+EOF
+chmod +x "$DS_BIN/claude" "$DS_BIN/git"
+
+# Inspects one run: argv facts from the claude spy, and the run-state record.
+cat > "$W/ds-inspect.py" <<'PY'
+import glob, json, os, sys
+spy, state_path = sys.argv[1], sys.argv[2]
+calls = []
+for path in glob.glob(os.path.join(spy, "call-*.argv")):
+    with open(path, "rb") as fh:
+        calls.append((int(os.path.basename(path)[5:-5]), fh.read().decode("utf-8").split("\0")[:-1]))
+calls = [argv for _, argv in sorted(calls)]
+GRANT = "Bash,Agent,Glob,Grep,Skill,Read(~/.claude/**)"
+ANSWERS = ("Answers: plan_not_approved=stop; uncommitted=stop; run_mode=sequential; "
+           "fix_rounds_exhausted=stop; validate_low_score=stop; review_post=no; "
+           "review_language=English; review_style=short; review_low_score=stop")
+def value(argv, flag):
+    i = argv.index(flag) if flag in argv else -1
+    return argv[i + 1] if 0 <= i < len(argv) - 1 else None
+def prompt(argv):
+    return argv[argv.index("-p") + 1]
+def stage(argv):
+    return {"/code": "code", "/validate-code": "validate", "/review-code": "review"}.get(prompt(argv).split(" ")[0], "?")
+grant = bool(calls) and all(
+    value(a, "--permission-mode") == "acceptEdits"
+    and value(a, "--allowedTools") == GRANT
+    and not ({"--dangerously-skip-permissions", "--bare"} & set(a))
+    for a in calls)
+answers = bool(calls) and all(ANSWERS in prompt(a) for a in calls)
+resume = sum(1 for a in calls for x in a if x.startswith("--resume"))
+state, recs = "none", 0
+if os.path.exists(state_path):
+    with open(state_path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    state, recs = data["status"], len(data["stages"])
+print(f"calls={len(calls)} stages={','.join(stage(a) for a in calls)} resume={resume} "
+      f"grant={'ok' if grant else 'bad'} answers={'ok' if answers else 'bad'} state={state} recs={recs}")
+PY
+
+ds_fix() {  # ds_fix <fix-dir> <stage> <result text> [subtype] — the canned payload one stage returns
+    python3 -c '
+import json, os, sys
+d, stage, text, subtype = sys.argv[1:5]
+payload = {"type": "result", "subtype": subtype, "is_error": False, "result": text,
+           "session_id": "s-" + stage, "total_cost_usd": 0.25, "num_turns": 4,
+           "usage": {"input_tokens": 10, "output_tokens": 20,
+                     "cache_read_input_tokens": 30, "cache_creation_input_tokens": 5}}
+with open(os.path.join(d, stage + ".json"), "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(payload) + "\n")
+' "$1" "$2" "$3" "${4:-success}"
+}
+ds_new() {  # ds_new <name> <branch> — a repo with an approved plan and a happy-path fixture; sets DS_*
+    local base="$W/ds-$1"
+    rm -rf "$base"
+    DS_R="$base/repo"; DS_FIX="$base/fix"; DS_SPY="$base/spy"; DS_GLOG="$base/git.log"
+    mkdir -p "$DS_FIX"
+    dr_repo "$DS_R" "$2"; dr_plan "$DS_R" alpha approved
+    ds_fix "$DS_FIX" code "Implemented alpha."
+    ds_fix "$DS_FIX" validate "Validated alpha.
+VERDICT_LINE: PRODUCTION READY 8.5"
+    ds_fix "$DS_FIX" review "Reviewed alpha.
+REVIEW_SCORE: 9 pass"
+    echo "src/a.go" > "$DS_FIX/code.write"
+    DS_FAIL=""
+}
+ds_go() {  # ds_go <drive args...> — run drive.py in DS_R with the spies first on PATH; sets DS_OUT, DS_RC
+    rm -rf "$DS_SPY"; mkdir -p "$DS_SPY"; : > "$DS_GLOG"
+    DS_OUT=$(cd "$DS_R" && PYTHONDONTWRITEBYTECODE=1 DRIVE_FIX="$DS_FIX" DRIVE_SPY="$DS_SPY" \
+        DRIVE_GIT_LOG="$DS_GLOG" DRIVE_REAL_GIT="$DS_REAL_GIT" DRIVE_GIT_FAIL_COMMIT="$DS_FAIL" \
+        PATH="$DS_BIN:$PATH" python3 "$DR_PY" "$@" 2>&1); DS_RC=$?
+}
+ds_happy() { ds_new happy feat/x; ds_go --plan docs/plans/alpha/plan.md; }
+ds_facts() { python3 "$W/ds-inspect.py" "$DS_SPY" "$DS_R/docs/plans/alpha/run-state.json"; }
+ds_calls() { ls "$DS_SPY" 2>/dev/null | grep -c '^call-'; }
+ds_commits() { git -C "$DS_R" rev-list --count HEAD; }
+ds_stop() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("stop_reason") or "")' "$DS_R/docs/plans/alpha/run-state.json"; }
+
+ds_new detached feat/x; git -C "$DS_R" checkout -q --detach
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: refuses detached HEAD" 0 "$rc" "$DS_OUT" "drive: REFUSED — HEAD is detached"
+
+ds_new docs-only feat/x
+mkdir -p "$DS_R/docs/plans/alpha" && printf 'notes\n' > "$DS_R/docs/plans/alpha/notes.md"
+rm -f "$DS_FIX/code.write"
+ds_go --plan docs/plans/alpha/plan.md
+rc=1; case "$DS_OUT" in *"drive: REFUSED"*) ;; *) rc=0 ;; esac
+check "drive: docs-only changes allowed" 0 "$rc" "$(ds_facts) $DS_OUT" "calls=1 stages=code"
+
+ds_happy
+check "drive: answers line" 0 "$DS_RC" "$(ds_facts)" "answers=ok"
+
+ds_happy
+check "drive: exact grant" 0 "$DS_RC" "$(ds_facts)" "grant=ok"
+
+ds_new resume feat/x
+ds_fix "$DS_FIX" validate "VERDICT_LINE: NOT READY 4.0"
+ds_go --plan docs/plans/alpha/plan.md
+cp "$DS_R/docs/plans/alpha/run-state.json" "$W/ds-resume-before.json"
+ds_fix "$DS_FIX" validate "VERDICT_LINE: PRODUCTION READY 8.5"
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+same=$(python3 -c 'import json,sys; a=json.load(open(sys.argv[1]))["stages"][0]; b=json.load(open(sys.argv[2]))["stages"][0]; print("same" if a == b else "changed")' "$W/ds-resume-before.json" "$DS_R/docs/plans/alpha/run-state.json")
+[ "$DS_RC" = 0 ] && [ "$(ds_calls)" = 2 ] && [ "$same" = same ]; rc=$?
+check "drive: resume-from validate" 0 "$rc" "$DS_OUT $(ds_facts) code_record=$same" "calls=2 stages=validate,review resume=0 grant=ok answers=ok state=done recs=3 code_record=same"
+
+ds_new happy feat/x; c0=$(ds_commits); ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 0 ] && [ "$(ds_commits)" = $((c0 + 1)) ] && [ "$(ds_calls)" = 3 ]; rc=$?
+check "drive: happy path three fresh stages" 0 "$rc" "$DS_OUT $(ds_facts)" "calls=3 stages=code,validate,review resume=0 grant=ok answers=ok state=done recs=3"
+
+ds_new conditions feat/x; ds_fix "$DS_FIX" validate "VERDICT_LINE: READY WITH CONDITIONS 7.6"
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_calls)" = 2 ]; rc=$?
+check "drive: stops on conditions" 0 "$rc" "$DS_OUT" "STOPPED — validate verdict READY WITH CONDITIONS 7.6"
+
+ds_new nosentinel feat/x; ds_fix "$DS_FIX" validate "Validated alpha; looks fine."
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_calls)" = 2 ]; rc=$?
+check "drive: stops on missing sentinel" 0 "$rc" "$DS_OUT" "STOPPED — no VERDICT_LINE"
+
+ds_new block feat/x; ds_fix "$DS_FIX" review "REVIEW_SCORE: 6 block"
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_calls)" = 3 ]; rc=$?
+check "drive: stops on review block" 0 "$rc" "$DS_OUT" "STOPPED — review block: REVIEW_SCORE: 6 block"
+
+ds_new limit feat/x; ds_fix "$DS_FIX" code "You've hit your limit · resets 5am"
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_calls)" = 1 ]; rc=$?
+check "drive: halts on limit" 0 "$rc" "$DS_OUT" "STOPPED — usage limit: stopped, not retried"
+
+ds_new needsuser feat/x; ds_fix "$DS_FIX" code "NEEDS_USER: which plan?"
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_calls)" = 1 ]; rc=$?
+check "drive: stops on needs_user" 0 "$rc" "$DS_OUT" "STOPPED — needs user: which plan?"
+
+ds_new emptydiff feat/x; rm -f "$DS_FIX/code.write"; c0=$(ds_commits)
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 1 ] && [ "$(ds_commits)" = "$c0" ] && [ "$(ds_calls)" = 1 ]; rc=$?
+check "drive: stops on empty code diff" 0 "$rc" "$DS_OUT" "STOPPED — code stage changed nothing"
+
+ds_new rejected feat/x; DS_FAIL="BLOCKED x"; c0=$(ds_commits)
+ds_go --plan docs/plans/alpha/plan.md
+DS_FAIL=""
+reason=$(ds_stop)
+[ "$DS_RC" = 1 ] && [ "$(ds_commits)" = "$c0" ] && [ "${#reason}" -le 300 ] \
+    && case "$reason" in "commit rejected: "*"BLOCKED x") true ;; *) false ;; esac; rc=$?
+check "drive: stops on rejected commit" 0 "$rc" "$DS_OUT $reason" "STOPPED — commit rejected: BLOCKED x"
+
+ds_new scope feat/x
+mkdir -p "$DS_R/docs/plans/alpha/validation" && printf 'qa\n' > "$DS_R/docs/plans/alpha/validation/qa.md"
+ds_go --plan docs/plans/alpha/plan.md
+committed=$(git -C "$DS_R" diff-tree --no-commit-id --name-only -r HEAD)
+[ "$DS_RC" = 0 ] && [ "$committed" = "src/a.go" ]; rc=$?
+check "drive: commit stages only outside docs" 0 "$rc" "$DS_OUT $committed" "src/a.go"
+
+# AC11b / SEC-5: a credential the code stage wrote through Bash is never committed. The env-file
+# name is assembled from pieces so this script's own text holds no literal env-file name.
+DS_SECRET="config/$(printf '.%s.local' env)"
+ds_new deny feat/x; c0=$(ds_commits)
+printf 'src/a.go\n%s\n' "$DS_SECRET" > "$DS_FIX/code.write"
+ds_go --plan docs/plans/alpha/plan.md
+staged=$(git -C "$DS_R" diff --cached --name-only)
+reason=$(ds_stop)
+[ "$DS_RC" = 1 ] && [ "$(ds_commits)" = "$c0" ] && [ -z "$staged" ] && [ -f "$DS_R/$DS_SECRET" ] \
+    && [ "$(ds_calls)" = 1 ] \
+    && case "$reason" in "staged file matches deny list: $DS_SECRET") true ;; *) false ;; esac; rc=$?
+check "drive: refuses to commit a deny-listed file" 0 "$rc" "$DS_OUT $reason staged=[$staged]" "STOPPED — staged file matches deny list: $DS_SECRET"
+
+ds_happy
+rc=1; [ "$DS_RC" = 0 ] && ! grep -q '^push' "$DS_GLOG" && rc=0
+check "drive: never pushes" 0 "$rc" "$DS_OUT $(cat "$DS_GLOG")" "commit -m"
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

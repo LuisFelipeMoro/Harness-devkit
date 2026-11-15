@@ -13,6 +13,36 @@
 #      2 = UNENFORCED (jscpd or dup-attribution.py missing) — never rendered as a pass
 DUP_MAX="${DEVKIT_DUP_MAX:-3}"
 
+# The paths jscpd never measures. Defined once: the jscpd call and the
+# no-source check below both read it, so they cannot disagree about what counts
+# as source. Markdown is excluded because the gate targets code — deliberately
+# repeated prose (a per-language reference that must stay self-sufficient on a
+# single-file load) is a token-efficiency decision, not a defect.
+DUP_IGNORE="**/.git/**,**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md"
+
+# dup_has_source — exit 0 when the tree in $PWD holds at least one file that
+# jscpd would scan (a file no DUP_IGNORE glob matches). A `**/` prefix matches
+# zero or more directories, so each glob is tried bare and with `*/` in front.
+dup_has_source() {
+    local f g p matched
+    local -a globs
+    IFS=',' read -r -a globs <<< "$DUP_IGNORE"
+    while IFS= read -r -d '' f; do
+        f="${f#./}"
+        matched=0
+        for g in "${globs[@]}"; do
+            p="${g#\*\*/}"
+            # The ignore globs are patterns on purpose, so the case word stays unquoted.
+            # shellcheck disable=SC2254
+            case "$f" in
+                $p|*/$p) matched=1; break ;;
+            esac
+        done
+        [ "$matched" = 1 ] || return 0
+    done < <(find . \( -name .git -prune \) -o -type f -print0)
+    return 1
+}
+
 dup_attr="$(cd "$(dirname "$0")" && pwd)/dup-attribution.py"
 [ -f "$dup_attr" ] || dup_attr="$HOME/.claude/git-hooks/dup-attribution.py"
 
@@ -91,14 +121,21 @@ if [ "${1:-}" = "--worktree" ] && [ -n "$(git status --porcelain --untracked-fil
     cd "$snapshot" || exit 1
 fi
 
+# A tree with nothing jscpd would scan (a docs-only delivery) has no duplication
+# to measure, and attribution would call its zero-line report unmeasured. That is
+# a real zero, not a missing measurement, so it passes — said plainly. A tree with
+# any source still reaches jscpd, and a zero-line report beside that source fails.
+if ! dup_has_source; then
+    echo "Duplication: no source files to measure — PASS"
+    exit 0
+fi
+
 # --threshold 100 so jscpd never gates: attribution owns the comparison, and a
-# repo-wide percentage answers the wrong question. Markdown is excluded because
-# the gate targets code — deliberately repeated prose (a per-language reference
-# that must stay self-sufficient on a single-file load) is a token-efficiency
-# decision, not a defect. Per-repo tuning (extra ignores, per-language limits)
-# belongs in a committed .jscpd.json, which jscpd reads without this hook knowing.
+# repo-wide percentage answers the wrong question. Per-repo tuning (extra ignores,
+# per-language limits) belongs in a committed .jscpd.json, which jscpd reads
+# without this hook knowing.
 "$jscpd_bin" . --threshold 100 --min-lines 8 --min-tokens 50 \
-    --ignore "**/.git/**,**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/target/**,**/.worktrees/**,**/testdata/**,**/*.lock,**/*.min.*,**/*.md" \
+    --ignore "$DUP_IGNORE" \
     --reporters json --output "$dup_out" >/dev/null 2>&1 || true
 
 if base="$(resolve_base)"; then

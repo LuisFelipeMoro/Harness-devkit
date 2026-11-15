@@ -384,7 +384,7 @@ It never pipes a downloaded script into a shell. Existing `~/.claude/` files are
 files are untouched, `~/.claude/CLAUDE.md` gets one `@include` line, and `settings.json` keeps your
 `model`, `permissions`, `env` and non-devkit hooks. Invalid JSON aborts rather than being rewritten.
 
-The flat install also stages the sensor scripts (`scripts/verify/*`, `estimate-run.py`, `harness-metrics.py`) to
+The flat install also stages the sensor scripts (`scripts/verify/*`, `estimate-run.py`, `harness-metrics.py`, `headless.py`, `drive.py`) to
 `~/.claude/devkit/scripts/`, where skills and agents resolve `scripts/…` paths.
 
 Upgrading from 2.x retires the old skills, agents and hook (`multi-agent`, `task`,
@@ -425,6 +425,18 @@ plugins/
                        #   devkit-help
 ```
 
+## Headless driver (opt-in)
+
+`scripts/drive.py` runs `/code`, `/validate-code` and `/review-code` for one approved plan, each stage in a fresh `claude -p` session under a fixed permission grant, and records the run in `run-state.json`. The answers contract is in `plugins/coding-pipeline/references/headless-runs.md`.
+
+```
+python3 ~/.claude/devkit/scripts/drive.py --plan docs/plans/{slug}/plan.md [--model sonnet]
+```
+
+- It refuses to run on main or master, on a detached HEAD, on a dirty tree, and on a plan whose Status is not `approved`.
+- It never pushes and never opens a PR. The commit it makes stays on the feature branch.
+- It stops for a human on anything but `PRODUCTION READY`: NOT READY, a condition, a block, the usage limit, a `NEEDS_USER:` question, an empty diff, or a rejected commit.
+
 ## Hooks
 
 | Hook | Trigger | Behaviour |
@@ -432,7 +444,9 @@ plugins/
 | `session-bootstrap.sh` | SessionStart | Prints `PROGRESS.md` so a new session resumes with done/failed/current state |
 | `env-guard.sh` | PreToolUse | Blocks reads of `.env`, `.envrc`, `.env.*`, including via `cat`/`grep` |
 | `destructive-guard.sh` | PreToolUse(Bash) | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL |
+| `gate-filter.sh` | PreToolUse(Bash) | Opt-in: set `DEVKIT_GATE_FILTER=1`. Rewrites a simple test/lint gate command (`go test`, `tsc`, `eslint`, `npm test`…) so only failure lines and a 20-line tail reach context; the full output stays in a file named on the last line. Opt-in because Claude Code cannot pre-check the rewritten compound command, so it needs a broad Bash allow (auto/bypass mode or the driver grant). Inert when `rtk` is on PATH |
 | `secret-write-guard.sh` | PreToolUse(Write/Edit) | Blocks writing a recognisable live credential |
+| `go-test-name-guard.sh` | PreToolUse(Write) | Blocks creating a `*_test.go` with no same-named source beside it (`bar_test.go` needs `bar.go`); existing files are not judged |
 | `dispatch-budget.sh` | PreToolUse(Agent) | Warns once past the session dispatch budget (default 14, `DEVKIT_DISPATCH_BUDGET`); flags an oversized dispatch prompt |
 | `session-tracker.sh` | PostToolUse | Records changed source files and whether a gate command ran |
 | `context-budget.sh` | PostToolUse | Warns at 60% context, calls the 80% ceiling |
@@ -446,7 +460,7 @@ The guards are deterministic (regex and exit codes, no model in the loop), each 
 | `DEVKIT_HOOK_PROFILE=off` | Every guard is inert |
 | `DEVKIT_HOOK_PROFILE=standard` | Default. Guards block; `delivery-gate` warns |
 | `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
-| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:write:secret-guard`, `post:session-tracker`, `stop:delivery-gate` |
+| `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:bash:gate-filter`, `pre:write:secret-guard`, `pre:write:go-test-name`, `post:session-tracker`, `stop:delivery-gate` |
 
 `strict` blocks a given session only once — a Stop hook that blocks forever traps the operator
 rather than the mistake.

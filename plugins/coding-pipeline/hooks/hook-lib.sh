@@ -11,6 +11,13 @@
 # is deliberate: a guard that blocks every tool call because of a payload shape
 # change is worse than the risk it guards against.
 
+# The one definition of a "gate command": a test runner, linter, type checker or
+# vulnerability scan that can fail the build. Each user applies its own boundary:
+# session-tracker matches it word-bounded anywhere in the command, gate-filter
+# only at the start of a simple command (see plugins/coding-pipeline/hooks/gate-filter.sh).
+# shellcheck disable=SC2034  # read by the hooks that source this file
+DEVKIT_GATE_RE='(go test|golangci-lint|go vet|govulncheck|npm (run )?test|pnpm (run )?test|yarn test|vitest|jest|tsc|eslint|pytest|ruff check|cargo test|cargo clippy|mvn test|gradle test|phpunit|phpstan|flutter test|dart analyze)'
+
 devkit_profile() {
     printf '%s' "${DEVKIT_HOOK_PROFILE:-standard}"
 }

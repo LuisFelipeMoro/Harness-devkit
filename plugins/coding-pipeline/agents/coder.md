@@ -215,6 +215,7 @@ against the specified behaviour, not reverse-engineered line by line from what y
 9. Add no test that is not a row in the table. If Phase 1 surfaced a behaviour the table missed,
    write the test AND report it as `Gap found: ...` — never expand scope silently.
 10. Run the suite. Everything green.
+    Before creating a Go `*_test.go`, confirm its `<name>.go` exists in that directory and that no `<name>_test.go` already exists; extend the existing one instead of creating another. The guard hook and checkpoint will block a breach.
 
 ## Phase 3 — Falsify every test (mandatory — this replaces RED)
 

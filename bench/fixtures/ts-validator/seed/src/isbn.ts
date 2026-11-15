@@ -1,0 +1,2 @@
+// isbn.ts
+export {};

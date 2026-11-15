@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.2.0] — 2026-11-13
+
+### Added
+
+- `hooks/gate-filter.sh` rewrites a simple test or lint gate command so only the failures and a file path reach context. It is opt-in with `DEVKIT_GATE_FILTER=1`, and it is opt-in because Claude Code's permission check cannot pre-check the rewritten compound command, so it needs a broad Bash allow. It does nothing when rtk is installed.
+- Go test-file naming is enforced at three points: plan time (`plan-template.md`, and `plan-reviewer` PR4 as MAJOR), code time (`coder.md`), and commit or checkpoint time through `git-hooks/go-test-name.sh`, which `checkpoint-m.sh` and the git pre-commit hook share. The new PreToolUse Write guard `hooks/go-test-name-guard.sh` (id `pre:write:go-test-name`) blocks creating an unpaired `*_test.go` and names the existing test file to extend.
+- `references/headless-runs.md` sets the answers contract for running `/code`, `/validate-code` and `/review-code` headless: nine keys, `NEEDS_USER:` and the `VERDICT_LINE` and `REVIEW_SCORE` sentinels.
+- `scripts/headless.py` and the opt-in driver `scripts/drive.py` run one fresh `claude -p` session per stage under a fixed permission grant, and keep `run-state.json`. The driver stops on NOT READY, on conditions, on a block, on the usage limit, on `NEEDS_USER:`, on an empty diff, and on a rejected commit. It refuses main, master, a detached HEAD, a dirty tree and an unapproved plan. It never pushes and never opens a PR. Before the code-stage commit it lists the staged paths and refuses any whose basename matches the deny list (`.env`, `.env.*`, `.envrc`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`): it unstages them, records the path in `stop_reason`, and exits 1 without committing.
+- `estimate-run.py` has a Measured $ column and `harness-metrics.py` has a Cache hit row, both read from `run-state.json`.
+- `bench/` is a golden-set benchmark with six fixtures. It is for maintainers and is not installed.
+
+### Changed
+
+- SessionStart output is kept at 9,500 characters or fewer. The oldest PROGRESS.md entries are dropped first, and the snapshot is kept whole.
+- `/validate-code` writes the full qa and stress returns to `docs/plans/{slug}/validation/` and prints a summary.
+- Headless stages get `$(go env GOPATH)/bin` on PATH.
+
+### Fixed
+
+- `dup-gate.sh` no longer fails a tree with no scannable source.
+- `git-hooks/install.sh` copies `go-test-name.sh`.
+
+### Measured
+
+- Eval E1 (bench, sonnet, 3 reps, 18 runs, $11.97) gates green on 5 of 6 fixtures in at least 2 of 3 reps.
+- E1b (1 rep, $4.48) confirmed sentinel parsing after the fix.
+
+### Known issues
+
+- `git-hooks/go-test-name.sh` matches a stem as a `find -name` glob, so a test file whose name contains `*` or `[` can pass the pairing check.
+- `drive.py` takes no lock, so two drivers on one plan race on run-state.json and the branch, and a killed write can leave a stale `run-state.json.<pid>.tmp`.
+
 ## [3.1.3] — 2026-11-05
 
 ### Changed

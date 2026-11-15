@@ -91,6 +91,39 @@ expect "garbage json"      env-guard.sh 'not json' 0
 expect "empty payload"     destructive-guard.sh '{}' 0
 expect "empty payload w"   secret-write-guard.sh '{}' 0
 
+# ── go-test-guard: a new Go test file must pair with its source ──────────────
+# Each case is its own directory so no row depends on another row's files.
+GT="$(mktemp -d "${TMPDIR:-/tmp}/devkit-gtg.XXXXXX")"
+mkdir -p "$GT/block" "$GT/paired" "$GT/overwrite" "$GT/home"
+: > "$GT/block/foo.go"; : > "$GT/block/foo_test.go"
+: > "$GT/paired/foo.go"
+: > "$GT/overwrite/foo.go"; : > "$GT/overwrite/bar_test.go"
+gtg_json() { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }
+expect "go-test-guard: blocks new unpaired test file" go-test-name-guard.sh "$(gtg_json "$GT/block/bar_test.go")" 2
+msg=$(printf '%s' "$(gtg_json "$GT/block/bar_test.go")" | bash "$HOOKS/go-test-name-guard.sh" 2>&1 >/dev/null)
+case "$msg" in
+    "BLOCKED go-test-name: "*"foo_test.go"*) pass=$((pass + 1)) ;;
+    *) echo "FAIL: go-test-guard: blocks new unpaired test file — stderr was: $msg"; fail=1 ;;
+esac
+expect "go-test-guard: allows paired test file" go-test-name-guard.sh "$(gtg_json "$GT/paired/foo_test.go")" 0
+expect "go-test-guard: allows overwrite of existing file" go-test-name-guard.sh "$(gtg_json "$GT/overwrite/bar_test.go")" 0
+expect "go-test-guard: ignores non-test path" go-test-name-guard.sh "$(gtg_json "$GT/paired/bar.go")" 0
+expect "go-test-guard: disabled by id" go-test-name-guard.sh "$(gtg_json "$GT/block/bar_test.go")" 0 DEVKIT_DISABLED_HOOKS=pre:write:go-test-name
+# No shared script beside the hook and none under HOME: the guard must allow, not block.
+FO="$GT/plugin/hooks"; mkdir -p "$FO"
+cp "$HOOKS/go-test-name-guard.sh" "$HOOKS/hook-lib.sh" "$FO/"
+got=$(printf '%s' "$(gtg_json "$GT/block/bar_test.go")" | env HOME="$GT/home" bash "$FO/go-test-name-guard.sh" >/dev/null 2>&1; echo $?)
+if [ "$got" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: go-test-guard: fails open without shared script — exit $got (want 0)"; fail=1; fi
+# Internal faults fail open. A scratch dir that cannot be made must allow the Write.
+expect "go-test-guard: fails open on internal error" go-test-name-guard.sh "$(gtg_json "$GT/block/bar_test.go")" 0 TMPDIR="$GT/no-such-tmp"
+# A shared script exiting outside its 0/1 contract must allow the Write, not block it.
+ST="$GT/stub"; mkdir -p "$ST/hooks" "$ST/git-hooks"
+cp "$HOOKS/go-test-name-guard.sh" "$HOOKS/hook-lib.sh" "$ST/hooks/"
+printf 'exit 3\n' > "$ST/git-hooks/go-test-name.sh"
+got=$(printf '%s' "$(gtg_json "$GT/block/bar_test.go")" | env HOME="$GT/home" bash "$ST/hooks/go-test-name-guard.sh" >/dev/null 2>&1; echo $?)
+if [ "$got" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: go-test-guard: fails open on internal error — stub shared script exit 3 gave $got (want 0)"; fail=1; fi
+rm -rf "$GT"
+
 # ── delivery-gate: warns on unproven work, silent once a gate ran ────────────
 SESS="${TMPDIR:-/tmp}/claude-devkit/citest"
 rm -rf "$SESS"
@@ -208,6 +241,99 @@ case "$out" in *"pre-compaction snapshot"*"Do not ask the human"*)
     *) echo "FAIL: bootstrap on compact did not re-inject the snapshot — got: $out"; fail=1 ;; esac
 rm -rf "$PC" "$pc_state" "${TMPDIR:-/tmp}/claude-devkit/pcx"
 
+# ── session-bootstrap: SessionStart output stays within 9,500 characters ─────
+# Claude Code cuts SessionStart output at 10,000 characters. Every case measures
+# characters of what a resumed session would receive, and asserts the snapshot
+# and resume lines survive, so a cap met by deleting them does not pass.
+bs_check() { if [ "$2" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: $1"; fail=1; fi; }
+BS="$(mktemp -d "${TMPDIR:-/tmp}/devkit-bs.XXXXXX")"
+# bs_dir <name> — a fresh project dir with a private TMPDIR, so the state dir is isolated
+bs_dir() { local d="$BS/$1"; rm -rf "$d"; mkdir -p "$d/tmp/claude-devkit/bs"; printf '%s' "$d"; }
+# bs_run <dir> <source> — runs the hook inside <dir>; stdout lands in <dir>/out
+bs_run() {
+    printf '{"session_id":"bs","source":"%s","cwd":"%s"}' "$2" "$1" \
+        | ( cd "$1" && env TMPDIR="$1/tmp" bash "$ABS_HOOKS/session-bootstrap.sh" ) >"$1/out" 2>&1
+}
+# bs_entries <count> <chars-each> — "## [E01]…" entries, each exactly <chars-each> incl. newline
+bs_entries() {
+    python3 -I -c '
+import sys
+count, size = int(sys.argv[1]), int(sys.argv[2])
+for i in range(1, count + 1):
+    head = "## [E%02d] entry %d " % (i, i)
+    sys.stdout.write(head + "x" * (size - len(head) - 1) + "\n")
+' "$1" "$2"
+}
+bs_len() { python3 -I -c 'import sys; print(len(open(sys.argv[1], encoding="utf-8").read()))' "$1"; }
+# bs_snap_ok <out> <snapshot> — within budget, PROGRESS then the whole snapshot then the resume line
+bs_snap_ok() {
+    python3 -I -c '
+import sys
+out = open(sys.argv[1], encoding="utf-8").read()
+snap = open(sys.argv[2], encoding="utf-8").read()
+end = out.find("=== end PROGRESS.md ===")
+at = out.find(snap)
+ok = len(out) <= 9500 and end >= 0 and at > end and "Do not ask the human" in out[at + len(snap):]
+sys.exit(0 if ok else 1)
+' "$1" "$2"
+}
+
+# trims oldest entries: 30 × 600 chars cannot fit whole; the newest survive and the count is named
+d=$(bs_dir trim); bs_entries 30 600 > "$d/PROGRESS.md"; bs_run "$d" startup
+kept=$(grep -c '^## \[E' "$d/out")
+[ "$(bs_len "$d/out")" -le 9500 ] && grep -q 'E30' "$d/out" && ! grep -q 'E01' "$d/out" \
+    && grep -qF "($((30 - kept)) older PROGRESS.md entries omitted" "$d/out"
+bs_check "bootstrap: trims oldest entries" $?
+
+# snapshot whole after trim: a 2,000-char snapshot is kept whole, after PROGRESS, before the resume line
+d=$(bs_dir snapwhole); bs_entries 30 600 > "$d/PROGRESS.md"
+python3 -I -c 'import sys; sys.stdout.write("SNAP-START\n" + "s" * (2000 - len("SNAP-START\n") - len("SNAP-END\n")) + "SNAP-END\n")' > "$d/snap.expected"
+cp "$d/snap.expected" "$d/tmp/claude-devkit/bs/precompact.md"
+bs_run "$d" compact; bs_snap_ok "$d/out" "$d/snap.expected"
+bs_check "bootstrap: snapshot whole after trim" $?
+
+# oversized snapshot cut last: a 10,000-char snapshot alone breaks the cap, so PROGRESS goes and the snapshot is cut
+d=$(bs_dir oversize); printf '# Progress\n' > "$d/PROGRESS.md"; bs_entries 2 600 >> "$d/PROGRESS.md"
+python3 -I -c 'import sys; sys.stdout.write("".join("SNAPLINE %04d " % i + "z" * 85 + "\n" for i in range(100)))' > "$d/tmp/claude-devkit/bs/precompact.md"
+bs_run "$d" compact
+[ "$(bs_len "$d/out")" -le 9500 ] && tail -n 1 "$d/out" | grep -q 'Do not ask the human to restart.' \
+    && grep -qF "(snapshot truncated — see git status)" "$d/out" \
+    && grep -qF "older PROGRESS.md entries omitted" "$d/out" && ! grep -qF "# Progress" "$d/out"
+bs_check "bootstrap: oversized snapshot cut last" $?
+
+# no entries over budget: a free-form 20,000-char PROGRESS keeps its first characters and says it was cut
+d=$(bs_dir freeform)
+python3 -I -c 'import sys; sys.stdout.write("".join("free-form line %05d " % i + "f" * 78 + "\n" for i in range(200)))' > "$d/PROGRESS.md"
+bs_run "$d" startup
+python3 -I -c '
+import sys
+out = open(sys.argv[1], encoding="utf-8").read()
+src = open(sys.argv[2], encoding="utf-8").read()
+body = out.split("\n", 1)[1] if "\n" in out else ""
+ok = len(out) <= 9500 and body.startswith(src[:60]) and "PROGRESS.md cut to the size budget" in out
+sys.exit(0 if ok else 1)
+' "$d/out" "$d/PROGRESS.md"
+bs_check "bootstrap: no entries over budget" $?
+
+# small progress verbatim: a 2,000-char PROGRESS is printed byte-for-byte with no omission line
+d=$(bs_dir small); bs_entries 20 100 > "$d/PROGRESS.md"; bs_run "$d" startup
+python3 -I -c '
+import sys
+out = open(sys.argv[1], encoding="utf-8").read()
+src = open(sys.argv[2], encoding="utf-8").read()
+want = "=== PROGRESS.md (resume context — written by pipelines/handoff last session) ===\n" + src + "=== end PROGRESS.md ===\n"
+sys.exit(0 if out == want else 1)
+' "$d/out" "$d/PROGRESS.md"
+bs_check "bootstrap: small progress verbatim" $?
+
+# byte-stable: two SessionStart runs over the same PROGRESS.md print identical bytes
+d=$(bs_dir stable); bs_entries 30 600 > "$d/PROGRESS.md"
+bs_run "$d" startup; cp "$d/out" "$d/out1"; bs_run "$d" startup
+cmp -s "$d/out1" "$d/out"
+bs_check "bootstrap: byte-stable" $?
+
+rm -rf "$BS"
+
 # ── dispatch-budget: counts subagents, warns once, never blocks ──────────────
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
 dsp() { printf '%s' '{"session_id":"dsp"}' | env DEVKIT_DISPATCH_BUDGET=3 bash "$HOOKS/dispatch-budget.sh" 2>&1; }
@@ -245,6 +371,203 @@ out=$(prompt_payload "$normal" dspp3 | bash "$HOOKS/dispatch-budget.sh" 2>&1)
 case "$out" in *split*) echo "FAIL: dispatch-budget: normal prompt is silent — got: $out"; fail=1 ;;
     *) pass=$((pass + 1)) ;; esac
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspp1" "${TMPDIR:-/tmp}/claude-devkit/dspp2" "${TMPDIR:-/tmp}/claude-devkit/dspp3"
+
+# ── gate-filter + session-tracker: failures reach context, the full log stays on disk ──
+# A rewritten command is run for real against a fake `go` on PATH, so the assertions judge
+# the output a model would receive, not the hook's JSON shape alone.
+gf_check() {   # gf_check <row name> <0|1> — the row name is the needle break-run looks for
+    if [ "$2" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: $1"; fail=1; fi
+}
+GF="$(mktemp -d "${TMPDIR:-/tmp}/devkit-gf.XXXXXX")"
+mkdir -p "$GF/bin" "$GF/cwd" "$GF/rtkbin"
+cat > "$GF/bin/go" <<'STUB'
+#!/usr/bin/env bash
+# fake gate: 300 numbered lines, FAIL lines at 200 and 260 when GO_STUB_FAIL=yes, exit $GO_STUB_RC
+[ -n "${GO_STUB_ARGS:-}" ] && printf '%s\n' "$*" > "$GO_STUB_ARGS"
+i=1
+while [ "$i" -le 300 ]; do
+    if [ "${GO_STUB_FAIL:-}" = yes ] && { [ "$i" = 200 ] || [ "$i" = 260 ]; }; then
+        echo "--- FAIL: Test$i"
+    else
+        echo "line $i ok"
+    fi
+    i=$((i + 1))
+done
+exit "${GO_STUB_RC:-0}"
+STUB
+chmod +x "$GF/bin/go"
+printf '#!/bin/sh\nexit 0\n' > "$GF/rtkbin/rtk"; chmod +x "$GF/rtkbin/rtk"
+# PATH with every rtk binary removed: this machine has one, and the filter is inert under it
+NORTK=""
+for d in $(printf '%s' "$PATH" | tr ':' ' '); do
+    [ -x "$d/rtk" ] || NORTK="${NORTK:+$NORTK:}$d"
+done
+
+gf_run() {   # gf_run <session> <command> [VAR=value...] -> the hook's stdout
+    local payload
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"session_id": sys.argv[1], "tool_input": {"command": sys.argv[2], "description": "x"}}))' "$1" "$2")
+    shift 2
+    printf '%s' "$payload" | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 "$@" bash "$HOOKS/gate-filter.sh" 2>/dev/null
+}
+GF_PRE='import json, sys
+raw = sys.argv[1]
+doc = json.loads(raw) if raw else {}
+d = doc.get("hookSpecificOutput", {}).get("updatedInput", {}) if isinstance(doc, dict) else {}
+c = d.get("command", "") if isinstance(d, dict) else ""'
+gf_py() {    # gf_py <hook-output> — python body on stdin; raw/doc/d/c bound; exit 0 iff it passes
+    local body
+    body="$(cat)"
+    python3 -c "$GF_PRE
+$body" "$1" 2>/dev/null
+}
+gf_cmd() {   # gf_cmd <hook-output> -> the rewritten command text
+    python3 -c "$GF_PRE
+print(c)" "$1" 2>/dev/null
+}
+gf_log() {   # gf_log <hook-output> -> the log path the rewritten command redirects into
+    python3 -c "$GF_PRE
+import shlex
+print(shlex.split(c.split('} > ', 1)[1].split(' 2>&1;', 1)[0])[0])" "$1" 2>/dev/null
+}
+
+# tracker: records gate after regex move — gates recorded word-bounded, tsconfig reads not
+TRK="${TMPDIR:-/tmp}/claude-devkit/trk1"; rm -rf "$TRK"
+for c in 'go test ./...' 'npx tsc --noEmit' 'cat tsconfig.json'; do
+    python3 -c 'import json,sys; print(json.dumps({"session_id": "trk1", "tool_input": {"command": sys.argv[1]}}))' "$c" \
+        | bash "$HOOKS/session-tracker.sh" >/dev/null 2>&1
+done
+gates="$TRK/gates"
+[ "$(wc -l < "$gates" 2>/dev/null | tr -d ' ')" = 2 ] \
+    && grep -qxF 'go test ./...' "$gates" && grep -qxF 'npx tsc --noEmit' "$gates" && ! grep -q tsconfig "$gates"
+gf_check "tracker: records gate after regex move" $?
+rm -rf "$TRK"
+
+# gate-filter: rewrites go test — the whole input is kept, only command changes
+out=$(gf_run gf2 'go test ./...')
+gf_py "$out" <<'PY'
+assert c.startswith("{ go test ./... ; } >"), c
+assert d.get("description") == "x", d
+PY
+gf_check "gate-filter: rewrites go test" $?
+
+# gate-filter: rewrites tsc, eslint and npm test
+rw=0
+for c in 'tsc --noEmit' 'eslint --max-warnings 0 .' 'npm test'; do
+    case "$(gf_cmd "$(gf_run gf3 "$c")")" in "{ $c ; } >"*) ;; *) rw=1 ;; esac
+done
+gf_check "gate-filter: rewrites tsc, eslint and npm test" $rw
+
+# gate-filter: failure lines only — 300 lines in, FAIL lines and the path out, log keeps all
+out=$(gf_run gf4 'go test ./...'); cmd=$(gf_cmd "$out"); log=$(gf_log "$out")
+( cd "$GF/cwd" && GO_STUB_FAIL=yes GO_STUB_RC=1 PATH="$GF/bin:$NORTK" bash -c "$cmd" ) >"$GF/o4" 2>&1
+[ "$(wc -l < "$GF/o4" | tr -d ' ')" -le 200 ] \
+    && grep -q -- '--- FAIL: Test200' "$GF/o4" && grep -q -- '--- FAIL: Test260' "$GF/o4" \
+    && grep -q 'full output:' "$GF/o4" && [ -f "$log" ] && [ "$(wc -l < "$log" | tr -d ' ')" = 300 ]
+gf_check "gate-filter: failure lines only" $?
+
+# gate-filter: success tail — no failure pattern: last 20 lines and the exit line only
+out=$(gf_run gf5 'go test ./...'); cmd=$(gf_cmd "$out")
+( cd "$GF/cwd" && GO_STUB_FAIL=no GO_STUB_RC=0 PATH="$GF/bin:$NORTK" bash -c "$cmd" ) >"$GF/o5" 2>&1
+[ "$(wc -l < "$GF/o5" | tr -d ' ')" = 21 ] && [ "$(sed -n 1p "$GF/o5")" = "line 281 ok" ] \
+    && tail -n 1 "$GF/o5" | grep -q 'exit 0'
+gf_check "gate-filter: success tail" $?
+
+# gate-filter: exit status preserved — a filtered failure still fails the call
+out=$(gf_run gf6 'go test ./...'); cmd=$(gf_cmd "$out")
+( cd "$GF/cwd" && GO_STUB_FAIL=yes GO_STUB_RC=3 PATH="$GF/bin:$NORTK" bash -c "$cmd" ) >/dev/null 2>&1
+[ "$?" = 3 ]
+gf_check "gate-filter: exit status preserved" $?
+
+# gate-filter: skips non-gate — only gate commands are touched
+[ -z "$(gf_run gf7 'ls -la')" ]
+gf_check "gate-filter: skips non-gate" $?
+
+# gate-filter: skips gate word mid-command — a rewriter must not wrap commands that mention a gate
+[ -z "$(gf_run gf8 'echo go test')" ] && [ -z "$(gf_run gf8 'git commit -m fix-go-test')" ]
+gf_check "gate-filter: skips gate word mid-command" $?
+
+# gate-filter: skips compound — one case per AC3 metacharacter
+sc=0
+for c in 'go test ./... | tee x' 'go test ./... & wait' 'go test ./...; ls' 'go test $(echo ./...)' \
+         'go test `echo ./...`' 'go test ./... > out' 'go test ./... < in' "$(printf 'go test ./...\nls')"; do
+    [ -z "$(gf_run gf9 "$c")" ] || sc=1
+done
+gf_check "gate-filter: skips compound" $sc
+
+# gate-filter: skips comment — a trailing # would swallow the closing brace
+[ -z "$(gf_run gf10 'go test ./... # note')" ]
+gf_check "gate-filter: skips comment" $?
+
+# gate-filter: keeps quoted args — a quoted | still skips; quoted -run arg survives verbatim
+qa=0
+[ -z "$(gf_run gf11 "go test -run 'TestA\\|TestB' ./...")" ] || qa=1
+out=$(gf_run gf11 'go test -run "TestA" ./...'); cmd=$(gf_cmd "$out")
+case "$cmd" in '{ go test -run "TestA" ./... ; } >'*) ;; *) qa=1 ;; esac
+rm -f "$GF/args"
+( cd "$GF/cwd" && GO_STUB_ARGS="$GF/args" PATH="$GF/bin:$NORTK" bash -c "$cmd" ) >/dev/null 2>&1
+grep -qx 'test -run TestA ./...' "$GF/args" 2>/dev/null || qa=1
+gf_check "gate-filter: keeps quoted args" $qa
+
+# gate-filter: skips rtk — rtk owns the shaping when it is installed
+[ -z "$(gf_run gf12 'rtk go test ./...')" ] && [ -z "$(gf_run gf12 'go test ./...' PATH="$GF/rtkbin:$GF/bin:$NORTK")" ]
+gf_check "gate-filter: skips rtk" $?
+
+# gate-filter: opt-in when flagged — no rewrite without DEVKIT_GATE_FILTER=1, rewrite with it
+optin_payload='{"session_id":"gf19","tool_input":{"command":"go test ./...","description":"x"}}'
+[ -z "$(printf '%s' "$optin_payload" | env -u DEVKIT_GATE_FILTER PATH="$GF/bin:$NORTK" bash "$HOOKS/gate-filter.sh" 2>/dev/null)" ] \
+    && [ -n "$(printf '%s' "$optin_payload" | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 bash "$HOOKS/gate-filter.sh" 2>/dev/null)" ]
+gf_check "gate-filter: opt-in when flagged" $?
+
+# gate-filter: disabled by id — the documented off-switch works
+[ -z "$(gf_run gf13 'go test ./...' DEVKIT_DISABLED_HOOKS=pre:bash:gate-filter)" ]
+gf_check "gate-filter: disabled by id" $?
+
+# gate-filter: never sets permissionDecision — the rewrite still goes through the permission flow
+out=$(gf_run gf14 'go test ./...')
+gf_py "$out" <<'PY'
+assert "permissionDecision" not in raw, raw
+assert "permissionDecision" not in doc.get("hookSpecificOutput", {}), doc
+assert c != "", raw
+PY
+gf_check "gate-filter: never sets permissionDecision" $?
+
+# gate-filter: added surface is the listed set — byte-for-byte the C2 template, nothing appended
+out=$(gf_run gf15 'go test ./...')
+gf_py "$out" <<'PY'
+import shlex
+path = shlex.split(c.split("} > ", 1)[1].split(" 2>&1;", 1)[0])[0]
+q = "'" + path.replace("'", "'\\''") + "'"
+expected = ("{ go test ./... ; } > " + q + " 2>&1; rc=$?; "
+    "grep -nE -B2 -A6 'FAIL|ERROR|Error|error:|panic:|✗|×' " + q + " | head -n 150; "
+    "tail -n 20 " + q + "; "
+    'echo "[gate-filter] exit $rc · full output: ' + q + '"; '
+    "(exit $rc)")
+assert c == expected, c
+assert "/claude-devkit/gf15/gate-" in path, path
+PY
+gf_check "gate-filter: added surface is the listed set" $?
+
+# gate-filter: quoted path — a TMPDIR with a space and a quote still runs and logs at the literal path
+QP="$GF/with space's"; mkdir -p "$QP"
+out=$(gf_run gf16 'go test ./...' "TMPDIR=$QP"); cmd=$(gf_cmd "$out"); log=$(gf_log "$out")
+( cd "$GF/cwd" && GO_STUB_FAIL=no PATH="$GF/bin:$NORTK" bash -c "$cmd" ) >/dev/null 2>&1
+[ -n "$log" ] && [ -f "$log" ] && case "$log" in "$QP/claude-devkit/gf16/gate-"*) ;; *) false ;; esac \
+    && [ -z "$(ls -A "$GF/cwd")" ]
+gf_check "gate-filter: quoted path" $?
+
+# gate-filter: malformed payload — fail open: silent, exit 0
+printf 'not json' | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 bash "$HOOKS/gate-filter.sh" >"$GF/o17" 2>&1; rc17=$?
+[ "$rc17" = 0 ] && [ ! -s "$GF/o17" ]
+gf_check "gate-filter: malformed payload" $?
+
+# gate-filter: state dir unavailable — the command must still run, unfiltered: silent, exit 0
+: > "$GF/afile"
+printf '%s' '{"session_id":"gf18","tool_input":{"command":"go test ./..."}}' \
+    | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 TMPDIR="$GF/afile" bash "$HOOKS/gate-filter.sh" >"$GF/o18" 2>&1; rc18=$?
+[ "$rc18" = 0 ] && [ ! -s "$GF/o18" ]
+gf_check "gate-filter: state dir unavailable" $?
+
+rm -rf "$GF" "${TMPDIR:-/tmp}"/claude-devkit/gf* 2>/dev/null
 
 echo "hook tests: $pass passed, exit=$fail"
 exit $fail

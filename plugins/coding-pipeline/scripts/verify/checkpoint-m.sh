@@ -287,37 +287,46 @@ is_renamed() {  # is_renamed <path>
     return 1
 }
 
-check_go_test_file_name() {  # check_go_test_file_name <path>
-    local path="$1" dir stem
-    case "$path" in
-        *_test.go) ;;
-        *) return 0 ;;
-    esac
-    case "/$path" in
-        */testdata/*|*/vendor/*) return 0 ;;
-    esac
-    [ -f "$path" ] || return 0
-    git cat-file -e "$base:$path" 2>/dev/null && return 0
-    # A moved file keeps the name debt it already had; this diff did not create it.
-    is_renamed "$path" && return 0
-    dir=$(dirname "$path")
-    stem=$(basename "$path" _test.go)
-    case "$stem" in
-        main|export|example) return 0 ;;
-    esac
-    stem="${stem%_integration}"
-    stem="${stem%_e2e}"
-    [ -f "$dir/$stem.go" ] && return 0
-    # A platform-split package has foo_linux.go and foo_windows.go but no foo.go.
-    find "$dir" -maxdepth 1 -name "${stem}_*.go" ! -name '*_test.go' | grep -q . && return 0
-    # A test-only directory has no source file to pair with.
-    find "$dir" -maxdepth 1 -name '*.go' ! -name '*_test.go' | grep -q . || return 0
-    fail "test-file-name" "$path — no $stem.go in the same directory"
-}
+# New-file filter only here; the pairing rule itself lives in go-test-name.sh,
+# shared with pre-commit and the Write guard so the three gates cannot drift.
+new_go_tests=()
 if [ ${#seen[@]} -gt 0 ]; then
     for p in "${seen[@]}"; do
-        check_go_test_file_name "$p"
+        case "$p" in
+            *_test.go) ;;
+            *) continue ;;
+        esac
+        [ -f "$p" ] || continue
+        git cat-file -e "$base:$p" 2>/dev/null && continue
+        # A moved file keeps the name debt it already had; this diff did not create it.
+        is_renamed "$p" && continue
+        new_go_tests+=("$p")
     done
+fi
+if [ ${#new_go_tests[@]} -gt 0 ]; then
+    gtn="$SCRIPT_DIR/../../git-hooks/go-test-name.sh"
+    [ -f "$gtn" ] || gtn="$HOME/.claude/git-hooks/go-test-name.sh"
+    [ -f "$gtn" ] || unmeasured "go-test-name.sh not found beside the devkit git-hooks or in ~/.claude/git-hooks"
+    gtn_out=$(bash "$gtn" "${new_go_tests[@]}" 2>&1)
+    gtn_rc=$?
+    case "$gtn_rc" in
+        0) : ;;
+        1)
+            gtn_lines=0
+            while IFS= read -r gtn_line; do
+                case "$gtn_line" in
+                    "go-test-name: "*)
+                        fail "test-file-name" "${gtn_line#go-test-name: }"
+                        gtn_lines=$((gtn_lines + 1))
+                        ;;
+                esac
+            done <<EOF
+$gtn_out
+EOF
+            [ "$gtn_lines" -gt 0 ] || fail "test-file-name" "new Go test file not paired with its source (go-test-name.sh exited 1 with no detail)"
+            ;;
+        *) unmeasured "go-test-name: $gtn_out" ;;
+    esac
 fi
 
 # ── viewport-zoom: a page this diff touches does not block zoom (WCAG 1.4.4) ─
