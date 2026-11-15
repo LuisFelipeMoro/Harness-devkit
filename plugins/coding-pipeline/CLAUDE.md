@@ -24,7 +24,9 @@ This devkit is a Harness. Four components, all mandatory:
   |---|---|---|---|
   | `env-guard.sh` | PreToolUse | `pre:read:env-guard` | Blocks any read of `.env` / `.envrc` |
   | `destructive-guard.sh` | PreToolUse(Bash) | `pre:bash:destructive-guard` | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL run through a database client |
+  | `gate-filter.sh` | PreToolUse(Bash) | `pre:bash:gate-filter` | Opt-in (`DEVKIT_GATE_FILTER=1`) because Claude Code cannot pre-check the rewritten compound command and needs a broad Bash allow (auto/bypass or driver grant); rewrites a simple test/lint gate command so only failures and a 20-line tail reach context; full output kept in a file named in the last line |
   | `secret-write-guard.sh` | PreToolUse(Write/Edit) | `pre:write:secret-guard` | Blocks writing a recognisable live credential into the tree |
+  | `go-test-name-guard.sh` | PreToolUse(Write) | `pre:write:go-test-name` | Blocks creating a `*_test.go` with no same-named source beside it (go.md naming rule); existing files are not judged |
   | `session-tracker.sh` | PostToolUse | `post:session-tracker` | Records which source files changed and whether any gate command ran |
   | `context-budget.sh` | PostToolUse | `post:context-budget` | Reads context fill from the session transcript; warns at 60%, calls the 80% ceiling |
   | `dispatch-budget.sh` | PreToolUse(Agent\|Task) | `pre:agent:dispatch-budget` | Counts subagent dispatches, warns once past the session budget |
@@ -109,6 +111,7 @@ Rules:
   `scripts/estimate-run.py`: inline (small change, no dispatch) · single coder · sequential (one
   `coder` per Tasks row, default) · parallel (≤ 3 writers, each in its own worktree, only for rows with
   no dependency and disjoint `Files`; see `references/delivery-and-worktree.md`). Never parallel writers in one tree.
+  Opt-in headless driver: `scripts/drive.py` runs an approved plan's stages headless (answers contract in `references/headless-runs.md`).
 - **Agent teams** are experimental and off: nothing in the devkit enables them, and a user who does keeps them to read-only lanes — read `references/agent-teams.md` before setting the flag.
 - **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a multi-step run, which is how one spent sixty dispatches without

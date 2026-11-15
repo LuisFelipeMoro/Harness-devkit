@@ -234,6 +234,42 @@ check "records_version_state" "state file missing or holds the wrong commit" $?
 [ "$(hook_count "$H/.claude/settings.json" destructive-guard.sh)" = "1" ]
 check "wires_hooks_end_to_end" "destructive-guard not wired after a full install" $?
 
+# installs_gate_filter_hook — a flat install must get the Bash rewrite hook, under the Bash matcher
+GFH="$(newhome)"   # own home: $H is still the install home the detects_up_to_date case reads
+python3 "$WIRE" "$PLUGIN" --home "$GFH" >/dev/null 2>&1
+python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+hit = [g for g in d.get("hooks", {}).get("PreToolUse", [])
+       if g.get("matcher") == "Bash" and any("gate-filter.sh" in h.get("command", "") for h in g.get("hooks", []))]
+assert hit, "no PreToolUse Bash entry for gate-filter.sh"
+' "$GFH/.claude/settings.json" 2>/dev/null
+check "installs_gate_filter_hook" "fresh install has no PreToolUse Bash entry for gate-filter.sh" $?
+rm -rf "$GFH"
+
+# git-hooks install: copies go-test-name.sh — pre-commit calls it beside the hook; without the copy
+# the Go test naming gate is silently absent in every repo the installer touched.
+GTN="$(newhome)"; mkdir -p "$GTN/repo"
+( cd "$GTN/repo" && git init -q && bash "$PLUGIN/git-hooks/install.sh" ) >/dev/null 2>&1
+[ -x "$GTN/repo/.git/hooks/go-test-name.sh" ]
+check "git-hooks install: copies go-test-name.sh" "go-test-name.sh not copied executable beside the hooks" $?
+rm -rf "$GTN"
+
+# installs_go_test_guard_hook — a flat install must get the Write guard and the staged shared script
+GTG="$(newhome)"; GTGW="$(newhome)"
+( cd "$GTGW" && HOME="$GTG" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
+python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+hit = [g for g in d.get("hooks", {}).get("PreToolUse", [])
+       if g.get("matcher") == "Write" and any("go-test-name-guard.sh" in h.get("command", "") for h in g.get("hooks", []))]
+assert hit, "no PreToolUse Write entry for go-test-name-guard.sh"
+' "$GTG/.claude/settings.json" 2>/dev/null
+wired=$?
+[ "$wired" = 0 ] && [ -f "$GTG/.claude/git-hooks/go-test-name.sh" ]
+check "installs_go_test_guard_hook" "fresh install lacks the Write entry for go-test-name-guard.sh or the staged go-test-name.sh" $?
+rm -rf "$GTG" "$GTGW"
+
 # detects_up_to_date — second run recognises the commit it already installed
 out2="$( cd "$WORK" && bash "$REPO/install.sh" --yes --no-deps --home "$H" 2>&1 )"
 printf '%s' "$out2" | grep -q "up to date"
@@ -261,8 +297,19 @@ H="$(newhome)"; WORK="$(newhome)"
 ( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
 D="$H/.claude/devkit/scripts"
 [ -x "$D/verify/break-run.sh" ] && [ -x "$D/verify/verdict.sh" ] && [ -f "$D/verify/diff-lib.sh" ] \
-    && [ -x "$D/estimate-run.py" ] && [ -x "$D/harness-metrics.py" ]
-check "stages_sensor_scripts" "verify/*.sh, estimate-run.py or harness-metrics.py missing or not executable under ~/.claude/devkit/scripts" $?
+    && [ -x "$D/estimate-run.py" ] && [ -x "$D/harness-metrics.py" ] && [ -x "$D/headless.py" ]
+check "stages_sensor_scripts" "verify/*.sh, estimate-run.py, harness-metrics.py or headless.py missing or not executable under ~/.claude/devkit/scripts" $?
+rm -rf "$H" "$WORK"
+
+# installs_drive_scripts — the driver is the one entry point that runs /code, /validate-code and
+# /review-code unattended; a flat install must stage drive.py executable beside the headless.py
+# it imports, or the documented command has nothing to run.
+H="$(newhome)"; WORK="$(newhome)"
+( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
+rc=$?
+D="$H/.claude/devkit/scripts"
+[ "$rc" = 0 ] && [ -x "$D/drive.py" ] && [ -f "$D/headless.py" ]
+check "installs_drive_scripts" "install exited $rc, or drive.py is not executable / headless.py is missing under ~/.claude/devkit/scripts" $?
 rm -rf "$H" "$WORK"
 
 # retires_devkit_files — an upgrade from a 2.x flat install must not leave the retired

@@ -1,0 +1,2 @@
+// createNote.ts
+export {};

@@ -24,7 +24,8 @@ done
 # resolve_base() is sourced by both dup-gate.sh and pre-push's fallback path —
 # missing it degrades dup-gate.sh's attribution and pre-push's manual-run guard
 # to whole-repo/skipped mode.
-for helper in dup-gate.sh dup-attribution.py release-content-guard.sh base-lib.sh; do
+# go-test-name.sh is the Go test-file naming rule, called by pre-commit beside the hook.
+for helper in dup-gate.sh dup-attribution.py release-content-guard.sh base-lib.sh go-test-name.sh; do
     if [ -f "$SCRIPT_DIR/$helper" ]; then
         cp "$SCRIPT_DIR/$helper" "$HOOKS_DIR/$helper"
         chmod +x "$HOOKS_DIR/$helper"

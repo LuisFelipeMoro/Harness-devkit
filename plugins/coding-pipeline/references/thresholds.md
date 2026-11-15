@@ -66,6 +66,7 @@ the same three scores; only the Stress label differs (`[folded]` vs `[dispatched
 | Thing | Limit |
 |---|---|
 | Context ceiling | 80% of window (warn at 60%) — sensor: `hooks/context-budget.sh` |
+| SessionStart output | ≤ 9,500 characters (Claude Code cuts at 10,000); PROGRESS.md gives way first, oldest `## [` entries first — sensor: `hooks/session-bootstrap.sh` |
 | Subagent dispatches | 14 per session, advisory — `/planning` (1 map + 1 `plan-reviewer` per round, max 2) + `/code` (1 `coder` per Tasks row) + `/validate-code` (0–2, by depth) + `/review-code` (1). Sensor: `hooks/dispatch-budget.sh` |
 | Writer subagents per turn | 3 (never 4+); read-only subagents are counted separately in the next row |
 | Read-only subagents per turn | 6 — each returns ≤ 150 words or one table; every one counts toward the session dispatch budget |

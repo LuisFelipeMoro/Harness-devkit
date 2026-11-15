@@ -23,6 +23,10 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import headless  # noqa: E402 — the one run-state reader, shared with estimate-run.py
 
 AC_LINE = re.compile(r"^[+-]\s*-\s*(AC|SEC|NFR)-?\d")   # an added/removed AC bullet
 FIX_SUBJECT = re.compile(r"^fix(\(.+\))?!?:")            # conventional-commit fix
@@ -161,6 +165,47 @@ def test_honesty(plans):
             "tautology MAJORs: n/a — needs judgement: qa reports are not persisted")
 
 
+WINDOW_RE = re.compile(r"^(\d+)\.(second|minute|hour|day|week|month|year)s?$")
+WINDOW_S = {"second": 1, "minute": 60, "hour": 3600, "day": 86400,
+            "week": 604800, "month": 2592000, "year": 31536000}
+
+
+def window_start(since, now):
+    """Start of the --since window for run-state dates: `N.days`-style or YYYY-MM-DD; None otherwise."""
+    m = WINDOW_RE.match(since)
+    if m:
+        return now - timedelta(seconds=int(m.group(1)) * WINDOW_S[m.group(2)])
+    try:
+        return datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def parse_utc(text):
+    try:
+        t = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def cache_hit(since):
+    """references/harness-metrics.md — Cache hit: prefix stability over driven runs.
+    Σcache_read ÷ Σ(input + cache_read + cache_creation) over the recorded stages finished in the window."""
+    start = window_start(since, datetime.now(timezone.utc))
+    if start is None:
+        return "n/a — needs judgement: --since form not parsed for run-state dates (use N.days or YYYY-MM-DD)"
+    stages = [s for r in headless.load_runs(".") for s in r.stages
+              if (t := parse_utc(s.finished_at)) is not None and t >= start]
+    if not stages:
+        return "n/a — no driven runs"
+    read = sum(s.cache_read for s in stages)
+    total = sum(s.input_tokens + s.cache_read + s.cache_creation for s in stages)
+    if total == 0:
+        return f"n/a — no input tokens recorded (n={len(stages)} stages)"
+    return f"{100 * read / total:.1f}% (n={len(stages)} stages)"
+
+
 def main(argv):
     base, since = None, "90.days"
     it = iter(argv)
@@ -192,6 +237,7 @@ def main(argv):
         ("Rework", rework(base, since), "flat; a rise means the spec was too loose"),
         ("Sensor escape", sensor_escape(), "falling — a failure caught late cost a full loop"),
         ("Test honesty", test_honesty(plans), "zero, with coverage steady"),
+        ("Cache hit (driven stages)", cache_hit(since), "high and steady — a fall means the stage prompt prefix changed"),
     ]
     print(f"# Harness health signals — window {since} (references/harness-metrics.md)")
     print()

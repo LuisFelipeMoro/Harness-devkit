@@ -25,7 +25,9 @@ cmd="$(devkit_field "$input" command)"
 if [ -n "$cmd" ]; then
     # A gate is a command that can fail the build: test runners, linters, type
     # checkers, vulnerability scanners. Formatters alone do not count.
-    if printf '%s' "$cmd" | grep -qE '(go test|golangci-lint|go vet|govulncheck|npm (run )?test|pnpm (run )?test|yarn test|vitest|jest|tsc |eslint|pytest|ruff check|cargo test|cargo clippy|mvn test|gradle test|phpunit|phpstan|flutter test|dart analyze)'; then
+    # Word-bounded anywhere: `npx tsc --noEmit` counts, `cat tsconfig.json` does not.
+    gate_pat="(^|[^[:alnum:]_])(${DEVKIT_GATE_RE})([[:space:]]|\$)"
+    if printf '%s' "$cmd" | grep -qE "$gate_pat"; then
         printf '%s\n' "$cmd" >> "$state/gates"
     fi
 fi

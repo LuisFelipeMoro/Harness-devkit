@@ -49,6 +49,22 @@ Produced by: `/code` (appends each coder's `Falsification evidence` lines under 
 
 ---
 
+## docs/plans/{slug}/validation/
+Produced by: `/validate-code` step 8 — `qa.md` and `stress.md`, each the agent's return verbatim (no plan → `$TMPDIR/validate-{slug}/`) | Consumed by: the user, who reads the score, top findings and path printed by `/validate-code`
+
+Generated output: release-excluded (`.devkit/release-exclude`), never committed.
+
+---
+
+## docs/plans/{slug}/run-state.json
+Produced by: `scripts/drive.py` after every stage (written to a temp file, then renamed into place) | Consumed by: `drive.py --resume-from`, `headless.load_runs` (estimate-run `Measured $`, harness-metrics cache-hit row)
+
+Schema 1: `schema`, `plan`, `slug`, `branch`, `base`, `mode`, `stages` (per stage: `stage`, `status`, `exit_code`, `subtype`, `model`, token and cost counts, `turns`, `session_id`, `sentinel`, `wall_s`, `finished_at`), `status`, `stop_reason`. Counts and identifiers only: no prompt, result or tool text. A file that does not match this schema is reported `UNMEASURED` and never half-read.
+
+Generated output: release-excluded (`**/run-state.json`), never committed by the driver.
+
+---
+
 ## Artifact Passing Rules
 
 1. A `coder` dispatch receives the **plan path and one Task ID**, never pasted contents. It reads the Test Case rows listed in that task and the Design components it touches, not the whole plan.

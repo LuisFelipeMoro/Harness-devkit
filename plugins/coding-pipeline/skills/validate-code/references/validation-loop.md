@@ -61,3 +61,5 @@ stop on an identical repeat failure.
 
 On a re-run, report only the delta (CRITICAL/MAJOR issues, failing ACs, failed gates) against the previous
 run, plus the new verdict.
+
+When AskUserQuestion is unavailable (headless run), take the answer from the prompt's `Answers:` line per `references/headless-runs.md`; no key → print `NEEDS_USER: <question>` and stop.

@@ -25,6 +25,7 @@ disable-model-invocation: true
    - Post to the PR? — Yes, inline comments / Yes, one summary comment / No. (No PR for this target → ask only whether to save the review to `$TMPDIR/review-{slug}.md`.)
    - Language — English / Português (BR) / Other.
    - Style — Short (a sentence or two) / With suggestions (adds a GitHub suggestion block when the fix is a concrete edit).
+   - When AskUserQuestion is unavailable (headless run), take the three answers from the prompt's `Answers:` line per `coding-pipeline/references/headless-runs.md`; no key → print `NEEDS_USER: <question>` and stop. Headless, the review posts only when `review_post` says so, and the last line printed is `REVIEW_SCORE: <score> <pass|block>`; the sentinel is the plain last line: no markdown, bold, backticks or blockquote around it.
 7. **Post only after the answers.** At this step, read `references/posting.md`: write each comment in its § Voice, translate, show the exact bodies, post with `gh` (what the Gaps block found as one general comment), set the event (`REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`; never `APPROVE` unless asked), print the review URL.
 
 Next: `/pr-fix` once comments are posted, or `/code` to fix locally. The score above is this review's own gate; `/validate-code` gives the separate verdict on gates, tests and stress.

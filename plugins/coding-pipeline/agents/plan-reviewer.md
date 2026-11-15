@@ -52,7 +52,9 @@ config key, or table/column disagrees with what is in the repo. Cite both sides.
 
 **PR4 — Convention breach** (MINOR; MAJOR when it forces a second pattern into one layer): the plan
 introduces a naming scheme, error-handling style, dependency-injection approach, or layering that
-contradicts the conventions in the codebase map.
+contradicts the conventions in the codebase map. A Go test path in a row's `Files` that does not pair
+with a `.go` source in its directory, or a second test file for a source that already has one, is a
+MAJOR breach of the rule in `references/languages/go.md:119`.
 
 **PR5 — Ambiguous AC** (MAJOR): an acceptance criterion or Test Case row that supports two
 defensible readings. This is CD7 caught at plan time: an ambiguity left here is resolved silently

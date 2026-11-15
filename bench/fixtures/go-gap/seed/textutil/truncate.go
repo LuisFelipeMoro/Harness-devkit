@@ -1,0 +1,2 @@
+// truncate.go
+package textutil

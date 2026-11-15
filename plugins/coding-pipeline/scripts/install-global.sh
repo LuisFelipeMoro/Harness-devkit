@@ -177,8 +177,9 @@ echo "✓ shared references"
 mkdir -p "$GLOBAL/devkit/scripts/verify"
 cp "$PLUGIN/scripts/verify/"*.sh "$PLUGIN/scripts/verify/"*.py "$GLOBAL/devkit/scripts/verify/"
 # harness-metrics.py runs verify/falsification.sh from its own directory — staged as a sibling.
-cp "$PLUGIN/scripts/estimate-run.py" "$PLUGIN/scripts/harness-metrics.py" "$GLOBAL/devkit/scripts/"
-chmod +x "$GLOBAL/devkit/scripts/verify/"* "$GLOBAL/devkit/scripts/estimate-run.py" "$GLOBAL/devkit/scripts/harness-metrics.py"
+# headless.py is the run-state reader estimate-run.py, harness-metrics.py and drive.py import — staged beside them.
+cp "$PLUGIN/scripts/estimate-run.py" "$PLUGIN/scripts/harness-metrics.py" "$PLUGIN/scripts/headless.py" "$PLUGIN/scripts/drive.py" "$GLOBAL/devkit/scripts/"
+chmod +x "$GLOBAL/devkit/scripts/verify/"* "$GLOBAL/devkit/scripts/estimate-run.py" "$GLOBAL/devkit/scripts/harness-metrics.py" "$GLOBAL/devkit/scripts/headless.py" "$GLOBAL/devkit/scripts/drive.py"
 echo "✓ sensor scripts staged to ~/.claude/devkit/scripts/"
 
 # ── CLAUDE.md — never overwrite ─────────────────────────────────────────────

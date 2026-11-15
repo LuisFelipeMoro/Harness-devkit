@@ -15,6 +15,16 @@ PROGRESS.md
 # A break-run.sh mutation marker left behind by a dead falsification run.
 *.devkit-break
 
+# /validate-code's qa and stress returns, written verbatim per plan — a
+# validation transcript, not a source file.
+docs/plans/*/validation/**
+
+# Benchmark output from bench/run.py — measured per run, not a static fixture.
+bench/results/**
+
+# Driver state per plan (run-state.json) — counts and ids only, but per run.
+**/run-state.json
+
 # Generated test output — produced by running the suite, never a static test
 # source. A file under a testdata/ directory is a fixture, not output, and is
 # never matched by these patterns. `**/` makes these depth-agnostic — a

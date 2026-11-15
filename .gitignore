@@ -46,3 +46,6 @@ __pycache__/
 PROGRESS.md
 handoff-*.md
 *.devkit-break
+
+# Benchmark run output (bench/run.py) — generated, local only; also release-excluded.
+/bench/results/

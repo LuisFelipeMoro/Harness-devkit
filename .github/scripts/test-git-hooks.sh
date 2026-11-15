@@ -302,6 +302,42 @@ run_gate "$d" --worktree; rc=$?
 if [ "$rc" = "2" ]; then ok=0; else ok=1; fi
 gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" "$ok"
 
+# dup_zero_repo <name> <tracked-file> — a git repo whose only tracked file is
+# <tracked-file>, and a jscpd stub that reports 0 lines. The stub's bin dir sits
+# beside the repo, not inside it: the gate measures every file in the tree, so a
+# stub inside it would be counted as the delivery's own source.
+dup_zero_repo() {
+    local dir="$WORK/$1" bin="$WORK/$1-bin"
+    mkdir -p "$dir" "$bin"
+    ( cd "$dir" || exit 1
+      git init -q .; git config user.email t@t; git config user.name t
+      git config commit.gpgsign false
+      printf 'x\n' > "$2"
+      git add -A >/dev/null && git commit -qm base )
+    cat > "$bin/jscpd" <<'STUB'
+#!/bin/sh
+while [ $# -gt 0 ]; do [ "$1" = --output ] && out="$2"; shift; done
+mkdir -p "$out"
+printf '%s\n' '{"statistics":{"total":{"lines":0}},"duplicates":[]}' > "$out/jscpd-report.json"
+exit 0
+STUB
+    chmod +x "$bin/jscpd"
+    printf '%s' "$dir"
+}
+
+# A tree with nothing jscpd would scan (README.md is ignored by the gate) has no
+# duplication to measure: a real zero, so it passes and says so.
+d="$(dup_zero_repo dup-docs-only README.md)"
+out="$( cd "$d" && PATH="$WORK/dup-docs-only-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
+if [ "$rc" = "0" ] && printf '%s' "$out" | grep -q "no source files to measure"; then ok=0; else ok=1; fi
+gate_check "dup-gate: docs-only tree passes" "$ok"
+
+# The same 0-line report beside real source is an unmeasured gate, not a pass.
+d="$(dup_zero_repo dup-zero-source a.go)"
+out="$( cd "$d" && PATH="$WORK/dup-zero-source-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q "counted 0 lines"; then ok=0; else ok=1; fi
+gate_check "dup-gate: zero lines with source still fails" "$ok"
+
 # ── release-content-guard.sh: PROGRESS.md, handoff snapshots and
 # generated test output must never enter a commit or a push ─────────────────
 # guard_repo <name> — a git repo carrying the real .devkit/release-exclude
@@ -586,6 +622,35 @@ printf '*.tmp\n' >> "$d/.devkit/release-exclude"
 printf 'scratch\n' > "$d/x.tmp"
 ( cd "$d" && git add x.tmp .devkit/release-exclude )
 expect_exit_says "release-guard: patterns come from the committed file" pre-commit "$d" 1 "x.tmp"
+
+# ── pre-commit: a staged new Go test must be named after its source ─────────
+# gtn_repo <name> — a git repo with foo.go committed as the base; the fixture's
+# stubs stay untracked because each case stages only what it is testing.
+gtn_repo() {
+    local d
+    d="$(fixture "$1")"
+    ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t \
+        && printf 'package x\n' > foo.go && git add foo.go && git commit -q -m base )
+    printf '%s' "$d"
+}
+
+d="$(gtn_repo gtn-unpaired)"
+printf 'package x\n' > "$d/bar_test.go"
+( cd "$d" && git add bar_test.go )
+expect_exit_says "pre-commit: blocks staged unpaired go test" pre-commit "$d" 1 "go-test-name:"
+
+d="$(gtn_repo gtn-paired)"
+printf 'package x\n' > "$d/foo_test.go"
+( cd "$d" && git add foo_test.go )
+expect_exit "pre-commit: allows staged paired go test" pre-commit "$d" 0
+
+# A misnamed test already committed is name debt, not this commit's: only the
+# added paths are judged, so an edit to it must pass.
+d="$(gtn_repo gtn-modified)"
+printf 'package x\n' > "$d/bar_test.go"
+( cd "$d" && git add bar_test.go && git commit -q -m "misnamed test before this change" \
+    && printf '// edited\n' >> bar_test.go && git add bar_test.go )
+expect_exit "pre-commit: ignores modified test file" pre-commit "$d" 0
 
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"
