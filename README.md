@@ -430,18 +430,20 @@ plugins/
 `scripts/drive.py` runs `/code`, `/validate-code` and `/review-code` for one approved plan, each stage in a fresh `claude -p` session under a fixed permission grant, and records the run in `run-state.json`. The answers contract is in `plugins/coding-pipeline/references/headless-runs.md`.
 
 ```
-python3 ~/.claude/devkit/scripts/drive.py --plan docs/plans/{slug}/plan.md [--model sonnet]
+python3 ~/.claude/devkit/scripts/drive.py --plan docs/plans/{slug}/plan.md [--model sonnet] [--mode sequential] [--budget-usd 3] [--resume-from code|validate|review]
 ```
 
 - It refuses to run on main or master, on a detached HEAD, on a dirty tree, and on a plan whose Status is not `approved`.
 - It never pushes and never opens a PR. The commit it makes stays on the feature branch.
 - It stops for a human on anything but `PRODUCTION READY`: NOT READY, a condition, a block, the usage limit, a `NEEDS_USER:` question, an empty diff, or a rejected commit.
+- It never commits a staged file whose name matches the deny list (`.env`, `.env.*`, `.envrc`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`): it unstages them and stops.
+- `--resume-from` keeps the earlier stages' records and reruns from the named stage. It refuses to resume past the code stage unless that stage is recorded and committed, and refuses to resume at review without a validate record.
 
 ## Hooks
 
 | Hook | Trigger | Behaviour |
 |------|---------|-----------|
-| `session-bootstrap.sh` | SessionStart | Prints `PROGRESS.md` so a new session resumes with done/failed/current state |
+| `session-bootstrap.sh` | SessionStart | Prints `PROGRESS.md` so a new session resumes with done/failed/current state; output is capped at 9,500 characters, dropping the oldest entries first |
 | `env-guard.sh` | PreToolUse | Blocks reads of `.env`, `.envrc`, `.env.*`, including via `cat`/`grep` |
 | `destructive-guard.sh` | PreToolUse(Bash) | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL |
 | `gate-filter.sh` | PreToolUse(Bash) | Opt-in: set `DEVKIT_GATE_FILTER=1`. Rewrites a simple test/lint gate command (`go test`, `tsc`, `eslint`, `npm test`…) so only failure lines and a 20-line tail reach context; the full output stays in a file named on the last line. Opt-in because Claude Code cannot pre-check the rewritten compound command, so it needs a broad Bash allow (auto/bypass mode or the driver grant). Inert when `rtk` is on PATH |

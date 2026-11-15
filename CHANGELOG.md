@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.2.0] — 2026-11-13
+## [3.2.0] — 2026-11-15
 
 ### Added
 
@@ -26,7 +26,7 @@
 ### Measured
 
 - Eval E1 (bench, sonnet, 3 reps, 18 runs, $11.97) gates green on 5 of 6 fixtures in at least 2 of 3 reps.
-- E1b (1 rep, $4.48) confirmed sentinel parsing after the fix.
+- E1b (1 rep, $4.48) confirmed sentinel parsing after the fix. Every E1b validate stage still ended NOT READY, from the environment: Go tools missing from the headless PATH, no offline TypeScript toolchain, and the dup-gate docs-only false FAIL. The PATH and dup-gate fixes above shipped without a rerun, so the driver has not yet completed an end-to-end `PRODUCTION READY` run. The rest of G9 was waived by the maintainer after E1.
 
 ### Known issues
 
