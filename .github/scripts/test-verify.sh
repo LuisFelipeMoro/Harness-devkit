@@ -2746,6 +2746,9 @@ chmod +x "$DR_BIN/claude"
 dr_repo() {  # dr_repo <dir> <branch> — a repo with one commit on <branch>
     mkdir -p "$1" && cd "$1" || exit
     git init -q -b "$2"
+    # drive.py commits with the repo's own identity; a CI runner has none, so the fixture sets one.
+    git config user.email t@t
+    git config user.name t
     printf 'base\n' > base.txt
     git -c user.email=t@t -c user.name=t add base.txt
     git -c user.email=t@t -c user.name=t commit -q -m base
