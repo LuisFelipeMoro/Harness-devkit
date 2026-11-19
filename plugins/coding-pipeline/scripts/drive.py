@@ -478,12 +478,19 @@ def acquire_run_lock(ctx: Context) -> int:
 
 
 def sweep_stale_tmp(plan_dir: str) -> None:
-    """Delete interrupted run-state temp files: regular files only, never following a symlink (SEC-5)."""
-    with os.scandir(plan_dir) as entries:
-        for entry in entries:
-            if fnmatch.fnmatchcase(entry.name, STALE_TMP) and entry.is_file(follow_symlinks=False):
-                os.remove(entry.path)
-                print(f"drive: removed stale {entry.name}")
+    """Delete interrupted run-state temp files: regular files only, never following a symlink (SEC-5).
+
+    Any OSError while listing or removing is a refusal, not a traceback, so the exit-2 contract holds (AC18b).
+    """
+    try:
+        with os.scandir(plan_dir) as entries:
+            for entry in entries:
+                if fnmatch.fnmatchcase(entry.name, STALE_TMP) and entry.is_file(follow_symlinks=False):
+                    os.remove(entry.path)
+                    print(f"drive: removed stale {entry.name}")
+    except OSError as exc:
+        error = exc.strerror or type(exc).__name__
+        raise Refused(f"cannot sweep stale run-state tmp in {plan_dir}: {error}") from None
 
 
 def main(argv: list[str], *, git: GitFn | None = None, runner: Runner | None = None) -> int:
@@ -496,7 +503,7 @@ def main(argv: list[str], *, git: GitFn | None = None, runner: Runner | None = N
     git_fn = git or _git
     try:
         ctx = check_preconditions(opts, git_fn)
-        _run_lock = acquire_run_lock(ctx)  # held to process exit; see acquire_run_lock
+        _run_lock = acquire_run_lock(ctx)  # binding the fd keeps the flock held until this process exits
         sweep_stale_tmp(ctx.plan_dir)
         prior = load_prior(opts, ctx, git_fn)
     except Refused as exc:

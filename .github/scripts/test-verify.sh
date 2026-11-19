@@ -3507,6 +3507,21 @@ ds_go --plan docs/plans/alpha/plan.md
 [ -L "$DS_R/docs/plans/alpha/run-state.json.1.tmp" ] && [ "$(cat "$outside")" = keep ]; rc=$?
 check "drive: stale tmp cleanup leaves symlink target" 0 "$rc" "$DS_OUT"
 
+sw_file="$W/drive-sweep-file"; printf 'x\n' > "$sw_file"
+sw_out=$(PYTHONDONTWRITEBYTECODE=1 python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import drive
+try:
+    drive.sweep_stale_tmp(sys.argv[2])
+except drive.Refused as exc:
+    print(f"refused: {exc}")
+    sys.exit(0)
+print("no refusal")
+sys.exit(1)
+' "$(dirname "$DR_PY")" "$sw_file" 2>&1); sw_rc=$?
+check "drive: sweep error refused" 0 "$sw_rc" "$sw_out" "cannot sweep stale run-state tmp"
+
 ds_new envtpl feat/x
 printf 'src/a.go\n%s\n' "$ENV_TPL" > "$DS_FIX/code.write"
 ds_go --plan docs/plans/alpha/plan.md
@@ -3762,6 +3777,15 @@ chmod 000 "$ld_unr/p.html"
 out=$(cd "$ld_unr" && bash "$LD" --diff HEAD 2>&1); rc=$?
 chmod 600 "$ld_unr/p.html"
 check "lang-detect: unreadable content file" 2 "$rc" "$out" "lang-detect: cannot read p.html"
+
+ld_sub="$W/ld-subdir"
+ld_repo "$ld_sub"
+mkdir -p "$ld_sub/sub"
+printf 'package x\n' > "$ld_sub/sub/a.go"
+printf 'package x\n' > "$ld_sub/b.go"
+out=$(cd "$ld_sub/sub" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: untracked counted from a subdirectory" 0 "$rc" "$out" "LANGUAGE: go references/languages/go.md 2
+LANGUAGES: go"
 
 # ── review wiring (T12, AC21/AC22): languages reach the reviewer, proof line ─
 RW_SK="$ROOT/plugins/pr-workflow/skills/review-code/SKILL.md"

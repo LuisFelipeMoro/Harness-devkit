@@ -44,6 +44,12 @@ esac
 toplevel=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git repository"
 git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || die "invalid base $base"
 
+# Enter the top level before any listing: git ls-files prints paths relative to
+# the working directory, so from a subdirectory it would miss untracked files
+# elsewhere and name the ones it found folder-relative. The next.config probe
+# resolves against the same directory.
+cd "$toplevel" || die "cannot enter $toplevel"
+
 list=""
 tally=""
 cleanup() { rm -f "$list" "$tally"; }
@@ -55,10 +61,6 @@ tally=$(mktemp "${TMPDIR:-/tmp}/lang-detect.XXXXXX") || die "cannot create a tem
 # count) plus untracked files. Deletions are dropped: nothing is left to read.
 git diff --name-only -z --diff-filter=d "$base" -- >> "$list" || die "git diff failed against $base"
 git ls-files -z --others --exclude-standard >> "$list" || die "git ls-files failed"
-
-# Paths from git are relative to the top level; enter it so the ls-files
-# listing and the next.config probe resolve the same way.
-cd "$toplevel" || die "cannot enter $toplevel"
 
 has_next_config() {
     local c
