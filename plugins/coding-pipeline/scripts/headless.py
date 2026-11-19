@@ -12,7 +12,7 @@ Library module, stdlib only, no CLI. Imported from this directory, and from
 ~/.claude/devkit/scripts/ in a flat install.
 
 classify() — first match wins (AC7):
-  1. result text matches /hit your .*limit/i            -> limit, whatever the exit code
+  1. a result line opens with "hit your ... limit"      -> limit, whatever the exit code
   2. subtype == "error_max_budget_usd"                  -> budget
   3. a NEEDS_USER: line in the result                   -> needs_user
   4. exit != 0, timeout, or claude not found            -> error
@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import glob
 import json
+import math
 import os
 import re
 import shutil
@@ -39,10 +40,16 @@ from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Callable
 
-SCHEMA = 1
-DEFAULT_TIMEOUT_S = 1800
+SCHEMA = 2
+SCHEMAS_READ = (1, 2)  # 1 predates StageResult.reason: its stages are read with reason ""
+STAGE_NAMES = ("code", "validate", "review")
+STAGE_STATUSES = ("ok", "limit", "needs_user", "budget", "error")
+RUN_STATUSES = ("running", "done", "stopped", "refused")
+DEFAULT_TIMEOUT_S = 3600  # per stage; the driver and bench read this one value (ADR-7)
+DEFAULT_BUDGET_USD = 8.0  # per stage: room for three fix rounds (ADR-7, grill G6)
 SENTINEL_NAMES = ("VERDICT_LINE", "REVIEW_SCORE", "NEEDS_USER")
-LIMIT_RE = re.compile(r"hit your .*limit", re.IGNORECASE)
+# The limit message must open a line: ordinary text that only mentions it is not a usage-limit stop.
+LIMIT_RE = re.compile(r"^\W*(?:you've |you have )?hit your [^\n]*limit", re.IGNORECASE | re.MULTILINE)
 # Markdown wrapping a sentinel line may carry: code ticks, bold stars, a blockquote mark, whitespace.
 WRAP_CHARS = " \t\r\n`*>"
 
@@ -56,7 +63,8 @@ class StageResult:
     stage: str  # code | validate | review
     status: str  # ok | limit | needs_user | budget | error
     exit_code: int  # -1 when claude never ran to an exit
-    subtype: str  # JSON subtype; for a stage that did not finish, the reason it stopped
+    subtype: str  # JSON payload subtype only; "" when the stage did not run to an exit
+    reason: str  # why the stage did not run to an exit ("" otherwise)
     model: str  # --model passed
     cost_usd: float
     input_tokens: int
@@ -200,8 +208,13 @@ def run_stage(
     allowed_tools: str,
     timeout_s: int = DEFAULT_TIMEOUT_S,
     runner: Runner | None = None,
+    on_stdout: Callable[[str], None] | None = None,
 ) -> StageResult:
-    """Run one stage and return its typed record. Timeout and a missing binary are `error`."""
+    """Run one stage and return its typed record. Timeout and a missing binary are `error`.
+
+    `on_stdout` receives the raw stdout once, when the runner returned; a stage that never
+    returned (timeout, missing binary) reports nothing.
+    """
     argv = build_argv(prompt, model, budget_usd, tmp_dir, allowed_tools, None)
     if runner is None:
         env = _stage_env(tmp_dir)  # per-stage scratch stays inside tmp_dir
@@ -209,6 +222,8 @@ def run_stage(
     started = time.monotonic()
     try:
         exit_code, stdout, _stderr = runner(argv, cwd)
+        if on_stdout is not None:
+            on_stdout(stdout)
     except subprocess.TimeoutExpired:
         return _unrun(stage, model, f"timeout after {timeout_s}s", started)
     except FileNotFoundError:
@@ -227,6 +242,7 @@ def run_stage(
         status=status,
         exit_code=exit_code,
         subtype="unparsable output" if payload is None else str(body.get("subtype") or ""),
+        reason="",
         model=model,
         cost_usd=_num(body.get("total_cost_usd")),
         input_tokens=int(_num(usage.get("input_tokens"))),
@@ -246,7 +262,7 @@ def write_state(path: str, state: RunState) -> None:
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(asdict(state), fh, indent=2)
+            json.dump({**asdict(state), "schema": SCHEMA}, fh, indent=2)
             fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())
@@ -269,25 +285,73 @@ def load_runs(root: str) -> list[RunState]:
     return runs
 
 
+# field -> (accepted types, label for the error, allowed values or None). A run-state file is
+# untrusted input (SEC-4): every field is type-checked before any reader uses it.
+FieldSpec = tuple[tuple[type, ...], str, tuple[str, ...] | None]
+_RUN_FIELDS: dict[str, FieldSpec] = {
+    "plan": ((str,), "str", None),
+    "slug": ((str,), "str", None),
+    "branch": ((str,), "str", None),
+    "base": ((str,), "str", None),
+    "mode": ((str,), "str", None),
+    "status": ((str,), "str", RUN_STATUSES),
+    "stop_reason": ((str, type(None)), "str|None", None),
+}
+_STAGE_FIELDS: dict[str, FieldSpec] = {
+    "stage": ((str,), "str", STAGE_NAMES),
+    "status": ((str,), "str", STAGE_STATUSES),
+    "exit_code": ((int,), "int", None),
+    "subtype": ((str,), "str", None),
+    "reason": ((str,), "str", None),
+    "model": ((str,), "str", None),
+    "cost_usd": ((int, float), "int|float", None),
+    "input_tokens": ((int,), "int", None),
+    "output_tokens": ((int,), "int", None),
+    "cache_read": ((int,), "int", None),
+    "cache_creation": ((int,), "int", None),
+    "turns": ((int,), "int", None),
+    "session_id": ((str,), "str", None),
+    "sentinel": ((str, type(None)), "str|None", None),
+    "wall_s": ((int,), "int", None),
+    "finished_at": ((str,), "str", None),
+}
+
+
 def _read_state(path: str) -> RunState:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     if not isinstance(data, dict):
         raise ValueError("not a JSON object")
-    if data.get("schema") != SCHEMA:
-        raise ValueError(f"schema {data.get('schema')!r} is not {SCHEMA}")
+    schema = data.get("schema")
+    if type(schema) is not int or schema not in SCHEMAS_READ:
+        raise ValueError(f"schema {schema!r} is not one of {SCHEMAS_READ}")
     if set(data) != _names(RunState):
         raise ValueError(f"fields {sorted(set(data) ^ _names(RunState))} differ from the record")
+    _check_fields(data, _RUN_FIELDS)
     stages = data["stages"]
     if not isinstance(stages, list):
-        raise ValueError("stages is not a list")
-    return RunState(**{**data, "stages": [_stage_from(item) for item in stages]})
+        raise ValueError(f"stages is {type(stages).__name__}, expected list")
+    return RunState(**{**data, "stages": [_stage_from(item, schema) for item in stages]})
 
 
-def _stage_from(item: Any) -> StageResult:
-    if not isinstance(item, dict) or set(item) != _names(StageResult):
+def _check_fields(record: dict[str, Any], spec: dict[str, FieldSpec]) -> None:
+    """Raise ValueError naming the first field whose type or value no reader may use (SEC-4)."""
+    for name, (types, label, allowed) in spec.items():
+        value = record[name]
+        if isinstance(value, bool) or not isinstance(value, types):  # JSON true is not a count
+            raise ValueError(f"{name} is {type(value).__name__}, expected {label}")
+        if allowed is not None and value not in allowed:
+            raise ValueError(f"{name} is {value!r}, expected one of {', '.join(allowed)}")
+
+
+def _stage_from(item: Any, schema: int) -> StageResult:
+    """One stage record. Schema 1 predates `reason`, so its stages read with reason ""."""
+    expected = _names(StageResult) - ({"reason"} if schema == 1 else set())
+    if not isinstance(item, dict) or set(item) != expected:
         raise ValueError("a stage record does not match the declared fields")
-    return StageResult(**item)
+    record = {"reason": "", **item}
+    _check_fields(record, _STAGE_FIELDS)
+    return StageResult(**record)
 
 
 def _names(cls: type) -> set[str]:
@@ -318,9 +382,17 @@ def _result_text(payload: dict[str, Any]) -> str:
 
 
 def _num(value: Any) -> float:
+    """A number from a claude payload, or 0.0 when it is absent, typed wrong, or not finite.
+
+    json parses `1e999` and `NaN` to inf/nan, and a 400-digit integer has no float at all:
+    each maps to 0.0 so a garbled count never aborts run_stage or reaches run-state.json.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0.0
-    return float(value)
+    try:
+        return float(value) if math.isfinite(value) else 0.0
+    except OverflowError:
+        return 0.0
 
 
 def _now() -> str:
@@ -332,7 +404,8 @@ def _unrun(stage: str, model: str, reason: str, started: float) -> StageResult:
         stage=stage,
         status="error",
         exit_code=-1,
-        subtype=reason,
+        subtype="",
+        reason=reason,
         model=model,
         cost_usd=0.0,
         input_tokens=0,

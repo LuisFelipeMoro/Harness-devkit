@@ -45,6 +45,7 @@ Functional components + hooks only; `eslint-plugin-react-hooks` zero violations;
 | Keys | Stable domain ids — an array index on a reorderable list is a correctness defect, not a warning |
 | Memoisation | `useMemo`/`useCallback` only after a measured cost; they are not free and they hide dependency mistakes |
 | Components | Presentational components take data as props; fetching lives at the route/container edge |
+| Errors | An error thrown in event handlers or async effects never reaches an error boundary — catch it and store it in state (`setError`) so render shows it; a boundary covers render errors only |
 | Context | Low-frequency values only, split by concern — one god-context re-renders the tree on every change |
 | Refs | `useRef` for imperative handles and mutable non-render values — never as a state substitute |
 | Focus | A client route change or closing dialog moves focus deliberately; React does not manage it. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
@@ -69,6 +70,7 @@ integration test rather than assuming.
 | Snapshot or empty-bodied loop standing in for a behavioural assertion **[FH]** | MAJOR |
 | State mutation — direct array push or object property assignment | MAJOR |
 | Missing error boundary around async/suspense subtrees | MAJOR |
+| Error in an event handler or async effect not caught into state | MAJOR |
 | `Math.random()` for keys or IDs — use `crypto.randomUUID()` | MAJOR |
 | Class components in new code | MINOR |
 | Missing `eslint-plugin-jsx-a11y` zero-warning requirement | MINOR |

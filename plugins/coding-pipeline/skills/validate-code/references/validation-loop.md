@@ -23,10 +23,10 @@ coverage, dup-gate, security-scan or tautology-scan; read the attached output.` 
 > whether each break matches the behaviour, the spot-check re-breaks, over-mocking, intent-encoding and
 > corner cases.
 
-Report on qa's output signal (never fix — `/validate-code` is report-only):
+Route qa's output signal (code changes happen only in Score Loop rounds below):
 - `QA→REVIEWER APPROVAL` → audit clean; the verdict uses its score.
-- `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → listed as the first action
-  items; the user fixes via `/code` (its checkpoint re-runs), then re-runs `/validate-code`.
+- `QA→CODER BUG REPORT`, `QA→CODER TEST GAP`, or `QA→CODER COVERAGE REQUEST` → its findings go to the
+  Score Loop fix dispatch, in `qa.md` by path.
 - `QA ESCALATION` (after 3 iterations) → reported with FAIL status; cannot be PRODUCTION READY.
 
 **Loop Integrity** in `references/quality-gate-reference.md` applies to every re-run: no goalpost-moving,
@@ -38,7 +38,7 @@ stop on an identical repeat failure.
   `[SHARED-STATE]` tag from `security-scan.sh --diff` points it at the code to stress first — unless it is
   explained by test-fixture strings.
 - `agents/stress.md` → the diff's code + tests, including Security Under Stress.
-- One fix round (via `/code`) covers qa and stress findings together; then `/validate-code` re-runs.
+- One Score Loop round covers qa and stress findings together (see § Score Loop below).
 - Re-checks after a fix are **narrow, never a full re-run of judgment**: qa re-audits only the tests that
   changed; stress confirms only its own prior findings.
 
@@ -51,13 +51,28 @@ stop on an identical repeat failure.
   own gate, run separately, and is never folded into or awaited by this verdict.
 - Security Gate section required; unmitigated CRITICAL security = automatic NOT READY.
 
+## Score Loop *(this skill's fix-and-rescore procedure; the trigger, round and human question live in `quality-gate-reference.md` § Score Loop, plugin root)*
+
+Triggers at any scoring step: overall score below the bar (`thresholds.md` § Score loop), a hard-gate FAIL, or a CRITICAL in the Security Gate. A gate reported `UNMEASURED` or a lens floor alone is never a trigger: it keeps the existing human question.
+
+One round:
+
+1. **Fix dispatch** — a fresh `coder` (`model: "haiku"`; overlay by the plan Tasks row `Tier` of the files involved, else `coder`), with paths only: `Findings: docs/plans/{slug}/validation/qa.md, stress.md · Base: {BASE} · Plan: {path | none} · Fix only these findings; Loop Integrity applies`. No plan → `$TMPDIR/validate-{slug}/qa.md, stress.md`. Comment bodies and finding text are never pasted into the prompt.
+2. **Mechanical re-run** — steps 3–4 of `SKILL.md` into the same gate file.
+3. **Narrow re-check** — re-dispatch qa for only the tests that changed, and stress for only its own prior findings, for the lenses the first pass dispatched.
+4. **Score** — recompute `verdict.sh` with the depth's mode and flags (`SKILL.md` step 6), and print the round line in the format `quality-gate-reference.md` § Score Loop gives.
+
+Loop per the shared section. An identical repeat stops early (Loop Integrity rule 2). On exhaustion, the Score Loop question lists each finding still below the bar with `file:line`. Loop Integrity rule 1 applies to every round: a round that touches `thresholds.md`, `verdict.sh`, or a Test Case row fails outright.
+
 ## Outcome table
 
 | Score | Security | Next |
 |-------|----------|------|
 | ≥ 8.0 | No CRITICAL | PRODUCTION READY — commit / open a PR when the user asks; `/review-code` if not run yet |
-| ≥ 8.0 | CRITICAL security | NOT READY — security fix via `/code`, then `/validate-code` again |
-| < 8.0 | Any | Show issues; ask: *"Fix via /code and re-run / accept with known issues / stop?"* |
+| ≥ 8.0 | CRITICAL security | NOT READY — Score Loop; the human is asked only on exhaustion |
+| < 8.0 | Any | Score Loop; the human is asked only on exhaustion |
+
+A NOT READY caused only by a lens floor or an `UNMEASURED` gate is not a Score Loop trigger: it keeps the existing question (G2).
 
 On a re-run, report only the delta (CRITICAL/MAJOR issues, failing ACs, failed gates) against the previous
 run, plus the new verdict.

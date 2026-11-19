@@ -67,7 +67,7 @@ falsifiability. Four steps, in order, for every change:
 4. **Falsify** — the evidence step that replaces RED. For every test, break the code path it
    covers (invert the condition, return the zero value, delete the guard), run the test,
    observe it FAIL, then restore. A test that still passes against broken code is worthless
-   and must be rewritten before handoff.
+   and must be rewritten before handoff. A prose-only row (Markdown, README, CHANGELOG) is marked `n/a — Markdown, wiring check` and gets a wiring check, not a break.
 
 Rules:
 - **Tautology is the blocking defect, not low coverage.** Asserting a literal you just set,
@@ -113,11 +113,11 @@ Rules:
   no dependency and disjoint `Files`; see `references/delivery-and-worktree.md`). Never parallel writers in one tree.
   Opt-in headless driver: `scripts/drive.py` runs an approved plan's stages headless (answers contract in `references/headless-runs.md`).
 - **Agent teams** are experimental and off: nothing in the devkit enables them, and a user who does keeps them to read-only lanes — read `references/agent-teams.md` before setting the flag.
-- **Per session: 14 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
+- **Per session: 20 dispatches, advisory** (limit and derivation: `references/thresholds.md`) — `hooks/dispatch-budget.sh` counts and warns once. The
   per-turn cap never bound a multi-step run, which is how one spent sixty dispatches without
   breaking a rule. Each one is a separate request carrying its own prompt.
 - A resumed agent replays its whole transcript: cheaper in dispatches, never in tokens — fix rounds are fresh dispatches.
-- **Dispatches per skill are the target shape**: `/planning` = 1 map (haiku) + 1 `plan-reviewer` per round (max 2); `/code` = 1 `coder` per Tasks row; `/validate-code` = by the depth it measures from the diff — cosmetic none, light `qa`, standard/full `qa` + `stress` (escalates only; `--full` forces it); `/review-code` = 1 `reviewer` (2 in parallel with `--split`, one per axis); `/bugfix` = `bug-investigator` (continued after its hypothesis checkpoint, not re-dispatched) + `coder`.
+- **Dispatches per skill are the target shape**: `/planning` = 1 map (haiku) + 1 `plan-reviewer` per round (max 3 fix rounds); `/code` = 1 `coder` per Tasks row; `/validate-code` = by the depth it measures from the diff — cosmetic none, light `qa`, standard/full `qa` + `stress` (escalates only; `--full` forces it); `/review-code` = 1 `reviewer` (2 in parallel with `--split`, one per axis); `/bugfix` = `bug-investigator` (continued after its hypothesis checkpoint, not re-dispatched) + `coder`.
   That keeps one implementer, one independent test auditor (earned, because tests are written
   after the code), one reviewer of the diff. The verdict is arithmetic (`scripts/verify/verdict.sh`
   plus an inline self-check), not a dispatch, and a second reviewer of the same diff finds what the first one did.

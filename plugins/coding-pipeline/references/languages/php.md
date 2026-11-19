@@ -37,6 +37,8 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Types | `declare(strict_types=1)` in every file; typed properties, parameters and returns — never a bare `array` where a shape exists |
 | Value objects | Readonly classes and enums for domain values; a validated identifier is never passed as a bare string |
 | Errors | A typed exception per failure mode; the `@` suppression operator never; a `Throwable` catch only with a rethrow |
+| Exception chaining | A rethrow passes the original as `$previous`: `throw new DomainException($msg, 0, $e)` — the cause is never dropped |
+| Process exit | Library code never calls `exit` or `die`; it throws, and only the entry point decides the exit status |
 | Layout | PSR-4 autoloading; a `Domain` namespace free of framework imports; controllers thin enough to read in one screen |
 | Null | Explicit `?T` unions; null coalescing over `isset` chains |
 | Database | Prepared statements or the ORM's binding — interpolating into SQL is never acceptable, including for an identifier |
@@ -58,6 +60,8 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Missing `htmlspecialchars($v, ENT_QUOTES, 'UTF-8')` for HTML output | MAJOR |
 | PHP errors exposed to client | MAJOR |
 | Suppression operator `@` hiding errors | MAJOR |
+| Rethrow without `$previous` | MAJOR |
+| `exit` / `die` in library code | MAJOR |
 | Missing `declare(strict_types=1)` | MINOR |
 | Missing type declarations on public API (PHP 8+) | MINOR |
 | HTTP endpoint missing `zircote/swagger-php` attributes | MAJOR |

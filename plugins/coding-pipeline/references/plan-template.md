@@ -154,6 +154,9 @@ or redesign them. Missing a case here means it doesn't get tested — be exhaust
 - **Falsified By**: the specific break that must make the test fail — "remove the `qty < 0` guard",
   "return `nil` instead of `ErrNotFound`". The coder performs exactly this break with
   `scripts/verify/break-run.sh`. If no break would fail the test, the row is tautological — rewrite it now.
+  A prose-only row (Markdown, README, CHANGELOG, manifests; no code file in its Files) writes
+  `n/a — Markdown, wiring check` instead of a break: the coder checks its wiring (the paths it names resolve,
+  `validate-wiring.py` is OK) and no break is run.
 - Every category the coder overlay requires (unit · integration · concurrency · security · E2E) has at least
   one row; every Edge Cases row and every non-N/A OWASP mitigation has a row — a security control with no
   row is unverifiable and must not ship.

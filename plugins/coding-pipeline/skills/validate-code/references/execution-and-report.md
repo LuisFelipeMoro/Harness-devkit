@@ -1,6 +1,6 @@
 # Execution Order and Report Format
 
-## Execution order (fail-fast by default; `/validate-code` is report-only, so it runs every gate in this order and reports all results)
+## Execution order (fail-fast by default; `/validate-code` runs every gate in this order and reports all results; code changes happen only in Score Loop rounds)
 
 1. Format check *(fastest)*
 2. Type check / vet / static analysis

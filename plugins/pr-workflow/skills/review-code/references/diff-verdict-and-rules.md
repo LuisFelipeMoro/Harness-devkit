@@ -26,11 +26,24 @@ It also runs the **change-discipline check** (CD1–CD8, defined in `coding-pipe
 | Score | Security | Action |
 |-------|----------|--------|
 | ≥ 8.0 | No CRITICAL | ✅ `CODE REVIEW GATE PASSED — Score: X/10 · Coverage: Y% · N tests` |
-| ≥ 8.0 | CRITICAL finding | ❌ BLOCK — fix security issue first, then `/validate-code` and `/review-code` again |
-| < 8.0 | No CRITICAL | Show findings; ask: *"Fix and re-run, or push with known issues?"* |
-| < 8.0 | CRITICAL | ❌ BLOCK — fix required; do not push |
+| ≥ 8.0 | CRITICAL finding | ❌ BLOCK — Score Loop removes the finding, then `/validate-code` and `/review-code` again; no pass until it is gone |
+| < 8.0 | No CRITICAL | Score Loop on the checked-out branch: a fix round by `coder`, then a narrow re-check; on exhaustion the human chooses *Fix the gaps yourself* · *Accept with known issues* · *Stop* (`coding-pipeline/references/quality-gate-reference.md` § Score Loop) |
+| < 8.0 | CRITICAL | ❌ BLOCK — Score Loop; fix required, do not push |
+
+Both loop rows apply only to the checked-out branch (step 5 of `SKILL.md`); any other target keeps show-findings-and-ask.
 
 On re-run after fixes: run `/validate-code` first (gates must re-pass after any code change), then `/review-code`.
+
+## Language proof check (`/review-code` step 5)
+
+Runs once, on the first pass, and only the Standards return is checked (with `--split`, the `Axis: standards` dispatch; the `Axis: spec` dispatch emits no Language lines). Score Loop confirmation rounds emit no Language lines and are not checked.
+
+For each name in the dispatch's `Languages:` field, the return must contain `Language {name}: references/languages/{name}.md · {K} findings`.
+
+- **Missing line** → print `Language review missing: {name}` and re-dispatch once, narrowly: `Axis: standards · Languages: {missing} · Scope: language rules only`. That retry is at most one extra `reviewer` dispatch per review, inside the AC8 dispatch slack.
+- **Still missing after the retry** → the printed review says `Language {name}: UNMEASURED`, never a clean line for that language.
+- **`Languages: none`** → no Language lines are expected. **`Languages: unknown`** → nothing to check the names against; the reviewer names the languages it inferred in its Language lines, and the printed review says they were inferred.
+- Language findings sit on the Standards axis and count in the Score Loop like any other finding.
 
 ## Anti-patterns
 

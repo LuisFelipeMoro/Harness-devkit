@@ -50,6 +50,16 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Focus after swap | htmx keeps focus only on inputs with an `id`, so give swapped inputs a stable `id` and move focus deliberately when a swap removes the focused control. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
 | Boosting | `hx-boost` applied at a container with `hx-push-url` chosen deliberately, not inherited by accident |
 
+## Error Handling
+Authority: [htmx events reference](https://htmx.org/events/) → [htmx response-targets extension](https://htmx.org/extensions/response-targets/).
+
+| Rule | Requirement |
+|------|-------------|
+| Failure events | `htmx:responseError` and `htmx:sendError` are handled and show a visible message; a request with no error handler leaves the user with no feedback |
+| Status codes | A failure is a real 4xx or 5xx carrying an error fragment; a 200 that carries an error message never fires an error event and is swapped in as success |
+| Error target | Where the error must land away from the request's `hx-target`, use `hx-target-error` from the `response-targets` extension; the attribute does nothing unless the extension is loaded |
+| Indicator | A failed request clears its `hx-indicator`; a test forces a 500 and asserts the indicator is hidden |
+
 ## Linting Commands
 `htmlhint` on rendered templates · `djlint` (or the server framework's template linter) · `eslint` on any accompanying JS with `eslint-plugin-security` · the server language's own linter for the handlers returning the fragments — an htmx feature is half backend, and the fragment endpoints are gated by that stack's file, not this one.
 
@@ -66,5 +76,10 @@ Server returns HTML fragments not JSON; CSRF verified server-side via `HX-Reques
 | Missing `hx-indicator` on slow server responses | MINOR |
 | Playwright spec whose loop body is empty or whose assertion cannot fail **[FH]** | MAJOR |
 | CI config file present for a CI system the project does not run **[FH]** | MAJOR |
+| `hx-` request with no `htmx:responseError` or `htmx:sendError` handler and no other error path | MAJOR |
+| Failure returned as 200 with an error message | MAJOR |
+| Error shown only in `console.error`, with no visible message | MAJOR |
+| Indicator still visible after a failed request | MINOR |
+| `hx-target-error` used without the `response-targets` extension loaded | MINOR |
 
 ---

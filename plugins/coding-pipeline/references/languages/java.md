@@ -37,6 +37,8 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Types | `record` for value objects; `sealed` hierarchies for closed sets; no raw types and no `Object` in a signature |
 | Nullability | `Optional<T>` for an absent *return* only — never a field, never a parameter |
 | Errors | A typed exception per failure mode; never `catch (Exception)`; an empty catch is a defect, not a style choice |
+| Error causes | Wrapping keeps the original as the cause — `new XException(msg, e)`; a rethrow never drops `e` |
+| Control flow | Exceptions signal failures, never branch on an expected outcome — a missing record is `Optional.empty()`, not a caught `NoSuchElementException` |
 | Layout | `domain` (zero framework imports) · `application` · `infrastructure` · `web` — Spring annotations never reach `domain` |
 | Immutability | Fields `final` by default; `List.copyOf` over `unmodifiableList`; defensive copies on collection accessors |
 | Injection | Constructor injection only — no `@Autowired` fields, no setter injection |
@@ -56,6 +58,8 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Missing `@PreAuthorize` / security check on protected endpoint | CRITICAL |
 | `ObjectInputStream` on untrusted data | CRITICAL |
 | `catch (Exception e) {}` without rethrow or meaningful log | MAJOR |
+| Wrapping drops the cause (`new XException(msg)` inside a catch) | MAJOR |
+| Exception thrown and caught to branch on an expected outcome | MAJOR |
 | Missing null check / `Optional<T>` on public API | MAJOR |
 | Public mutable fields on domain objects | MAJOR |
 | `Closeable` not in `try-with-resources` | MAJOR |

@@ -49,6 +49,9 @@ existing file or reason does not hold against the repo (CD8 at plan time).
 
 **PR3 — Contradicts existing code** (MAJOR): declared interface, signature, type, error shape,
 config key, or table/column disagrees with what is in the repo. Cite both sides.
+Also MAJOR under PR3: a design, Error Handling section or Edge-cases row that contradicts the plan
+language's file `references/languages/<language>.md` or, for Go, its topic files. Cite the
+contradicted rule as `references/…:line`.
 
 **PR4 — Convention breach** (MINOR; MAJOR when it forces a second pattern into one layer): the plan
 introduces a naming scheme, error-handling style, dependency-injection approach, or layering that
@@ -62,7 +65,7 @@ by the Coder, and the resolution is discovered in review.
 
 **PR6 — Unfalsifiable Test Case row** (MAJOR): a row missing an **Expected Observable Result**, a
 **Why It Matters**, or a **Falsified By** break; or one whose expected result cannot be observed
-from outside the unit; or whose named break would not actually make the test fail.
+from outside the unit; or whose named break would not actually make the test fail. `n/a — Markdown, wiring check` is a valid Falsified By only on a prose-only row (no code file in its Files); on a row that touches code it is a MAJOR PR6.
 
 **PR7 — Untraced requirement** (MAJOR): an acceptance criterion or security AC in the plan's Requirements with no component,
 no Test Case row, or no Tasks row carrying it. Also the inverse — a planned component or task
@@ -129,8 +132,10 @@ Gate: PLAN APPROVED | PLAN CHANGES REQUIRED
 
 **Gate rule**: any CRITICAL or MAJOR ⇒ `PLAN CHANGES REQUIRED`. `/planning` fixes the
 plan from the findings and re-dispatches you to re-review only the changed sections (plus your own
-earlier findings). Maximum 2 re-review rounds — a third means the requirements themselves are unclear, so
-escalate the open findings to the human as questions rather than looping.
+earlier findings). Maximum 3 re-review rounds after the first score, run as the Score Loop
+(`references/quality-gate-reference.md` § Score Loop, plugin root; the numbers are in
+`references/thresholds.md` § Score loop). When the rounds are exhausted, the open findings go to the
+human as the Score Loop question rather than looping further.
 
 **Never reaches the human unreviewed**: the `/planning` approval step starts only after
 `PLAN APPROVED`, or with the unresolved findings presented verbatim as the open questions.
@@ -150,6 +155,11 @@ Read a file from this table only at the moment its trigger fires, only that file
 |---|---|
 | Judging whether a planned change is in scope or speculative (PR7 inverse, CD3/CD7/CD8 at plan time) | `references/change-discipline.md` |
 | A Test Case row looks unfalsifiable or tautological (PR6) | `references/test-audit-reference.md` |
+| The plan's language is named in Technology decisions (PR3 language check) | `references/languages/<language>.md` (the plan's language, one file) |
+| Go plan: the Design defines errors, or the Error Handling section or Edge-cases rows name them | `references/go-error-handling.md` |
+| Go plan: shared slices or maps, numeric conversions, or lazy init in the Data structures | `references/go-safety.md` |
+| Go plan: context lifecycle, a database, outbound HTTP, gRPC or metrics in the Design | `references/go-services.md` |
+| Go plan: the module's Go version decides which idioms apply | `references/go-modern-idioms.md` |
 | The plan adds or changes HTTP endpoints / `api-spec.yaml` | `references/spec-driven-reference.md` |
 | The plan introduces a datastore or changes a schema | `references/db-selection-reference.md` |
 | SEC rows or the threat table need checking against the security sections | `references/security-checklist.md` |

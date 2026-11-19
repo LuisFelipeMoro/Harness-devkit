@@ -25,6 +25,10 @@ bench/results/**
 # Driver state per plan (run-state.json) — counts and ids only, but per run.
 **/run-state.json
 
+# Driver lock and interrupted run-state writes per plan — process state, never shipped (AC18).
+**/run-state.lock
+**/run-state.json.*.tmp
+
 # Generated test output — produced by running the suite, never a static test
 # source. A file under a testdata/ directory is a fixture, not output, and is
 # never matched by these patterns. `**/` makes these depth-agnostic — a

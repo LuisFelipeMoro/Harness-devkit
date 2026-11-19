@@ -302,17 +302,19 @@ run_gate "$d" --worktree; rc=$?
 if [ "$rc" = "2" ]; then ok=0; else ok=1; fi
 gate_check "missing jscpd exits 2 (UNENFORCED), not a pass" "$ok"
 
-# dup_zero_repo <name> <tracked-file> — a git repo whose only tracked file is
-# <tracked-file>, and a jscpd stub that reports 0 lines. The stub's bin dir sits
-# beside the repo, not inside it: the gate measures every file in the tree, so a
-# stub inside it would be counted as the delivery's own source.
-dup_zero_repo() {
-    local dir="$WORK/$1" bin="$WORK/$1-bin"
+# dup_tree <name> <file>... — a git repo whose committed files are the given paths
+# (parent directories created), and a jscpd stub that reports 0 lines. The stub's
+# bin dir sits beside the repo, not inside it: the gate measures every file in the
+# tree, so a stub inside it would be counted as the delivery's own source.
+dup_tree() {
+    local name="$1" dir bin f
+    shift
+    dir="$WORK/$name" bin="$WORK/$name-bin"
     mkdir -p "$dir" "$bin"
     ( cd "$dir" || exit 1
       git init -q .; git config user.email t@t; git config user.name t
       git config commit.gpgsign false
-      printf 'x\n' > "$2"
+      for f in "$@"; do mkdir -p "$(dirname "$f")"; printf 'x\n' > "$f"; done
       git add -A >/dev/null && git commit -qm base )
     cat > "$bin/jscpd" <<'STUB'
 #!/bin/sh
@@ -327,16 +329,33 @@ STUB
 
 # A tree with nothing jscpd would scan (README.md is ignored by the gate) has no
 # duplication to measure: a real zero, so it passes and says so.
-d="$(dup_zero_repo dup-docs-only README.md)"
+d="$(dup_tree dup-docs-only README.md)"
 out="$( cd "$d" && PATH="$WORK/dup-docs-only-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
 if [ "$rc" = "0" ] && printf '%s' "$out" | grep -q "no source files to measure"; then ok=0; else ok=1; fi
 gate_check "dup-gate: docs-only tree passes" "$ok"
 
 # The same 0-line report beside real source is an unmeasured gate, not a pass.
-d="$(dup_zero_repo dup-zero-source a.go)"
+d="$(dup_tree dup-zero-source a.go)"
 out="$( cd "$d" && PATH="$WORK/dup-zero-source-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
 if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q "counted 0 lines"; then ok=0; else ok=1; fi
 gate_check "dup-gate: zero lines with source still fails" "$ok"
+
+# The no-source walk never reads an ignored tree: node_modules/sub is unreadable, so
+# a walk that descends into it prints "Permission denied" — the gate must not.
+d="$(dup_tree dup-prune-ignored README.md node_modules/sub/x.js)"
+chmod 000 "$d/node_modules/sub"
+out="$( cd "$d" && PATH="$WORK/dup-prune-ignored-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
+chmod 700 "$d/node_modules/sub"
+if [ "$rc" = "0" ] && printf '%s' "$out" | grep -q "no source files to measure" \
+    && ! printf '%s' "$out" | grep -q "Permission denied"; then ok=0; else ok=1; fi
+gate_check "dup-gate: no-source walk prunes ignored dirs" "$ok"
+
+# Pruning an ignored tree must not hide real source that sits beside it.
+d="$(dup_tree dup-prune-source node_modules/a.js src/b.go)"
+out="$( cd "$d" && PATH="$WORK/dup-prune-source-bin:/usr/bin:/bin" bash "$HOOKS/dup-gate.sh" 2>&1 )"; rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -q "counted 0 lines" \
+    && ! printf '%s' "$out" | grep -q "no source files to measure"; then ok=0; else ok=1; fi
+gate_check "dup-gate: source beside ignored dirs still found" "$ok"
 
 # ── release-content-guard.sh: PROGRESS.md, handoff snapshots and
 # generated test output must never enter a commit or a push ─────────────────
@@ -651,6 +670,111 @@ printf 'package x\n' > "$d/bar_test.go"
 ( cd "$d" && git add bar_test.go && git commit -q -m "misnamed test before this change" \
     && printf '// edited\n' >> bar_test.go && git add bar_test.go )
 expect_exit "pre-commit: ignores modified test file" pre-commit "$d" 0
+
+# ── go-test-name.sh: the stem is a literal file-name part, never a glob ─────
+# A glob character in a test's name must not match a different source's name, so
+# foo*_test.go is not paired by foobar_linux.go (SEC-6).
+d="$WORK/gtn-glob-stem"; mkdir -p "$d"
+printf 'package x\n' > "$d/foo*_test.go"; printf 'package x\n' > "$d/foobar_linux.go"
+out="$( cd "$d" && bash "$HOOKS/go-test-name.sh" 'foo*_test.go' 2>&1 )"; rc=$?
+if [ "$rc" = "1" ] && printf '%s' "$out" | grep -qF "go-test-name: foo*_test.go"; then ok=0; else ok=1; fi
+gate_check "go-test-guard: glob stem matched literally" "$ok"
+
+# A platform split (foo_linux.go with no foo.go) still pairs the plain test.
+d="$WORK/gtn-platform-split"; mkdir -p "$d"
+printf 'package x\n' > "$d/foo_test.go"; printf 'package x\n' > "$d/foo_linux.go"
+out="$( cd "$d" && bash "$HOOKS/go-test-name.sh" foo_test.go 2>&1 )"; rc=$?
+if [ "$rc" = "0" ] && [ -z "$out" ]; then ok=0; else ok=1; fi
+gate_check "go-test-guard: platform split still pairs" "$ok"
+
+# ── pre-commit: golangci-lint's fast flag follows its major version ─────────
+# golangci-lint v2 has no --fast, so one flag for both majors blocked every Go
+# commit. Each case records the argv the hook hands golangci-lint; the stub
+# prints the version line the case names.
+
+# golangci_test_fixture <name> <version-line> — a git repo with a staged,
+# formatted Go file; gofmt prints nothing, golangci-lint reports <version-line>
+# for `version` and records its argv for `run`.
+golangci_test_fixture() {
+    local d
+    d="$(fixture "$1")"
+    printf '%s\n' "$2" > "$d/golangci-version"
+    printf '#!/bin/sh\nexit 0\n' > "$d/.stub-bin/gofmt"
+    chmod +x "$d/.stub-bin/gofmt"
+    sed "s|@DIR@|$d|g" > "$d/.stub-bin/golangci-lint" <<'STUB'
+#!/bin/sh
+if [ "$1" = version ]; then cat "@DIR@/golangci-version"; exit 0; fi
+printf '%s\n' "$*" > "@DIR@/argv.txt"
+exit 0
+STUB
+    chmod +x "$d/.stub-bin/golangci-lint"
+    ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t \
+        && printf 'module x\n\ngo 1.22\n' > go.mod \
+        && printf 'package x\n\nfunc F() {}\n' > x.go \
+        && git add go.mod x.go && git commit -q -m base \
+        && printf 'package x\n\nfunc G() {}\n' > y.go && git add y.go )
+    printf '%s' "$d"
+}
+
+# golangci_test_argv <name> <fixture-dir> <want-argv> — the hook exits 0 and the
+# golangci-lint run received exactly <want-argv>.
+golangci_test_argv() {
+    local name="$1" dir="$2" want="$3" rc got=""
+    run_hook pre-commit "$dir" >/dev/null 2>&1; rc=$?
+    [ -f "$dir/argv.txt" ] && got="$(cat "$dir/argv.txt")"
+    if [ "$rc" = "0" ] && [ "$got" = "$want" ]; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: $name — exit $rc, golangci-lint run argv '$got' (want '$want')"
+        fail=1
+    fi
+}
+
+d="$(golangci_test_fixture gl-v2 'golangci-lint has version 2.13.2')"
+golangci_test_argv "pre-commit: golangci v2 uses fast-only" "$d" "run --fast-only"
+
+d="$(golangci_test_fixture gl-v1 'golangci-lint has version 1.64.8')"
+golangci_test_argv "pre-commit: golangci v1 keeps fast" "$d" "run --fast"
+
+d="$(golangci_test_fixture gl-unknown 'garbage')"
+golangci_test_argv "pre-commit: unknown version runs plain" "$d" "run"
+
+# No --config in the argv: the offered template is never forced on a repo, so a
+# repo without .golangci.yml is linted with golangci-lint's own defaults.
+d="$(golangci_test_fixture gl-no-config 'golangci-lint has version 2.13.2')"
+[ ! -e "$d/.golangci.yml" ] || { echo "FAIL: pre-commit: never forces devkit config — fixture has a .golangci.yml"; fail=1; }
+golangci_test_argv "pre-commit: never forces devkit config" "$d" "run --fast-only"
+
+# ── golangci.yml: the offered baseline is a valid v2 config with the 16 linters ─
+# Config file, not a hook: the check is validity, not a break. The names are read
+# from the file; `config verify` runs only when a v2 binary is present. With none,
+# the row prints UNMEASURED and does not count as a pass.
+golangci_test_template() {
+    local f="$HOOKS/golangci.yml" n bin="" ver="" missing=""
+    grep -qxF 'version: "2"' "$f" || missing=" version-key"
+    for n in govet staticcheck errcheck errorlint nilerr forcetypeassert gosec bodyclose \
+             sqlclosecheck contextcheck noctx copyloopvar unused ineffassign revive modernize; do
+        grep -qxF "    - $n" "$f" || missing="$missing $n"
+    done
+    if [ -n "$missing" ]; then
+        echo "FAIL: golangci template: baseline linters — missing:$missing"; fail=1; return
+    fi
+    pass=$((pass + 1))
+
+    if command -v golangci-lint >/dev/null 2>&1; then bin="golangci-lint"
+    elif [ -x "$HOME/go/bin/golangci-lint" ]; then bin="$HOME/go/bin/golangci-lint"; fi
+    [ -n "$bin" ] && ver="$("$bin" version 2>/dev/null || true)"
+    case "$ver" in
+        *"version 2."*) ;;
+        *) echo "UNMEASURED: golangci template config verify — no v2 golangci-lint binary"; return ;;
+    esac
+    if "$bin" config verify --config "$f" >/dev/null 2>&1; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: golangci template: baseline linters — '$bin config verify' rejected $f"; fail=1
+    fi
+}
+golangci_test_template
 
 rm -rf "$WORK"
 echo "git-hook tests: $pass passed, exit=$fail"

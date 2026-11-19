@@ -31,7 +31,7 @@ usage() {
 
 # check_path <path> — prints one breach line and returns 1 when unpaired.
 check_path() {
-    local path="$1" dir stem bn cands where
+    local path="$1" dir stem bn cands where c
     case "$path" in
         *_test.go) ;;
         *) return 0 ;;
@@ -49,7 +49,15 @@ check_path() {
     stem="${stem%_e2e}"
     [ -f "$dir/$stem.go" ] && return 0
     # A platform-split package has foo_linux.go and foo_windows.go but no foo.go.
-    find "$dir" -maxdepth 1 -name "${stem}_*.go" ! -name '*_test.go' | grep -q . && return 0
+    # The stem comes from a file name, so it is quoted: a glob character in it
+    # matches only itself and cannot fake a pairing (SEC-6).
+    for c in "$dir"/*.go; do
+        [ -f "$c" ] || continue
+        case "$c" in
+            *_test.go) ;;
+            "$dir"/"$stem"_*.go) return 0 ;;
+        esac
+    done
     # A test-only directory has no source file to pair with.
     find "$dir" -maxdepth 1 -name '*.go' ! -name '*_test.go' | grep -q . || return 0
     bn=$(basename "$path")

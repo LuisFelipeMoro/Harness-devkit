@@ -27,7 +27,7 @@ Do not pre-load; do not load a language the story does not name.
 
 Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules-reference.md`.
 
-Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idioms.md) — Coder loads it on every Go story; apply a row only when the module's `go` directive is at least its Min Go.
+Modern idioms by minimum Go version: [`../go-modern-idioms.md`](../go-modern-idioms.md) — Coder loads it on every Go story; apply a row only when the module's `go` directive is at least its Min Go. **Topic files** (load on trigger, not up front): [`../go-error-handling.md`](../go-error-handling.md) when Go code creates, wraps, inspects, logs or returns errors · [`../go-safety.md`](../go-safety.md) when Go code does type assertions, shares slices or maps, converts numeric types, defers in a loop or lazy-inits · [`../go-services.md`](../go-services.md) when Go code touches context lifecycle, `database/sql`/sqlx/pgx, an outbound `http.Client`, gRPC, file paths from input or metrics.
 
 ---
 ## Coding Rules
@@ -155,7 +155,7 @@ Confirm the spelling of any API in this table against live docs via context7 bef
 `log/slog` (or `go.uber.org/zap`) structured, ERROR level in production paths · `request_id`/`trace_id` pulled from `ctx` on every error log · never log a token, password, PII, or full request body · OpenTelemetry spans across service boundaries with the context propagated, not reconstructed.
 
 ## Linting Commands
-`go vet ./...` · `staticcheck ./...` · `golangci-lint run` (with `gosec`, `errcheck`, `revive` enabled)
+`go vet ./...` · `staticcheck ./...` · `golangci-lint run` (with `gosec`, `errcheck`, `revive` enabled) · offered baseline for v2: `git-hooks/golangci.yml` (plugin-relative; flat install `~/.claude/git-hooks/golangci.yml`) — when the repo has no `.golangci.yml`, `cp <that path> .golangci.yml`. pre-commit runs `golangci-lint run --fast-only` on v2 and `--fast` on v1, and never passes `--config`.
 
 ## Review Flags *(required linters: `go vet`, `staticcheck`, `golangci-lint` with `gosec`/`errcheck`)*
 | Issue | Severity |
@@ -166,7 +166,7 @@ Confirm the spelling of any API in this table against live docs via context7 bef
 | `http.Server` missing `ReadTimeout`/`WriteTimeout` | MAJOR |
 | goroutine without documented owner or cancel mechanism | MAJOR |
 | `panic` in library/service code | MAJOR |
-| DB rows / response bodies not closed | MAJOR |
+| DB rows / response bodies not closed, or rows.Err() unchecked after iteration | MAJOR |
 | HTTP handler missing `swaggo/swag` annotations | MAJOR |
 | Swagger annotation references a type with `any` / `interface{}` field | MAJOR |
 | `swag init` fails to compile (broken annotations) | BLOCK |
@@ -208,6 +208,22 @@ Confirm the spelling of any API in this table against live docs via context7 bef
 | Performance claim from a single benchmark run, no `benchstat -count=10` | MINOR |
 | Concurrency primitive heavier than the problem (actor for guarded state, pipeline with trivial stages, errgroup with no errors) | MINOR |
 | `go mod tidy` not clean | MINOR |
+| error both logged and returned (handle once) | MAJOR |
+| nil returned on an error path (nilerr) | MAJOR |
+| `==` or a bare type assertion on a possibly wrapped error | MAJOR |
+| typed nil returned as an interface or error | MAJOR |
+| write to a possibly nil map | MAJOR |
+| `append` onto a slice the caller still holds | MAJOR |
+| single-value type assertion on a non-guaranteed type | MAJOR |
+| `defer Close()`/`Unlock()` inside a loop (resources held until return) | MAJOR |
+| internal slice or map returned without a copy | MINOR |
+| float compared with `==` | MINOR |
+| error string capitalised or punctuated | NIT |
+| Go module with no golangci-lint config | MINOR |
+| `cancel` from `WithCancel`/`WithTimeout` not called on every path | MAJOR |
+| request context used for work that must outlive the request (no `context.WithoutCancel`) | MAJOR |
+| outbound `http.Client` with no `Timeout` (any URL) | MAJOR |
+| gRPC handler returns a raw `error` (becomes `codes.Unknown`) | MAJOR |
 | coverage < 85% | BLOCK (score ≤ 5) |
 
 ---

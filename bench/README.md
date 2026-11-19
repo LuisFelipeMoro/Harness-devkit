@@ -10,7 +10,7 @@ per skill stage: `/code`, `/validate-code`, `/review-code`) through
 
 - Without `--yes` the runner prints the run count and a cost estimate and exits 2. Nothing
   is created and no stage starts. The estimate is `est_usd_per_run` from `arms.json` times the
-  run count. It is a planning figure, not a bound; each stage is capped at USD 3.
+  run count. It is a planning figure, not a bound; each stage is capped at USD 8, the driver's per-stage default.
 - `--out DIR` overrides the default `bench/results/<UTC stamp>/`. Results are release-excluded (G10).
 - Each arm writes `<arm>.summary.json`: per-run pass, gate result, verdict score, falsification
   exit, cost and stage statuses, plus aggregates (pass rate, score and cost median/min/max, and

@@ -13,6 +13,20 @@ is_android_gradle() {
         || grep -q 'android {' build.gradle.kts 2>/dev/null
 }
 
+# golangci-lint v2 removed --fast (it exits 3 "unknown flag"), so one flag for
+# both majors blocked every Go commit under set -e. The version is read once,
+# here, and the same function serves every lookup path. An unreadable version
+# runs plain: it still lints, it is never skipped.
+golangci_run() {    # golangci_run <binary>
+    local bin="$1" ver
+    ver="$("$bin" version 2>/dev/null || true)"
+    case "$ver" in
+        *"version 2."*) "$bin" run --fast-only ;;
+        *"version 1."*) "$bin" run --fast ;;
+        *) "$bin" run ;;
+    esac
+}
+
 # ── Release content guard: session memory, handoff snapshots and
 # generated test output must never enter a commit ───────────────────────────
 guard="$(dirname "$0")/release-content-guard.sh"
@@ -53,11 +67,11 @@ if [ -f go.mod ]; then
     echo "→ Go: vet"
     go vet ./...
 
-    echo "→ Go: lint (fast)"
+    echo "→ Go: lint"
     if command -v golangci-lint &>/dev/null; then
-        golangci-lint run --fast
+        golangci_run golangci-lint
     elif [ -x ~/go/bin/golangci-lint ]; then
-        ~/go/bin/golangci-lint run --fast
+        golangci_run ~/go/bin/golangci-lint
     fi
 fi
 

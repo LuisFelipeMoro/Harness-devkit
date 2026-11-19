@@ -62,6 +62,7 @@ Standards: N findings · worst: {SEVERITY file:line — one line | none}
 Spec:      N findings · worst: {SEVERITY file:line — one line | none | no spec available}
 Size: N changed lines (target ≤200 · ceiling 800) — {reviewable | oversized, findings below are best-effort}
 Duplication: introduced N% (limit 3%) · pre-existing debt M%
+Languages: {name · K findings, one per language | none | {name}: UNMEASURED | unknown (inferred: names)}
 Action: [REQUEST CHANGES | APPROVED | COMMENTED]
 ```
 

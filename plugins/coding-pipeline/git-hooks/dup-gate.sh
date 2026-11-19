@@ -23,10 +23,20 @@ DUP_IGNORE="**/.git/**,**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**
 # dup_has_source — exit 0 when the tree in $PWD holds at least one file that
 # jscpd would scan (a file no DUP_IGNORE glob matches). A `**/` prefix matches
 # zero or more directories, so each glob is tried bare and with `*/` in front.
+# The walk prunes every `**/<dir>/**` directory named in DUP_IGNORE, so a vendored
+# tree is never read; the prune is derived from the same list, so it cannot drift.
 dup_has_source() {
-    local f g p matched
-    local -a globs
+    local f g p d matched first=1
+    local -a globs dirs names
     IFS=',' read -r -a globs <<< "$DUP_IGNORE"
+    for g in "${globs[@]}"; do
+        case "$g" in
+            '**/'*'/**') d="${g#\*\*/}"; dirs+=("${d%/\*\*}") ;;
+        esac
+    done
+    for d in "${dirs[@]}"; do
+        if [ "$first" = 1 ]; then names=(-name "$d"); first=0; else names+=(-o -name "$d"); fi
+    done
     while IFS= read -r -d '' f; do
         f="${f#./}"
         matched=0
@@ -39,7 +49,7 @@ dup_has_source() {
             esac
         done
         [ "$matched" = 1 ] || return 0
-    done < <(find . \( -name .git -prune \) -o -type f -print0)
+    done < <(find . \( -type d \( "${names[@]}" \) -prune \) -o -type f -print0)
     return 1
 }
 

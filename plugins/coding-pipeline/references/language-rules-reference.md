@@ -33,8 +33,8 @@ For quality gate commands, see `references/quality-gate-reference.md`.
 
 ## Load one file, not this one
 
-Each language lives in its own file so an agent loads ~30 lines instead of ~340. Load exactly the
-row matching the task's `Language` field.
+Each language lives in its own file so an agent loads only the one it needs, never the whole set.
+Load exactly the row matching the task's `Language` field.
 
 | Language | File |
 |---|---|

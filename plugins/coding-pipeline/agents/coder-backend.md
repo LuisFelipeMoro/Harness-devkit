@@ -45,3 +45,6 @@ Read a file from this table only at the moment its trigger fires, only that file
 | Writing an HTTP handler, auth check, query from input, or deserializer | `references/security-checklist.md` |
 | Writing a Security Test Case row or choosing a mock pattern | `references/test-audit-reference.md` |
 | Go module whose `go` directive allows newer idioms | `references/go-modern-idioms.md` |
+| Go code that creates, wraps, inspects, logs or returns errors | `references/go-error-handling.md` |
+| Go code with type assertions, shared slices or maps, numeric conversions, defer in a loop or lazy init | `references/go-safety.md` |
+| Go code that touches context lifecycle, `database/sql`/sqlx/pgx, an outbound `http.Client`, gRPC, file paths from input, or metrics | `references/go-services.md` |

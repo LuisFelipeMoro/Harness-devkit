@@ -66,6 +66,14 @@ Observability · Performance · ADRs with rejected alternatives).
 
 - Every component carries a decided Reuse Map row (`reuse:` / `extend:` / `new:` with the closest
   existing thing cited). Reuse and extend beat new.
+- **Language rules at design time.** For each language in the plan's Technology decisions, load
+  `references/languages/<language>.md` before drafting the Design. For Go, also load the topic files
+  on their triggers: `references/go-error-handling.md` when the Design defines errors;
+  `references/go-safety.md` when Data structures share slices or maps, convert numbers or lazy-init;
+  `references/go-services.md` when the design has a context lifecycle, a database, outbound HTTP, gRPC
+  or metrics; `references/go-modern-idioms.md` for the module's Go version. The Error Handling section
+  and each Edge-cases row follow them: which errors are sentinels and which are types, where each
+  error is logged once, and the timeout on each outbound call.
 - Use context7 to verify current library capabilities, API stability and version compatibility before
   specifying any library or framework. A new datastore, or an existing one taking on a materially
   different use case, loads `references/db-selection-reference.md` at that moment.
@@ -107,11 +115,13 @@ declared · contradicts existing code · convention breach · ambiguous AC · un
 · untraced requirement · undecided question deferred into code · blast radius wrong or unmeasured ·
 not independently testable · not reviewable at the planned size.
 
-Routing on its `Gate:` line:
-- **`PLAN APPROVED`** → Phase 3.
-- **`PLAN CHANGES REQUIRED`** → fix the plan from the findings, then re-dispatch for a review of
-  **only the changed sections**. Maximum 2 rounds; a third means the requirements themselves are
-  unclear — carry the remaining findings to Phase 3 as Open questions rather than looping.
+Routing on its `Score:` and `Gate:` lines:
+- **`PLAN APPROVED` with a Score at or above the bar** → Phase 3.
+- **`plan-reviewer Score below 8.0`, or `PLAN CHANGES REQUIRED`** → the Score Loop
+  (`references/quality-gate-reference.md` § Score Loop, plugin root; the numbers are in
+  `thresholds.md` § Score loop). Fix the plan from the findings, then re-dispatch for a review of
+  **only the changed sections** plus the reviewer's own prior findings. On exhaustion the Score Loop
+  question goes to the human; leftovers are never carried silently to Phase 3.
 
 An `[OPEN QUESTION]` finding is never resolved by guessing — it goes to Phase 3. Each round is appended
 to the plan's Review log; after review, `Status: reviewed`.

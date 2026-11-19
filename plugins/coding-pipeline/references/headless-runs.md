@@ -22,11 +22,11 @@ The prompt carries one line, built by the caller from the closed key list below:
 | `uncommitted` | `stop` · `continue` | code/SKILL.md step 2 (uncommitted changes outside `docs/`) |
 | `run_mode` | `inline` · `single` · `sequential` · `parallel` | code/SKILL.md step 4 (mode choice) |
 | `fix_rounds_exhausted` | `stop` | code/SKILL.md step 6; validation-loop.md (fix round limit) |
-| `validate_low_score` | `stop` · `accept` | validate-code validation-loop.md outcome table (score < 8.0) |
+| `validate_low_score` | `stop` · `accept` | validate-code validation-loop.md outcome table (score < 8.0 after the Score Loop's 3 rounds) |
 | `review_post` | `no` · `inline` · `summary` | review-code SKILL.md step 6 (post to PR) |
 | `review_language` | `English` · `Português (BR)` | review-code SKILL.md step 6 (language) |
 | `review_style` | `short` · `suggestions` | review-code SKILL.md step 6 (style) |
-| `review_low_score` | `stop` | review-code diff-verdict-and-rules.md (review score < 8.0 or CRITICAL) |
+| `review_low_score` | `stop` | review-code diff-verdict-and-rules.md (review score < 8.0 or CRITICAL, after the Score Loop's 3 rounds) |
 
 A key with value `stop` means the skill ends the run at that step and reports why. It is never
 a reason to continue with a guess.
@@ -60,7 +60,7 @@ The sentinel is the plain last line: no markdown, bold, backticks or blockquote 
 sessions for one approved plan. It is opt-in: the manual skill flow is unchanged.
 
     python3 scripts/drive.py --plan docs/plans/{slug}/plan.md [--model sonnet] [--mode sequential] \
-        [--budget-usd 3] [--resume-from code|validate|review]
+        [--budget-usd 8] [--resume-from code|validate|review]
 
 - `--model` defaults to `sonnet`; `--mode` is one of `inline`, `single`, `sequential`, `parallel`.
 - `--resume-from <stage>` reruns from that stage and keeps the earlier recorded results. It needs a

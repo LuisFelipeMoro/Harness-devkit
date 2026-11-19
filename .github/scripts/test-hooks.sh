@@ -346,6 +346,40 @@ out=$(dsp)
 expect "dispatch never blocks" dispatch-budget.sh '{"session_id":"dsp"}' 0 DEVKIT_DISPATCH_BUDGET=1
 rm -rf "${TMPDIR:-/tmp}/claude-devkit/dsp"
 
+# dispatch-budget: default budget is 20 — quiet through the 20th, warns on the 21st.
+# DEVKIT_DISPATCH_BUDGET is unset on purpose: this asserts the shipped default, so an
+# inherited override must not be able to pass it.
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspd20"
+d20() { printf '%s' '{"session_id":"dspd20"}' | env -u DEVKIT_DISPATCH_BUDGET bash "$HOOKS/dispatch-budget.sh" 2>&1; }
+d20_early=$(for _ in $(seq 1 20); do d20; done)
+d20_late=$(d20)
+case "$d20_late" in *"(budget 20)"*) d20_late_ok=yes ;; *) d20_late_ok=no ;; esac
+if [ -z "$d20_early" ] && [ "$d20_late_ok" = yes ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: dispatch-budget: default 20 — warned before the 21st: [$d20_early] · 21st: [$d20_late]"
+    fail=1
+fi
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/dspd20"
+
+# dispatch-budget: the four files that state the budget all say 20, and none keeps the old 14.
+# A missing file fails the positive grep, so the negative check never passes on an absent doc.
+docs_ok=yes
+grep -qF 'Per session: 20 dispatches' plugins/coding-pipeline/CLAUDE.md || docs_ok=no
+grep -qF 'default 20' README.md || docs_ok=no
+grep -qF '| Subagent dispatches | 20 per session' plugins/coding-pipeline/references/thresholds.md || docs_ok=no
+grep -qF 'DEVKIT_DISPATCH_BUDGET:-20}' plugins/coding-pipeline/hooks/dispatch-budget.sh || docs_ok=no
+stale=$(grep -lF -e 'default 14' -e '14 dispatches' -e '14 per session' \
+    plugins/coding-pipeline/CLAUDE.md README.md plugins/coding-pipeline/references/thresholds.md \
+    plugins/coding-pipeline/hooks/dispatch-budget.sh 2>/dev/null)
+[ -z "$stale" ] || docs_ok=no
+if [ "$docs_ok" = yes ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: dispatch-budget: docs state 20 — a file lacks 20 or still says 14 (stale: [$stale])"
+    fail=1
+fi
+
 # ── dispatch-budget: prompt-size warning ──────────────────────────────────────
 # Independent of the dispatch-count latch above: this fires per invocation on
 # tool_input.prompt itself, read through hook-lib's devkit_field.
@@ -560,12 +594,24 @@ printf 'not json' | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 bash "$HOOKS/
 [ "$rc17" = 0 ] && [ ! -s "$GF/o17" ]
 gf_check "gate-filter: malformed payload" $?
 
-# gate-filter: state dir unavailable — the command must still run, unfiltered: silent, exit 0
+# gate-filter: log under devkit_state_dir — the log sits in the state dir every hook shares,
+# for the same payload (session id sanitised the same way: gfx/y.z -> gfxyz)
+gf_sid='gfx/y.z'
+gf_pl=$(python3 -c 'import json,sys; print(json.dumps({"session_id": sys.argv[1], "tool_input": {"command": "go test ./...", "description": "x"}}))' "$gf_sid")
+out=$(gf_run "$gf_sid" 'go test ./...')
+want=$( . "$HOOKS/hook-lib.sh"; devkit_state_dir "$gf_pl" )
+got=$(gf_log "$out")
+[ -n "$want" ] && case "$got" in "$want"/gate-*) true ;; *) false ;; esac
+gf_check "gate-filter: log under devkit_state_dir" $?
+rm -rf "${TMPDIR:-/tmp}/claude-devkit/gfxyz"
+
+# gate-filter: state dir failure runs unfiltered — an unwritable TMPDIR (a path under a
+# regular file): the command must still run, unfiltered: silent, exit 0
 : > "$GF/afile"
 printf '%s' '{"session_id":"gf18","tool_input":{"command":"go test ./..."}}' \
-    | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 TMPDIR="$GF/afile" bash "$HOOKS/gate-filter.sh" >"$GF/o18" 2>&1; rc18=$?
+    | env PATH="$GF/bin:$NORTK" DEVKIT_GATE_FILTER=1 TMPDIR="$GF/afile/x" bash "$HOOKS/gate-filter.sh" >"$GF/o18" 2>&1; rc18=$?
 [ "$rc18" = 0 ] && [ ! -s "$GF/o18" ]
-gf_check "gate-filter: state dir unavailable" $?
+gf_check "gate-filter: state dir failure runs unfiltered" $?
 
 rm -rf "$GF" "${TMPDIR:-/tmp}"/claude-devkit/gf* 2>/dev/null
 

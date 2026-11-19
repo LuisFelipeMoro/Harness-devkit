@@ -40,6 +40,8 @@ Dart 3+ sound null safety — no `!` operator; `const` constructors everywhere p
 | Async | Subscriptions cancelled in `dispose`; never `setState` after an `await` without a `mounted` check |
 | Layout | Feature-first folders; internals under `lib/src/`, public surface via a single library file |
 | Errors | Repositories return typed failures; a `dynamic` catch that hides a programming bug is a defect |
+| Uncaught errors | `FlutterError.onError` and `PlatformDispatcher.instance.onError` are both set once in `main()` before `runApp`; without them, errors raised outside the framework's own callbacks go unreported |
+| Futures | Every `Future` is awaited, returned, or wrapped in `unawaited(...)`, so a fire-and-forget call is a stated decision |
 | Immutability | `final` fields on widgets; value equality via `==`/`hashCode` or a codegen package — never by identity |
 | Responsive | `LayoutBuilder` or `MediaQuery.sizeOf` for the space available, never a device-type check; works in portrait and landscape; layouts hold at 200% `MediaQuery.textScalerOf` |
 | Accessibility | Every interactive widget has a label (`Semantics`, `tooltip` or `semanticLabel`); widget tests assert `meetsGuideline` with `androidTapTargetGuideline`, `labeledTapTargetGuideline` and `textContrastGuideline`. The Android tap-target guideline enforces 48dp, stricter than the 24 CSS px web floor, and the stricter one applies here |
@@ -55,6 +57,8 @@ Dart 3+ sound null safety — no `!` operator; `const` constructors everywhere p
 | `BuildContext` used after `await` without `mounted` check | CRITICAL |
 | `flutter_secure_storage` not used for tokens/passwords | MAJOR |
 | `!` (null-check operator) without flow-proven justification | MAJOR |
+| `FlutterError.onError` or `PlatformDispatcher.instance.onError` not set at startup | MAJOR |
+| `Future` neither awaited nor wrapped in `unawaited(...)` | MAJOR |
 | Expensive computation inside `build()` method | MAJOR |
 | Stateful logic in UI layer (should be in ViewModel/BLoC/Provider) | MAJOR |
 | Missing `flutter analyze` passing (zero errors/warnings) | MAJOR |

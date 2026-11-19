@@ -24,7 +24,7 @@ memory — except where the project pins an older version, in which case code to
 idiom and flag it at handoff. A library may be updated when the Tasks row needs it and the change is
 non-breaking; a major-version bump is its own task (or `/deps`), never a side effect of this one.
 
-**Lazy language loading (token efficiency)**: load **exactly one** file — `references/languages/<language>.md` for the row's `Language` (from the plan's Tasks row) or the language detected in existing code. Each is 60–155 lines and self-sufficient: version policy, specialist mandate, authority chain, idiom table, coding rules, lint commands and review flags, all in the one file. Loading the whole set would cost ~870 lines to use ~80 of them. Never load `references/language-rules-reference.md` either; it is a routing index, and everything in it that the work needs is already restated in the language file. The overlay tells you which stacks are in its scope; the row's `Language` tells you which single one to load.
+**Lazy language loading (token efficiency)**: load **exactly one** file — `references/languages/<language>.md` for the row's `Language` (from the plan's Tasks row) or the language detected in existing code. Each is self-sufficient: version policy, specialist mandate, authority chain, idiom table, coding rules, lint commands and review flags, all in the one file. Loading the whole set would spend most of its context on languages the row does not use. Never load `references/language-rules-reference.md` either; it is a routing index, and everything in it that the work needs is already restated in the language file. The overlay tells you which stacks are in its scope; the row's `Language` tells you which single one to load.
 
 ## Agent Boundary (SRP — strictly enforced)
 
@@ -74,6 +74,7 @@ Impl files created/modified: [list]
 Spec coverage: [N]/[N] Test Case rows implemented  (Gap found: [row the table missed, or "none"])
 Falsification evidence:
   [TestName] ← broke [file:line — the Falsified By break] → FAILED: [quoted assertion] → restored → GREEN
+  Wiring check: [TestName] ← wiring: [what resolves] · validate-wiring OK · [suite] [N] passed   (prose-only rows, `n/a — Markdown, wiring check`)
   [one line per test — every test, no exceptions]
 Interface implemented: [InterfaceName — file:line]
 Blast radius: plan [N] callers · found [M] (missed: [file:line list | none])
@@ -222,13 +223,16 @@ against the specified behaviour, not reverse-engineered line by line from what y
 A test written after the code has never been observed to fail, so it is unproven. Prove it.
 
 11. For each test, apply the break named in its **Falsified By** column — invert the condition,
-    return the zero value, delete the guard, drop the validation. One break at a time.
+    return the zero value, delete the guard, drop the validation. One break at a time. A row whose
+    Falsified By reads `n/a — Markdown, wiring check` is prose-only and has no break: write its test
+    as specified, then do the wiring check in step 12's place (the paths it names resolve,
+    `validate-wiring.py` is OK, its suite passes) and record a `Wiring check:` line, not a break line.
 12. Run that test. **Confirm it FAILS**, and fails on its own assertion (not on a compile error,
-    panic, or unrelated setup failure). Quote the failure line.
+    panic, or unrelated setup failure). Quote the failure line. (Prose rows: no failure to quote.)
 13. Revert the break exactly. Re-run; confirm green.
 14. **A test that still passes against broken code is worthless** — rewrite it so it asserts the
     real observable result, then falsify it again. Never hand off an unfalsified test.
-15. Record one evidence line per test in `CODER DONE`.
+15. Record one evidence line per test in `CODER DONE` — a break line for a code row, a `Wiring check:` line for a prose row.
 
 **Security ACs are falsified the same way**: remove the guard and confirm the injection test,
 the 401/403 test, or the no-secret-in-logs test actually goes red. A security test that passes
@@ -265,6 +269,9 @@ Read a file from this table only at the moment its trigger fires, only that file
 | The row touches an HTTP handler, auth, a query built from input, or other user input | `references/security-checklist.md` |
 | The row adds or changes a DB schema, or introduces a datastore | `references/db-selection-reference.md` |
 | Writing Go and about to use a newer-version idiom (`wg.Go`, `errors.AsType`, range-over-int…) | `references/go-modern-idioms.md` |
+| Writing Go that creates, wraps, inspects, logs or returns errors | `references/go-error-handling.md` |
+| Writing Go with type assertions, shared slices or maps, numeric conversions, defer in a loop or lazy init | `references/go-safety.md` |
+| Writing Go that touches context lifecycle, `database/sql`/sqlx/pgx, an outbound `http.Client`, gRPC, file paths from input, or metrics | `references/go-services.md` |
 | Unsure whether a changed line is in scope (drive-by refactor, deletion, new abstraction) | `references/change-discipline.md` |
 | Writing a mock, or a Security Test Case row for I/O / auth / input | `references/test-audit-reference.md` |
 | Running lint / format / coverage locally before handoff | `references/quality-gate-reference.md` |

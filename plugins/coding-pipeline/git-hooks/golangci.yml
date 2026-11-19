@@ -1,0 +1,24 @@
+# golangci.yml — the devkit's offered golangci-lint v2 baseline.
+# Offered, never forced: pre-commit runs golangci-lint with the repo's own config
+# and never passes --config. Adopt it by copying it to the repo root:
+#   cp git-hooks/golangci.yml .golangci.yml
+version: "2"
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - nilerr
+    - forcetypeassert
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - contextcheck
+    - noctx
+    - copyloopvar
+    - unused
+    - ineffassign
+    - revive
+    - modernize

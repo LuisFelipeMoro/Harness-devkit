@@ -1,5 +1,57 @@
 # Changelog
 
+## [3.3.0] — 2026-11-18
+
+### Added
+
+- **Score Loop.** A scored validation whose overall score is below 8.0 goes back for a fix round, then a narrow re-check, until it reaches 8.0. It covers the plan review (`/planning`), `/validate-code`, `/review-code` and `/pr-fix`. Each round dispatches a fresh `coder` with the findings only. After 3 fix rounds the human decides: fix the remaining gaps, accept with known issues, or stop. The procedure is in `references/quality-gate-reference.md` § Score Loop; the numbers are in `references/thresholds.md`.
+- `/pr-fix` has a reviewer pass. After the picked comments are fixed and their gates are green, `reviewer` scores the fix diff only. A score below 8.0, or a CRITICAL finding, goes to a coder round.
+- `scripts/verify/lang-detect.sh` maps the languages in a diff to their rule files. `/review-code` runs it and passes the result to `reviewer`, which prints one `Language` line per detected language, so the review shows which rules it applied. A Next.js config at the root selects `nextjs` in place of `react`.
+- Go topic files `references/go-error-handling.md`, `references/go-safety.md` and `references/go-services.md`, linked from `references/languages/go.md`. They hold the error handling, defensive safety and service rules, plus the `os.Root` idiom for file access under a root (`go-services.md`, `go-modern-idioms.md`). Each rule's severity is written once, in `go.md`'s Review Flags.
+- `/planning` and `plan-reviewer` judge the plan against the Go patterns at design time. A design that contradicts the language rules is MAJOR under PR3.
+- `git-hooks/golangci.yml`, a golangci-lint v2 baseline, is offered, not forced. Adopt it with `cp ~/.claude/git-hooks/golangci.yml .golangci.yml`. Pre-commit keeps using the repo's own config.
+- Error handling rules for nine languages: Java, TypeScript, Rust, PHP, Flutter, React, Next.js, Kotlin and HTMX. Kotlin and HTMX carry a `## Error Handling` section; the other seven add their rule to the existing sections.
+
+### Changed
+
+- Session dispatch budget default 14 → 20 (`dispatch-budget.sh`, overridable with `DEVKIT_DISPATCH_BUDGET`).
+- Plan review allows 3 fix rounds after the first review, then the Score Loop question.
+- `/validate-code` and `/review-code` run up to 3 fix rounds under the Score Loop, each a `coder` dispatch with a narrow re-check.
+- Run-state schema 2: `StageResult` gains `reason`, which records why a stage did not run to an exit. Schema 1 files still read.
+- Per-stage caps live once in `headless.py`: `$8` budget (was $3) and 3600 s timeout (was 1800 s). `drive.py --budget-usd` defaults to `8`.
+- The headless answers for `validate_low_score` and `review_low_score` now read "after the Score Loop's 3 rounds".
+- Prose-only Test Case rows are marked `n/a — Markdown, wiring check` and get a wiring check instead of a break. `falsification.sh` counts them as `wiring-checked`, and QA treats a code row marked that way as MAJOR.
+
+### Fixed
+
+- `pre-commit` called `golangci-lint run --fast` on every Go commit. golangci-lint v2 rejects `--fast` with exit 3, which blocked every Go commit. It now uses `run --fast-only` on v2 and `run --fast` on v1.
+- `drive.py --resume-from validate|review` refuses when the recorded code stage did not end `ok`, and when HEAD no longer descends from the recorded base.
+- `drive.py` holds an exclusive lock on `docs/plans/{slug}/run-state.lock` for the whole run, so a second run on the same plan is refused. It also removes stale `run-state.json.*.tmp` files left by a killed write.
+- `drive.py` accepts `.env.example`, `.env.sample` and `.env.template` in a commit. Every other deny-list match is still refused.
+- `StageResult.reason` carries the stop reason, and `drive` reports `stage error: {reason}`.
+- The usage-limit stop matches only a limit message that opens a line, so ordinary text that mentions the limit no longer stops a run.
+- The run-state reader checks field types and rejects a malformed file loudly.
+- `dup-gate.sh` prunes `.git`, `node_modules`, `vendor`, `dist`, `build`, `target`, `.worktrees` and `testdata` from its search, so it never descends into them.
+- `gate-filter.sh` writes its log under the devkit state directory, the same one the other hooks use. It still fails open.
+- `go-test-name.sh` matches the platform-split source name literally, so glob characters in a test file name can no longer fake a pairing.
+
+### Removed
+
+- The 3.2.0 Known issues are closed: the `go-test-name.sh` glob match, and the `drive.py` run-state race and stale temp files.
+
+
+### Measured
+
+- Bench run `bench/results/20261119T112324Z` (arm B-sonnet: code, validate and review on sonnet; 6 fixtures × 1 rep; total cost $4.32, median $0.77 per run): gates green on 5 of 6 fixtures (pass rate 0.83), review score median 8.0 (7.0–8.0), no fixture flipped.
+- Per fixture: doc-cosmetic pass (cosmetic, no verdict) · go-concurrency pass, NOT READY 8.0 · go-gap pass, NOT READY 8.0 · go-simple pass, NOT READY 8.0 · ts-validator pass, NOT READY 7.0 · ts-handler NOT READY, stopped at the code stage with `NEEDS_USER`.
+- Every NOT READY came from the environment, not from a gate or a score: `security-scan` reported `UNMEASURED — uncommitted changes are outside the diff` inside the driver's validate stage, and an UNMEASURED gate is reported, never looped on (Score Loop). The same pattern as the 3.2.0 run.
+- ts-handler: the fixture plan names its rows `it("…")`, while `spec-coverage.sh` extracts the bare string from `it("…")`, so checkpoint M reports the rows missing; the coder asked rather than rename the frozen rows. Pre-existing (neither file changed in 3.3.0); it passed in the 3.2.0 run.
+
+### Known issues
+
+- `bench/fixtures/ts-handler/plan.md` row names (`it("…")`) do not match what `spec-coverage.sh` extracts, so the fixture can stop at checkpoint M.
+- In the driver's validate stage `security-scan.sh` reports UNMEASURED on the uncommitted working tree, so a headless run cannot reach `PRODUCTION READY` yet.
+
 ## [3.2.0] — 2026-11-15
 
 ### Added

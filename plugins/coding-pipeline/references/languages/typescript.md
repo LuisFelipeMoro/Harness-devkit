@@ -45,6 +45,7 @@ Gate commands: `../quality-gate-reference.md`. All languages: `../language-rules
 | Types | Discriminated unions over optional-field bags; `satisfies` over a type annotation for literal tables |
 | Nullability | One nullish representation per field — `undefined` or `null`, never both in the same shape |
 | Errors | A typed union / `Result` return for expected failure; `throw` reserved for programmer error |
+| Thrown values | Only `Error` instances are thrown — never throw a string or a plain object; a rethrow keeps the original as `cause` (`new Error(msg, { cause: e })`, ES2022) |
 | Modules | Named exports only; no default exports; no barrel `index.ts` re-export chains |
 | Async | No floating promises (`no-floating-promises`); `await` inside try/catch with the error narrowed before use |
 | Immutability | `readonly` on every public shape; `as const` for literal tables |
@@ -66,6 +67,8 @@ in CI. Staged files are linted pre-commit (`lint-staged`) with the identical com
 | `unserialize` equivalent on untrusted data | CRITICAL |
 | `any` on public API surface | MAJOR |
 | Unhandled `Promise` rejections | MAJOR |
+| `throw` of a string or plain object | MAJOR |
+| Rethrow or wrap that drops `cause` | MAJOR |
 | Prototype pollution: deep merge / `Object.assign` on untrusted nested input | MAJOR |
 | `as T` type assertion without runtime validation | MAJOR |
 | Missing `httpOnly` + `secure` + `sameSite` on auth cookies | MAJOR |

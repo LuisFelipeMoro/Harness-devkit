@@ -34,6 +34,7 @@ React, Flutter and Kotlin from its list. Cite this file; do not copy the numbers
 | Reviewer BLOCK | caps overall at 5.0 |
 | Tautological test | MAJOR — caps QA score at 4 |
 | Review/Stress score gap | > 3 → WARNING note, verdict unchanged |
+| Score loop | overall < 8.0 → fix round · 3 fix rounds after the first score · then the human (procedure: `quality-gate-reference.md` § Score Loop) |
 
 ## Roster
 
@@ -67,10 +68,10 @@ the same three scores; only the Stress label differs (`[folded]` vs `[dispatched
 |---|---|
 | Context ceiling | 80% of window (warn at 60%) — sensor: `hooks/context-budget.sh` |
 | SessionStart output | ≤ 9,500 characters (Claude Code cuts at 10,000); PROGRESS.md gives way first, oldest `## [` entries first — sensor: `hooks/session-bootstrap.sh` |
-| Subagent dispatches | 14 per session, advisory — `/planning` (1 map + 1 `plan-reviewer` per round, max 2) + `/code` (1 `coder` per Tasks row) + `/validate-code` (0–2, by depth) + `/review-code` (1). Sensor: `hooks/dispatch-budget.sh` |
+| Subagent dispatches | 20 per session, advisory — derived: plan (1 map + 2 reviews) 3 + `/code` (1 `coder` per Tasks row, 5-row run) 5 + `/validate-code` 2 + one score round 3 + `/review-code` 1 + one score round 2 = 16, + slack = 20. Shape: `/planning` (1 map + 1 `plan-reviewer` per round, max 3 fix rounds) + `/code` (1 `coder` per Tasks row) + `/validate-code` (0–2, by depth) + `/review-code` (1). Sensor: `hooks/dispatch-budget.sh` |
 | Writer subagents per turn | 3 (never 4+); read-only subagents are counted separately in the next row |
 | Read-only subagents per turn | 6 — each returns ≤ 150 words or one table; every one counts toward the session dispatch budget |
 | Fix Loop iterations | 3, then `QA ESCALATION` |
-| Plan-review rounds | 2 |
+| Plan-review rounds | 3 fix rounds after the first score, then the human |
 | Task size (one Tasks row) | ~200 lines of production code |
 | Graceful shutdown drain | ≤ 30s |
