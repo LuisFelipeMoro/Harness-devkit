@@ -71,6 +71,8 @@ Any non-zero exit → `QA→CODER TEST GAP`, quoting the script's own lines. Do 
 comparison by reading the suite; if you disagree with a script, the script is the defect and it
 gets fixed, because it is the thing that will still be right at 70% context.
 
+**Prose-only rows (AC30):** a row whose Falsified By reads `n/a — Markdown, wiring check` is accepted on its `wiring:` evidence line (`falsification.sh` counts it as `wiring-checked`; no break and no assertion is asked). A row marked `n/a — Markdown` that changes code (any non-prose file in its Files) is a MAJOR finding under this lens: it dodged the falsification it owed.
+
 **What the scripts do NOT decide, and QA still owes:**
 - **Does the named break correspond to the behaviour under test?** Breaking an unrelated line and
   watching an unrelated test fail satisfies the parser and proves nothing.

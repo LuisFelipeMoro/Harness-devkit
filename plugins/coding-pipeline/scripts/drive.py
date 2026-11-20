@@ -10,8 +10,9 @@ stopped run can be resumed from a named stage without redoing committed work.
 Refusals happen before any stage is dispatched: plan Status is not `approved`; the slug (the
 plan's parent directory name) does not match ^[a-z0-9-]+$; HEAD is detached; the branch is main
 or master; `git status` lists a path outside docs/ (tracked or untracked), because those would be
-committed as the code stage; --resume-from names no schema-valid run-state.json. A refusal never
-reaches the runner, so no `claude` call is made and no state is written.
+committed as the code stage; --resume-from names no schema-valid run-state.json; another drive.py
+run holds the plan's run-state.lock. A refusal never reaches the runner, so no `claude` call is made
+and no state is written. Under the lock, interrupted run-state.json.*.tmp files are swept.
 
 Stages advance only on green: after code, a non-empty change outside docs/ that commits on the
 feature branch (only paths outside docs/ are staged, ADR-5 / G5); after validate, the last
@@ -20,13 +21,15 @@ other outcome stops the run with `stop_reason` recorded. A usage limit stops it 
 retried (SEC-4). The driver never pushes and never opens a PR; it stops after review.
 
 Usage: drive.py --plan <docs/plans/{slug}/plan.md> [--model sonnet] [--mode sequential]
-                [--budget-usd 3] [--resume-from code|validate|review]
+                [--budget-usd 8] [--resume-from code|validate|review]
 Exit 0 — all three stages advanced.
 Exit 1 — stopped by a rule (the reason is printed and recorded in run-state.json).
 Exit 2 — refused before any stage ran: a precondition failed, or the arguments were malformed.
 """
 from __future__ import annotations
 
+import errno
+import fcntl
 import fnmatch
 import math
 import os
@@ -37,15 +40,13 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 
 from headless import (
+    DEFAULT_BUDGET_USD,  # the per-stage cap: headless owns it, bench reads the same value
     DEFAULT_TIMEOUT_S,
     Runner,
     RunState,
     StageResult,
-    _stage_env,  # the default stage environment (TMPDIR, Go tools on PATH): defined once, in headless
-    _subprocess_runner,  # the default runner: defined once, in headless
     last_sentinel,
     load_runs,
     result_text,
@@ -61,10 +62,9 @@ MAINLINES = ("main", "master")
 FLAGS = ("--plan", "--model", "--mode", "--budget-usd", "--resume-from")
 DEFAULT_MODEL = "sonnet"
 DEFAULT_MODE = "sequential"
-DEFAULT_BUDGET_USD = 3.0
 USAGE = (
     "usage: drive.py --plan <docs/plans/{slug}/plan.md> [--model sonnet] [--mode sequential] "
-    "[--budget-usd 3] [--resume-from code|validate|review]"
+    "[--budget-usd 8] [--resume-from code|validate|review]"
 )
 # G1: the only tools a stage is granted. No WebFetch, no WebSearch; destructive-guard.sh stays active.
 ALLOWED_TOOLS = "Bash,Agent,Glob,Grep,Skill,Read(~/.claude/**)"
@@ -84,6 +84,10 @@ COMMIT_TAIL_MAX = 240  # hook output kept in a rejected-commit stop reason, tail
 # Basenames the code stage never commits (AC11b, SEC-5): a credential written through Bash bypasses
 # secret-write-guard, which sees only Write and Edit, so the commit is the last place to stop it.
 DENY_LIST = (".env", ".env.*", ".envrc", "*.pem", "*.key", "id_rsa*", "*.p12")
+# AC15 (SEC-3): exact basenames exempt from DENY_LIST — templates hold placeholders, not secrets.
+ENV_TEMPLATES = (".env.example", ".env.sample", ".env.template")
+RUN_LOCK = "run-state.lock"  # per plan; held by one drive.py run at a time (AC18)
+STALE_TMP = "run-state.json.*.tmp"  # interrupted write_state temp files (AC18, SEC-5)
 
 # git(args, cwd) -> (returncode, stdout, stderr). Tests inject a fake; the default runs real git.
 GitFn = Callable[[list[str], str], tuple[int, str, str]]
@@ -275,11 +279,19 @@ def _check_resume_record(stage: str, prior: RunState, ctx: Context, git: GitFn) 
     recorded = {run.stage for run in prior.stages}
     if "code" not in recorded:
         raise Refused(f"--resume-from {stage}: the recorded run has no code stage record; the code stage never ran")
+    code_status = [run.status for run in prior.stages if run.stage == "code"][-1]
+    if code_status != "ok":
+        raise Refused(f"--resume-from {stage}: the recorded code stage ended {code_status}; rerun from code")
     rc, head, _err = git(["rev-parse", "HEAD"], ctx.root)
     if rc != 0 or not head.strip():
         raise Refused("cannot read the HEAD commit")
     if head.strip() == prior.base:
         raise Refused(f"--resume-from {stage}: HEAD is still the recorded base; the code stage committed nothing")
+    ancestry, _out, _err = git(["merge-base", "--is-ancestor", prior.base, "HEAD"], ctx.root)
+    if ancestry == 1:
+        raise Refused(f"--resume-from {stage}: HEAD does not descend from the recorded base {prior.base}; the branch was rewritten")
+    if ancestry != 0:
+        raise Refused("cannot check ancestry of the recorded base")
     if stage == "review" and "validate" not in recorded:
         raise Refused("--resume-from review: the recorded run has no validate stage record; review would skip validation")
 
@@ -305,8 +317,10 @@ def _after(sentinel: str, name: str) -> str:
 
 
 def _denied(path: str) -> bool:
-    """True when the path's basename matches DENY_LIST."""
+    """True when the path's basename matches DENY_LIST, except the exact ENV_TEMPLATES names."""
     name = os.path.basename(path)
+    if name in ENV_TEMPLATES:
+        return False
     return any(fnmatch.fnmatchcase(name, pattern) for pattern in DENY_LIST)
 
 
@@ -373,7 +387,7 @@ def _advance(stage: str, result: StageResult, text: str, ctx: Context, git: GitF
     if result.status == "budget":
         return f"per-stage budget exhausted (--budget-usd): {stage}"
     if result.status == "error":
-        return f"stage error: {result.subtype or f'exit {result.exit_code}'}"
+        return f"stage error: {result.reason or result.subtype or f'exit {result.exit_code}'}"
     if stage == "code":
         return _code_stage(ctx, git)
     if stage == "validate":
@@ -414,18 +428,8 @@ def run_stages(
     state_path = os.path.join(ctx.plan_dir, "run-state.json")
     tmp_dir = tempfile.mkdtemp(prefix=f"drive-{ctx.slug}-")
     try:
-        inner: Runner = runner or partial(
-            _subprocess_runner, timeout_s=DEFAULT_TIMEOUT_S, env=_stage_env(tmp_dir)
-        )
-        seen: dict[str, str] = {}
-
-        def capture(argv: list[str], cwd: str) -> tuple[int, str, str]:
-            code, out, err = inner(argv, cwd)
-            seen["out"] = out
-            return code, out, err
-
         for stage in STAGES[start:]:
-            seen.clear()
+            seen: list[str] = []
             result = run_stage(
                 stage,
                 build_prompt(stage, opts, ctx),
@@ -435,11 +439,12 @@ def run_stages(
                 tmp_dir=tmp_dir,
                 allowed_tools=ALLOWED_TOOLS,
                 timeout_s=DEFAULT_TIMEOUT_S,
-                runner=capture,
+                runner=runner,  # None: run_stage's default runner, the one prod path
+                on_stdout=seen.append,
             )
             state.stages.append(result)
             write_state(state_path, state)
-            reason = _advance(stage, result, result_text(seen.get("out", "")), ctx, git)
+            reason = _advance(stage, result, result_text(seen[0] if seen else ""), ctx, git)
             if reason is not None:
                 return _stop(state, state_path, reason)
         state.status = "done"
@@ -449,6 +454,43 @@ def run_stages(
         return 0
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def acquire_run_lock(ctx: Context) -> int:
+    """Take an exclusive non-blocking flock on the plan's run-state.lock (AC18).
+
+    The descriptor is never closed, so the lock lasts until this process exits; the OS releases it
+    on any exit, kill included. The descriptor is non-inheritable (PEP 446), so no `claude` child holds it.
+    """
+    lock_path = os.path.join(ctx.plan_dir, RUN_LOCK)
+    try:
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    except OSError as exc:
+        raise Refused(f"cannot open {lock_path}: {type(exc).__name__}") from None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        os.close(fd)
+        if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+            raise Refused(f"another drive.py run holds {lock_path}") from None
+        raise Refused(f"cannot lock {lock_path}: {type(exc).__name__}") from None
+    return fd
+
+
+def sweep_stale_tmp(plan_dir: str) -> None:
+    """Delete interrupted run-state temp files: regular files only, never following a symlink (SEC-5).
+
+    Any OSError while listing or removing is a refusal, not a traceback, so the exit-2 contract holds (AC18b).
+    """
+    try:
+        with os.scandir(plan_dir) as entries:
+            for entry in entries:
+                if fnmatch.fnmatchcase(entry.name, STALE_TMP) and entry.is_file(follow_symlinks=False):
+                    os.remove(entry.path)
+                    print(f"drive: removed stale {entry.name}")
+    except OSError as exc:
+        error = exc.strerror or type(exc).__name__
+        raise Refused(f"cannot sweep stale run-state tmp in {plan_dir}: {error}") from None
 
 
 def main(argv: list[str], *, git: GitFn | None = None, runner: Runner | None = None) -> int:
@@ -461,6 +503,8 @@ def main(argv: list[str], *, git: GitFn | None = None, runner: Runner | None = N
     git_fn = git or _git
     try:
         ctx = check_preconditions(opts, git_fn)
+        _run_lock = acquire_run_lock(ctx)  # binding the fd keeps the flock held until this process exits
+        sweep_stale_tmp(ctx.plan_dir)
         prior = load_prior(opts, ctx, git_fn)
     except Refused as exc:
         print(f"drive: REFUSED — {exc}", file=sys.stderr)

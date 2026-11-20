@@ -46,7 +46,7 @@ FIXTURES = BENCH / "fixtures"
 RESULTS = BENCH / "results"
 FALSIFICATION = ROOT / "plugins" / "coding-pipeline" / "scripts" / "verify" / "falsification.sh"
 STAGES = ("code", "validate", "review")
-STAGE_BUDGET_USD = 3.0  # LLM10: per-stage cap
+STAGE_BUDGET_USD = headless.DEFAULT_BUDGET_USD  # LLM10: per-stage cap, the driver's value (ADR-7)
 STAGE_TIMEOUT_S = headless.DEFAULT_TIMEOUT_S
 ALLOWED_TOOLS = "Bash,Agent,Glob,Grep,Skill,Read(~/.claude/**)"  # G1
 GATE_TIMEOUT_S = 600
@@ -329,6 +329,7 @@ def run_one(
         "stop_reason": stop or (None if gates is not None else "gates unmeasured"),
         "stages": [
             {"stage": s.stage, "status": s.status, "exit_code": s.exit_code, "subtype": s.subtype,
+             "reason": s.reason,
              "cost_usd": s.cost_usd, "wall_s": s.wall_s, "result_tail": tail}
             for s, tail in zip(stages, tails)
         ],

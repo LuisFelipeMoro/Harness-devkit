@@ -178,6 +178,33 @@ If coverage < threshold AND uncovered paths are dead code or framework-generated
 
 ---
 
+## Score Loop *(the one fix-and-rescore procedure; every skill that scores cites it)*
+
+A low score becomes a fix round, not a question. The numbers (`< 8.0` and the 3 rounds) live in
+`thresholds.md`; cite it here, never restate them elsewhere.
+
+**Trigger.** Any scoring step with overall score < 8.0, **or** a hard-gate FAIL, **or** a CRITICAL finding, at any score. Fixable blockers loop.
+
+**Never a trigger.** A gate reported `UNMEASURED` or a missing tool is an environment fact, not a code defect, and a lens floor alone keeps its existing routing. Neither starts a round; both ask the human.
+
+**Round.** One fresh, narrow fix dispatch (only the findings still open, by path), then a narrow re-check (only the tests that changed and only its own prior findings), then a recomputed score. At most 3 rounds after the first scoring, so up to 4 scores in total. Each round prints:
+
+`Round {n}/3 · score {before} → {after} · {k} findings left`
+
+No question goes to the human before the 3rd round has failed. An identical repeat (Loop Integrity rule 2: same findings, same score) stops the loop early.
+
+**Exhaustion.** After the 3rd round still fails, one AskUserQuestion with three options:
+
+- *Fix the gaps yourself* — after the human's edit, one narrow re-check and a report. Still under the bar → the same question again, with no automatic rounds.
+- *Accept with known issues* — the run continues and the report lists each open finding.
+- *Stop* — the run ends and reports why.
+
+The question lists each finding still below the bar with `file:line`. Headless: the skill's existing low-score key answers it (see `headless-runs.md`); a headless run never guesses.
+
+**Loop Integrity applies to every round (SEC-1).** A round whose diff lowers a threshold, edits `thresholds.md` or `verdict.sh`, skips or weakens a test, or edits a Test Case row fails the round outright. The loop can reach 8 only by fixing code, never by editing its judge.
+
+---
+
 ## Loop Integrity *(applies to every loop above)*
 
 A loop that can edit its own verifier is not a gate, and a loop with no progress condition

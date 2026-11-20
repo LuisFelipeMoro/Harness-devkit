@@ -21,14 +21,14 @@ devkit_hook_enabled "pre:bash:gate-filter" || exit 0
 # undocumented behaviour (ADR-1).
 if command -v rtk >/dev/null 2>&1; then exit 0; fi
 
-# One python3 start per Bash call (NFR-2): it parses the payload, decides, creates the
-# log file and emits the JSON. Any failure leaves stdout empty.
+# One python3 start per Bash call (NFR-2) for the gate decision: it parses the payload,
+# decides, creates the log file and emits the JSON. Any failure leaves stdout empty.
 IFS= read -r -d '' GATE_FILTER_PY <<'PY' || true
 import json, os, re, shutil, sys, time
 
-gate_re, base = sys.argv[1], sys.argv[2]
-if not gate_re:
-    sys.exit(0)  # no gate list: rewrite nothing rather than everything
+gate_re, state = sys.argv[1], sys.argv[2]
+if not gate_re or not state:
+    sys.exit(0)  # no gate list or no state dir: rewrite nothing rather than everything
 
 try:
     payload = json.load(sys.stdin)
@@ -37,6 +37,8 @@ except Exception:
 tool_input = payload.get("tool_input") if isinstance(payload, dict) else None
 cmd = tool_input.get("command") if isinstance(tool_input, dict) else None
 if not isinstance(cmd, str) or not cmd:
+    sys.exit(0)
+if not os.path.isdir(state):
     sys.exit(0)
 
 # AC1: a gate starts the command, followed by whitespace or end of string.
@@ -48,21 +50,6 @@ for meta in ("|", ";", "&", "<", ">", "$(", "`", "#", "\n", "\r"):
     if meta in cmd:
         sys.exit(0)
 if cmd.startswith("rtk"):
-    sys.exit(0)
-
-# Mirror devkit_state_dir: ${TMPDIR:-/tmp}/claude-devkit/<sanitised session id>.
-sid = payload.get("session_id")
-sid = re.sub(r"[^A-Za-z0-9_-]", "", sid) if isinstance(sid, str) else ""
-sid = sid or "nosession"
-state = os.path.join(base, "claude-devkit", sid)
-try:
-    os.makedirs(state, mode=0o700, exist_ok=True)
-    for d in (state, os.path.dirname(state)):
-        try:
-            os.chmod(d, 0o700)
-        except OSError:
-            pass
-except OSError:
     sys.exit(0)
 
 path = os.path.join(state, "gate-%d-%d.log" % (int(time.time()), os.getpid()))
@@ -90,9 +77,13 @@ updated["command"] = rewritten
 json.dump({"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": updated}}, sys.stdout)
 PY
 
-# Fail open (A05): JSON is printed only when python exited 0 with output. Any other
-# outcome — unparseable payload, unwritable state dir, python crash — leaves stdout empty
-# and exits 0, so the command runs unfiltered and is never blocked.
-out=$(printf '%s' "$(cat)" | python3 -c "$GATE_FILTER_PY" "$DEVKIT_GATE_RE" "${TMPDIR:-/tmp}" 2>/dev/null); rc=$?
+# The state dir is the one rule every hook shares (hook-lib.sh devkit_state_dir). If it
+# cannot be made, the command runs unfiltered: fail open (A05), never blocked.
+payload="$(cat)"
+state="$(devkit_state_dir "$payload")" || exit 0
+[ -n "$state" ] || exit 0
+# JSON is printed only when python exited 0 with output. Any other outcome — unparseable
+# payload, unwritable log, python crash — leaves stdout empty and exits 0.
+out=$(printf '%s' "$payload" | python3 -c "$GATE_FILTER_PY" "$DEVKIT_GATE_RE" "$state" 2>/dev/null); rc=$?
 [ "$rc" = 0 ] && [ -n "$out" ] && printf '%s' "$out"
 exit 0

@@ -78,6 +78,55 @@ printf 'TestParsesToken: FAIL expected 1 got 0\nTestParsesTokenWithExpiry: FAIL 
 bash "$V/falsification.sh" "$W/done-both.txt" "$W/story.md" >/dev/null 2>&1; rc=$?
 check "falsification: evidence for both passes" 0 "$rc"
 
+# ── falsification: a prose-only row gets a wiring check, not a break (AC30) ──
+# A Falsified By cell starting `n/a — Markdown` needs a `wiring:` line naming the
+# row and no assertion. Every other row keeps the assertion rule. The keyword
+# checks read the evidence text after the row name, so a name such as "...needs
+# an assertion" cannot satisfy them on its own.
+cat > "$W/story-mixed.md" <<'MD'
+| Test Name | Input | Expected | AC | Why It Matters | Falsified By |
+|---|---|---|---|---|---|
+| `falsification: markdown row accepts wiring evidence` | a | b | AC30 | c | n/a — Markdown, wiring check |
+| `falsification: code row still needs an assertion` | a | b | AC30 | c | delete the guard |
+MD
+cat > "$W/story-prose.md" <<'MD'
+| Test Name | Input | Expected | AC | Why It Matters | Falsified By |
+|---|---|---|---|---|---|
+| `falsification: markdown row without wiring evidence fails` | a | b | AC30 | c | n/a — Markdown, wiring check |
+MD
+cat > "$W/story-code.md" <<'MD'
+| Test Name | Input | Expected | AC | Why It Matters | Falsified By |
+|---|---|---|---|---|---|
+| `falsification: code row still needs an assertion` | a | b | AC30 | c | delete the guard |
+MD
+printf '%s\n' \
+    'falsification: markdown row accepts wiring evidence ← wiring: paths resolve · validate-wiring OK · verify 1 passed' \
+    'falsification: code row still needs an assertion ← FAIL expected 1 got 0' > "$W/ev-mixed.txt"
+printf 'falsification: code row still needs an assertion ← wiring: paths resolve · validate-wiring OK\n' > "$W/ev-code-wiring.txt"
+printf 'falsification: markdown row without wiring evidence fails ← FAIL expected 1 got 0\n' > "$W/ev-assert-only.txt"
+: > "$W/ev-none.txt"
+
+out=$(bash "$V/falsification.sh" "$W/ev-mixed.txt" "$W/story-mixed.md" 2>&1); rc=$?
+check "falsification: markdown row accepts wiring evidence" 0 "$rc" "$out" "1 falsified · 1 wiring-checked"
+out=$(bash "$V/falsification.sh" "$W/ev-code-wiring.txt" "$W/story-code.md" 2>&1); rc=$?
+check "falsification: code row still needs an assertion" 1 "$rc" "$out" "NO ASSERTION QUOTED"
+out=$(bash "$V/falsification.sh" "$W/ev-none.txt" "$W/story-prose.md" 2>&1); rc=$?
+check "falsification: markdown row without wiring evidence fails" 1 "$rc" "$out" "NO EVIDENCE: falsification: markdown row without wiring evidence fails"
+out=$(bash "$V/falsification.sh" "$W/ev-assert-only.txt" "$W/story-prose.md" 2>&1); rc=$?
+check "falsification: markdown row without wiring evidence fails" 1 "$rc" "$out" "NO WIRING EVIDENCE: falsification: markdown row without wiring evidence fails"
+
+# ── standards: prose rows are named wherever a break used to be demanded ─────
+test_markdown_wiring_standards() {  # the phrase lives in each guide that demands a break, and QA names the MAJOR
+    local bad=0 f phrase='n/a — Markdown, wiring check' P="$ROOT/plugins/coding-pipeline"
+    for f in CLAUDE.md agents/coder.md agents/qa.md agents/plan-reviewer.md references/plan-template.md skills/code/references/loop.md; do
+        grep -qF -- "$phrase" "$P/$f" || { echo "$f does not name '$phrase'"; bad=1; }
+    done
+    grep -F 'MAJOR' "$P/agents/qa.md" | grep -qF 'n/a — Markdown' || { echo "qa.md does not name the MAJOR for a code row marked n/a"; bad=1; }
+    [ "$bad" = 0 ]
+}
+test_markdown_wiring_standards; rc=$?
+check "standards: markdown rows get a wiring check" 0 "$rc"
+
 # ── security-scan: "0 candidates" must mean scanned, not skipped ────────────
 out=$(bash "$V/security-scan.sh" "" 2>&1); rc=$?
 check "security-scan: empty path is UNMEASURED, not 0 candidates" 2 "$rc" "$out" "UNMEASURED"
@@ -1987,6 +2036,84 @@ check "release: 3.1.1 entry names the test file rule" 0 0 "$out" '`foo_test.go`'
 out=$(cat "$ROOT/README.md")
 check "release: README states the test file rule" 0 0 "$out" '**Go test files are paired.**'
 
+# ── Go error and safety topic files (T13) ───────────────────────────────────
+# Each test_go_topic_* helper prints `FAIL: <row>` on any miss. A grep that
+# cannot read its file counts as a miss, so unmeasured text never passes.
+T13_ERR="$ROOT/plugins/coding-pipeline/references/go-error-handling.md"
+T13_SAFE="$ROOT/plugins/coding-pipeline/references/go-safety.md"
+T13_GOMD="$ROOT/plugins/coding-pipeline/references/languages/go.md"
+T13_CODER="$ROOT/plugins/coding-pipeline/agents/coder.md"
+T13_BACKEND="$ROOT/plugins/coding-pipeline/agents/coder-backend.md"
+T13_REVIEW="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+
+test_go_topic_has() {  # test_go_topic_has <row> <file> <needle>... — every needle present, or the row FAILs
+    local row="$1" f="$2" n miss=""
+    shift 2
+    for n in "$@"; do grep -qF -- "$n" "$f" || miss="$miss [$n]"; done
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — $(basename "$f") missing:$miss"; fail=1; fi
+}
+test_go_topic_row() {  # test_go_topic_row <row> <file> <issue> <severity> — one Review Flags line holds both
+    local row="$1" f="$2" issue="$3" sev="$4"
+    if grep -F -- "$issue" "$f" | grep -qF -- "| $sev |"; then pass=$((pass + 1)); else echo "FAIL: $row — no '$issue' row at $sev in $(basename "$f")"; fail=1; fi
+}
+test_go_topic_once() {  # test_go_topic_once <row> <file> <literal> — exactly one occurrence
+    local row="$1" f="$2" n
+    n=$(grep -cF -- "$3" "$f" 2>/dev/null)
+    if [ "${n:-0}" = 1 ]; then pass=$((pass + 1)); else echo "FAIL: $row — '$3' occurs ${n:-unreadable} time(s) in $(basename "$f"), want 1"; fail=1; fi
+}
+test_go_topic_absent() {  # test_go_topic_absent <row> <file>... — no severity cell in any named topic file
+    local row="$1" f rc hit=""
+    shift
+    for f in "$@"; do
+        grep -qF -e '| MAJOR' -e '| MINOR' -e '| CRITICAL' -e '| NIT' -- "$f"; rc=$?
+        [ "$rc" = 1 ] || hit="$hit $(basename "$f")(rc=$rc)"
+    done
+    if [ -z "$hit" ]; then pass=$((pass + 1)); else echo "FAIL: $row — severity cell or unreadable file:$hit"; fail=1; fi
+}
+
+test_go_topic_has "go: error-handling topic file" "$T13_ERR" 'log it or return it, never both' 'errors.Join' 'nilerr' '%v' 'errors.AsType' 'samber/cc-skills-golang (MIT)'
+test_go_topic_has "go: safety topic file" "$T13_SAFE" 'typed nil' 's[:len(s):len(s)]' 'comma-ok' 'defer' 'loop' 'samber/cc-skills-golang (MIT)'
+test_go_topic_has "go: flags and topic links" "$T13_GOMD" 'go-error-handling.md' 'go-safety.md' '`foo.go` is tested by `foo_test.go`' 'not named after its source file (`bench_test.go`, `wiring_test.go`) | MAJOR |'
+test_go_topic_row "go: flags and topic links" "$T13_GOMD" 'logged and returned' MAJOR
+test_go_topic_row "go: flags and topic links" "$T13_GOMD" 'typed nil' MAJOR
+test_go_topic_row "go: flags and topic links" "$T13_GOMD" 'no golangci-lint config' MINOR
+test_go_topic_once "go: flags and topic links" "$T13_GOMD" 'Narrowing integer conversion with no bounds check (gosec G115)'
+test_go_topic_once "go: flags and topic links" "$T13_GOMD" '`defer` inside a hot loop'
+test_go_topic_absent "go: flags and topic links" "$T13_ERR" "$T13_SAFE"
+test_go_topic_has "go: agents load topic files" "$T13_CODER" 'references/go-error-handling.md' 'references/go-safety.md'
+test_go_topic_has "go: agents load topic files" "$T13_BACKEND" 'references/go-error-handling.md' 'references/go-safety.md'
+test_go_topic_has "go: agents load topic files" "$T13_REVIEW" 'references/go-error-handling.md' 'references/go-safety.md'
+
+# ── Go services topic file and os.Root idiom (T14) ──────────────────────────
+T14_SERV="$ROOT/plugins/coding-pipeline/references/go-services.md"
+T14_MODERN="$ROOT/plugins/coding-pipeline/references/go-modern-idioms.md"
+test_go_topic_has "go: services topic file" "$T14_SERV" '`context.WithoutCancel`' '`sql.ErrNoRows`' '`rows.Err()`' '`SetMaxOpenConns`' '`MaxIdleConnsPerHost`' '`status.Errorf`' '`Histogram`' 'samber/cc-skills-golang (MIT)'
+test_go_topic_has "go: services flags and links" "$T13_GOMD" 'go-services.md' 'rows.Err() unchecked after iteration'
+test_go_topic_row "go: services flags and links" "$T13_GOMD" '`WithCancel`/`WithTimeout` not called on every path' MAJOR
+test_go_topic_row "go: services flags and links" "$T13_GOMD" 'request context used for work that must outlive the request' MAJOR
+test_go_topic_row "go: services flags and links" "$T13_GOMD" 'outbound `http.Client` with no `Timeout` (any URL)' MAJOR
+test_go_topic_row "go: services flags and links" "$T13_GOMD" 'gRPC handler returns a raw `error`' MAJOR
+test_go_topic_row "go: services flags and links" "$T13_GOMD" 'rows.Err() unchecked after iteration' MAJOR
+test_go_topic_absent "go: services flags and links" "$T14_SERV"
+test_go_topic_has "go: services flags and links" "$T13_CODER" 'references/go-services.md'
+test_go_topic_has "go: services flags and links" "$T13_BACKEND" 'references/go-services.md'
+test_go_topic_has "go: services flags and links" "$T13_REVIEW" 'references/go-services.md'
+test_go_topic_row "go: os.Root idiom row" "$T14_MODERN" '`os.Root`' 1.24
+
+# ── Go patterns at plan time and the review's topic-files line (T17) ─────────
+T17_PHASES="$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md"
+T17_PLAN_REVIEWER="$ROOT/plugins/coding-pipeline/agents/plan-reviewer.md"
+T17_REVIEWER="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+check_all_needles() {  # check_all_needles <row> <file> <needle>... — every needle present, or the row FAILs
+    local row="$1" f="$2" n miss=""
+    shift 2
+    for n in "$@"; do grep -qF -- "$n" "$f" || miss="$miss [$n]"; done
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — $(basename "$f") missing:$miss"; fail=1; fi
+}
+check_all_needles "planning: language rules at design time" "$T17_PHASES" 'Language rules at design time' 'references/languages/<language>.md' 'go-error-handling.md' 'go-safety.md' 'go-services.md'
+check_all_needles "plan-reviewer: language rules contradiction" "$T17_PLAN_REVIEWER" 'Also MAJOR under PR3' 'contradicts the plan' 'references/languages/<language>.md' 'go-error-handling.md' 'go-safety.md' 'go-services.md'
+check_all_needles "reviewer: topic files line" "$T17_REVIEWER" 'Topic files: {paths loaded | none}' 'Language {name}: references/languages/{name}.md'
+
 # ── Responsive and accessibility: rules exist and each stack points at them ──
 FH="$ROOT/plugins/coding-pipeline/references/frontend-hardening-reference.md"
 out=$(cat "$FH")
@@ -2263,6 +2390,119 @@ check "release-exclude: validation and bench results" 0 "$rc"
 grep -qF 'validation/' "$HC_PA" && grep -qF 'run-state.json' "$HC_PA"; rc=$?
 check "pipeline-artifacts: validation and run-state listed" 0 "$rc"
 
+# ── score loop: numbers once in thresholds.md, one procedure, headless keys answer it ──
+SL_TH="$ROOT/plugins/coding-pipeline/references/thresholds.md"
+SL_QG="$ROOT/plugins/coding-pipeline/references/quality-gate-reference.md"
+SL_HR="$ROOT/plugins/coding-pipeline/references/headless-runs.md"
+sl_section() {  # sl_section <file> — the "## Score Loop" heading through the next "## " heading
+    awk 'index($0, "## Score Loop") == 1 {on = 1; print; next} on && /^## / {exit} on {print}' "$1"
+}
+
+grep '^| Score loop |' "$SL_TH" | grep -qF '< 8.0' \
+    && grep '^| Score loop |' "$SL_TH" | grep -qF 'the human'; rc=$?
+check "score-loop: thresholds row" 0 "$rc"
+
+grep -qF '| Plan-review rounds | 3' "$SL_TH" && ! grep -qF '| Plan-review rounds | 2 |' "$SL_TH"; rc=$?
+check "score-loop: plan-review rounds 3" 0 "$rc"
+
+sl_sec=$(sl_section "$SL_QG")
+sl_line=$(grep -nF '## Score Loop' "$SL_QG" | head -1 | cut -d: -f1)
+li_line=$(grep -nF '## Loop Integrity' "$SL_QG" | head -1 | cut -d: -f1)
+sl_ok=1
+[ -n "$sl_line" ] && [ -n "$li_line" ] && [ "$sl_line" -lt "$li_line" ] || sl_ok=0
+for sl_n in 'Fix the gaps yourself' 'Accept with known issues' 'Stop' 'identical' 'thresholds.md'; do
+    case "$sl_sec" in *"$sl_n"*) ;; *) sl_ok=0 ;; esac
+done
+[ "$sl_ok" = 1 ]; rc=$?
+check "score-loop: shared section" 0 "$rc"
+
+sl_trig=$(printf '%s\n' "$sl_sec" | grep -F 'Trigger')
+sl_never=$(printf '%s\n' "$sl_sec" | grep -F 'Never a trigger')
+printf '%s\n' "$sl_trig" | grep -qF 'hard-gate FAIL' && printf '%s\n' "$sl_trig" | grep -qF 'CRITICAL' \
+    && printf '%s\n' "$sl_never" | grep -qF 'UNMEASURED' && printf '%s\n' "$sl_never" | grep -qF 'lens floor'; rc=$?
+check "score-loop: gate fail and critical trigger the loop" 0 "$rc"
+
+sl_fix=$(printf '%s\n' "$sl_sec" | grep -F 'Fix the gaps yourself')
+printf '%s\n' "$sl_fix" | grep -qF 'one narrow re-check'; rc=$?
+check "score-loop: fix yourself re-checks once" 0 "$rc"
+
+grep -F '| `validate_low_score` |' "$SL_HR" | grep -qF 'Score Loop' \
+    && grep -F '| `review_low_score` |' "$SL_HR" | grep -qF 'Score Loop'; rc=$?
+check "score-loop: headless keys answer exhaustion" 0 "$rc"
+
+# ── score loop, T2: /planning and /validate-code loop text ──────────────────
+SL_PLAN_SKILL="$ROOT/plugins/coding-pipeline/skills/planning/SKILL.md"
+SL_PLAN_PH="$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md"
+SL_PR="$ROOT/plugins/coding-pipeline/agents/plan-reviewer.md"
+SL_VS="$ROOT/plugins/coding-pipeline/skills/validate-code/SKILL.md"
+SL_VL="$ROOT/plugins/coding-pipeline/skills/validate-code/references/validation-loop.md"
+SL_VE="$ROOT/plugins/coding-pipeline/skills/validate-code/references/execution-and-report.md"
+
+grep -qF 'Score Loop' "$SL_PLAN_SKILL" && grep -qF 'Score Loop' "$SL_PLAN_PH" \
+    && grep -qF 'plan-reviewer Score below 8.0' "$SL_PLAN_SKILL" && grep -qF 'plan-reviewer Score below 8.0' "$SL_PLAN_PH" \
+    && ! grep -qF -e 'max 2' -e 'Maximum 2' "$SL_PLAN_SKILL" "$SL_PLAN_PH"; rc=$?
+check "score-loop: planning loops on score" 0 "$rc"
+
+grep -qF '3 re-review rounds' "$SL_PR" && ! grep -qF '2 re-review rounds' "$SL_PR"; rc=$?
+check "score-loop: plan-reviewer rounds" 0 "$rc"
+
+grep -qF 'Score Loop' "$SL_VL" && grep -qF 'coder' "$SL_VL" \
+    && ! grep -qF -e 'report-only' -e 'without fixing anything' "$SL_VS" "$SL_VL" "$SL_VE"; rc=$?
+check "score-loop: validate-code dispatches coder" 0 "$rc"
+
+sl_vl_sec=$(sl_section "$SL_VL")
+printf '%s\n' "$sl_vl_sec" | grep -qF 'only the tests that changed' \
+    && printf '%s\n' "$sl_vl_sec" | grep -qF 'only its own prior findings'; rc=$?
+check "score-loop: validate-code narrow re-check" 0 "$rc"
+
+sl_crit=$(grep -F 'CRITICAL security |' "$SL_VL")
+printf '%s\n' "$sl_crit" | grep -qF 'Score Loop' && ! printf '%s\n' "$sl_crit" | grep -qF 'via /code'; rc=$?
+check "score-loop: validate critical loops" 0 "$rc"
+
+# ── score loop, T3: /review-code and /pr-fix loop text ──────────────────────
+SL_RC="$ROOT/plugins/pr-workflow/skills/review-code/SKILL.md"
+SL_RV="$ROOT/plugins/pr-workflow/skills/review-code/references/diff-verdict-and-rules.md"
+SL_PF="$ROOT/plugins/pr-workflow/skills/pr-fix/SKILL.md"
+
+sl_low=$(grep -F '| < 8.0 | No CRITICAL |' "$SL_RV")
+grep -qF 'coding-pipeline/references/quality-gate-reference.md' "$SL_RC" \
+    && grep -qF 'coding-pipeline/references/quality-gate-reference.md' "$SL_RV" \
+    && grep -qF 'Score Loop' "$SL_RC" && grep -qF 'Score Loop' "$SL_RV" \
+    && printf '%s\n' "$sl_low" | grep -qF 'Score Loop' \
+    && ! printf '%s\n' "$sl_low" | grep -qF 'push with known issues?'; rc=$?
+check "score-loop: review-code loop" 0 "$rc"
+
+sl_crit_hi=$(grep -F '| ≥ 8.0 | CRITICAL' "$SL_RV")
+sl_crit_lo=$(grep -F '| < 8.0 | CRITICAL' "$SL_RV")
+sl_blk=1
+for sl_row in "$sl_crit_hi" "$sl_crit_lo"; do
+    printf '%s\n' "$sl_row" | grep -qF 'BLOCK' || sl_blk=0
+    printf '%s\n' "$sl_row" | grep -qF 'Score Loop' || sl_blk=0
+done
+[ "$sl_blk" = 1 ]; rc=$?
+check "score-loop: review CRITICAL still blocks" 0 "$rc"
+
+grep -qF 'Score Loop needs the branch checked out' "$SL_RC" \
+    && grep -qF 'runs only for the current branch' "$SL_RC"; rc=$?
+check "score-loop: review loop needs checked-out branch" 0 "$rc"
+
+sl_pf_boundary=$(grep -F '**Boundary**' "$SL_PF")
+grep -qF 'FIX_BASE' "$SL_PF" && grep -qF 'subagent_type: "reviewer"' "$SL_PF" \
+    && grep -qF 'Score Loop' "$SL_PF" \
+    && printf '%s\n' "$sl_pf_boundary" | grep -qF 'reviewer'; rc=$?
+check "score-loop: pr-fix reviewer pass" 0 "$rc"
+
+grep -qF 'only the fix diff' "$SL_PF" \
+    && grep -qF 'remaining gaps are listed in the confirm step' "$SL_PF" \
+    && grep -qF 'never posted' "$SL_PF"; rc=$?
+check "score-loop: pr-fix scope and accept" 0 "$rc"
+
+grep -qF 'vs FIX_BASE · Comments: {ids' "$SL_PF" \
+    && grep -F 'Findings:' "$SL_RC" | grep -qF 'paths' \
+    && grep -F 'Findings:' "$SL_PF" | grep -qF 'paths' \
+    && grep -F 'Findings:' "$SL_VL" | grep -qF 'paths'; rc=$?
+check "score-loop: dispatch prompts paths only" 0 "$rc"
+
 # ── headless runner: classify, argv, sentinels, state ───────────────────────
 # headless.py is driven through python3 with an injected fake runner — the real
 # `claude` is never called. Each snippet prints the observed values on one line;
@@ -2323,16 +2563,177 @@ out=$(hl_py <<'PY'
 import subprocess
 from headless import run_stage
 def timed_out(argv, cwd):
-    raise subprocess.TimeoutExpired(argv, 1800)
+    raise subprocess.TimeoutExpired(argv, 3600)
 def missing(argv, cwd):
     raise FileNotFoundError(2, "No such file or directory", "claude")
 kw = dict(budget_usd=3.0, tmp_dir=".", allowed_tools="Bash")
 t = run_stage("code", "P", "sonnet", ".", runner=timed_out, **kw)
 m = run_stage("code", "P", "sonnet", ".", runner=missing, **kw)
-print(f"timeout={t.status}:{t.subtype} missing={m.status}:{m.subtype}")
+print(f"timeout={t.status}:{t.reason} missing={m.status}:{m.reason}")
 PY
 ); rc=$?
-check "headless: timeout and missing binary" 0 "$rc" "$out" "timeout=error:timeout after 1800s missing=error:claude not found"
+check "headless: timeout and missing binary" 0 "$rc" "$out" "timeout=error:timeout after 3600s missing=error:claude not found"
+
+# ── T6: reason field, schema 2 (schema 1 still read), anchored limit line, typed reader ──
+# hl_state <root> <schema> <stage overrides JSON> — one run-state record at <root>/docs/plans/x/
+hl_state() {
+    mkdir -p "$1/docs/plans/x" && python3 - "$1/docs/plans/x/run-state.json" "$2" "$3" <<'PY'
+import json, sys
+path, schema, over = sys.argv[1], int(sys.argv[2]), json.loads(sys.argv[3])
+stage = dict(stage="code", status="ok", exit_code=0, subtype="success", reason="", model="sonnet",
+             cost_usd=0.5, input_tokens=1, output_tokens=1, cache_read=0, cache_creation=0, turns=1,
+             session_id="s", sentinel=None, wall_s=1, finished_at="2026-11-18T00:00:00+00:00")
+if schema == 1:
+    del stage["reason"]
+stage.update(over)
+state = dict(schema=schema, plan="docs/plans/x/plan.md", slug="x", branch="feat/x", base="main",
+             mode="sequential", stages=[stage], status="done", stop_reason=None)
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(state, fh)
+PY
+}
+
+out=$(hl_py <<'PY'
+import subprocess
+from headless import run_stage
+def timed_out(argv, cwd):
+    raise subprocess.TimeoutExpired(argv, 5)
+r = run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+              timeout_s=5, runner=timed_out)
+print(f"reason={r.reason!r} subtype={r.subtype!r}")
+PY
+); rc=$?
+check "headless: unrun reason in reason field" 0 "$rc" "$out" "reason='timeout after 5s' subtype=''"
+
+out=$(hl_py <<'PY'
+import json, os, shutil, tempfile
+from headless import RunState, StageResult, write_state
+stage = StageResult(stage="code", status="ok", exit_code=0, subtype="success", reason="", model="sonnet",
+                    cost_usd=1.5, input_tokens=10, output_tokens=20, cache_read=30, cache_creation=40,
+                    turns=3, session_id="s1", sentinel=None, wall_s=12, finished_at="2026-11-18T00:00:00+00:00")
+state = RunState(plan="p", slug="x", branch="b", base="m", mode="sequential", stages=[stage],
+                 status="running", stop_reason=None)
+root = tempfile.mkdtemp(prefix="hl-schema2-")
+try:
+    path = os.path.join(root, "run-state.json")
+    write_state(path, state)
+    with open(path, encoding="utf-8") as fh:
+        rec = json.load(fh)
+    print(f"schema={rec['schema']} reason_on_every_stage={all('reason' in s for s in rec['stages'])}")
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: state written as schema 2" 0 "$rc" "$out" "schema=2 reason_on_every_stage=True"
+
+hl_s1="$W/hl-schema1"; hl_state "$hl_s1" 1 '{}'
+out=$(hl_py <<PY
+from headless import load_runs
+runs = load_runs("$hl_s1")
+print(f"runs={len(runs)} reasons={[s.reason for r in runs for s in r.stages]}")
+PY
+); rc=$?
+check "headless: schema 1 record still read" 0 "$rc" "$out" "runs=1 reasons=['']"
+
+out=$(hl_py <<'PY'
+import json
+from headless import run_stage
+def res(text):
+    payload = json.dumps({"subtype": "success", "result": text, "total_cost_usd": 0.1,
+                          "num_turns": 1, "session_id": "s"})
+    return run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+                     runner=lambda argv, cwd: (0, payload, ""))
+print(f"status={res('If you hit your limit, retry later.').status}")
+PY
+); rc=$?
+check "headless: limit text mid-sentence is not a limit" 0 "$rc" "$out" "status=ok"
+
+out=$(hl_py <<'PY'
+import json
+from headless import run_stage
+def res(text):
+    payload = json.dumps({"subtype": "success", "result": text, "total_cost_usd": 0.1,
+                          "num_turns": 1, "session_id": "s"})
+    return run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+                     runner=lambda argv, cwd: (0, payload, ""))
+print(f"status={res('Working.\nYou' + chr(39) + 've hit your 5-hour limit').status}")
+PY
+); rc=$?
+check "headless: limit line opening a later line still a limit" 0 "$rc" "$out" "status=limit"
+
+hl_bad="$W/hl-badcost"; hl_state "$hl_bad" 2 '{"cost_usd": "x"}'
+out=$(hl_py <<PY
+import contextlib, io
+from headless import load_runs
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    runs = load_runs("$hl_bad")
+msg = err.getvalue()
+print(f"returned={len(runs)} named={'UNMEASURED' in msg and 'cost_usd is str, expected int|float' in msg}")
+PY
+); rc=$?
+check "headless: wrong field type skips record" 0 "$rc" "$out" "returned=0 named=True"
+
+hl_st="$W/hl-badstatus"; hl_state "$hl_st" 2 '{"status": "maybe"}'
+out=$(hl_py <<PY
+import contextlib, io
+from headless import load_runs
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    runs = load_runs("$hl_st")
+msg = err.getvalue()
+named = 'UNMEASURED' in msg and "status is 'maybe'" in msg
+print(f"returned={len(runs)} named={named}")
+PY
+); rc=$?
+check "headless: unknown status skips record" 0 "$rc" "$out" "returned=0 named=True"
+
+hl_bool="$W/hl-bool"; hl_state "$hl_bool" 2 '{"turns": true}'
+out=$(hl_py <<PY
+import contextlib, io
+from headless import load_runs
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    runs = load_runs("$hl_bool")
+msg = err.getvalue()
+print(f"returned={len(runs)} named={'UNMEASURED' in msg and 'turns is bool, expected int' in msg}")
+PY
+); rc=$?
+check "headless: bool rejected as int" 0 "$rc" "$out" "returned=0 named=True"
+
+out=$(hl_py <<'PY'
+from headless import run_stage
+payload = '{"result": "x", "usage": {"input_tokens": 1e999}, "total_cost_usd": 0}'
+r = run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+              runner=lambda argv, cwd: (0, payload, ""))
+print(f"status={r.status} input_tokens={r.input_tokens}")
+PY
+); rc=$?
+check "headless: non-finite usage number recorded as zero" 0 "$rc" "$out" "status=ok input_tokens=0"
+
+out=$(hl_py <<'PY'
+import json, os, shutil, tempfile
+from headless import RunState, run_stage, write_state
+payload = '{"result": "x", "total_cost_usd": NaN, "num_turns": 1, "session_id": "s"}'
+r = run_stage("code", "P", "sonnet", ".", budget_usd=3.0, tmp_dir=".", allowed_tools="Bash",
+              runner=lambda argv, cwd: (0, payload, ""))
+root = tempfile.mkdtemp(prefix="hl-nonfinite-")
+try:
+    path = os.path.join(root, "run-state.json")
+    state = RunState(plan="p", slug="x", branch="b", base="m", mode="sequential", stages=[r],
+                     status="running", stop_reason=None)
+    write_state(path, state)
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    def refuse(token):
+        raise ValueError(f"non-standard JSON constant {token}")
+    json.loads(text, parse_constant=refuse)
+    print(f"cost={r.cost_usd} strict=ok")
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+PY
+); rc=$?
+check "headless: non-finite cost recorded as zero" 0 "$rc" "$out" "cost=0.0 strict=ok"
 
 out=$(hl_py <<'PY'
 from headless import build_argv
@@ -2367,7 +2768,7 @@ import os, shutil, sys, tempfile
 from unittest import mock
 from headless import RunState, StageResult, load_runs, write_state
 def state(status):
-    stage = StageResult(stage="code", status=status, exit_code=0, subtype="success", model="sonnet",
+    stage = StageResult(stage="code", status=status, exit_code=0, subtype="success", reason="", model="sonnet",
                         cost_usd=1.5, input_tokens=10, output_tokens=20, cache_read=30, cache_creation=40,
                         turns=3, session_id="s1", sentinel=None, wall_s=12, finished_at="2026-11-12T00:00:00+00:00")
     return RunState(plan="docs/plans/x/plan.md", slug="x", branch="feat/x-s1", base="abc",
@@ -2417,7 +2818,7 @@ try:
     err = io.StringIO()
     with contextlib.redirect_stderr(err):
         runs = load_runs(root)
-    print(f"loaded={len(runs)} unmeasured={'UNMEASURED — ' in err.getvalue() and 'schema' in err.getvalue()}")
+    print(f"loaded={len(runs)} unmeasured={'UNMEASURED — ' in err.getvalue() and 'fields' in err.getvalue()}")
 finally:
     shutil.rmtree(root, ignore_errors=True)
 PY
@@ -2441,7 +2842,7 @@ try:
         text = fh.read()
     rec = json.loads(text)
     top = {"schema", "plan", "slug", "branch", "base", "mode", "stages", "status", "stop_reason"}
-    per_stage = {"stage", "status", "exit_code", "subtype", "model", "cost_usd", "input_tokens",
+    per_stage = {"stage", "status", "exit_code", "subtype", "reason", "model", "cost_usd", "input_tokens",
                  "output_tokens", "cache_read", "cache_creation", "turns", "session_id", "sentinel",
                  "wall_s", "finished_at"}
     keys_ok = set(rec) == top and all(set(s) == per_stage for s in rec["stages"])
@@ -2732,6 +3133,25 @@ with tempfile.TemporaryDirectory() as tmp:
 PY
 ); rc=$?
 check "bench: run records verdict and result tail" 0 "$rc" "$out" "verdict=PRODUCTION READY tails=ok max=500"
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, io, json, os, subprocess, sys, tempfile
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+def timed_out(argv, cwd):
+    raise subprocess.TimeoutExpired(argv, 1)
+buf, err = io.StringIO(), io.StringIO()
+with tempfile.TemporaryDirectory() as tmp:
+    out = os.path.join(tmp, "results")
+    mod.main(["--arms", "B-haiku", "--reps", "1", "--yes", "--fixtures", "go-gap", "--out", out],
+             runner=timed_out, stdout=buf, stderr=err)
+    with open(os.path.join(out, "B-haiku.summary.json"), encoding="utf-8") as fh:
+        st = json.load(fh)["runs"][0]["stages"][0]
+    print(f"reason_ok={st.get('reason', '').startswith('timeout after')} subtype={st.get('subtype')!r}")
+PY
+); rc=$?
+check "bench: stage record carries reason" 0 "$rc" "$out" "reason_ok=True subtype=''"
 
 # ── drive: refusals before any stage, and --resume-from state ───────────────
 # drive.py runs in temp git repos. `claude` is a fake on PATH that leaves a
@@ -3032,6 +3452,489 @@ check "drive: refuses to commit a deny-listed file" 0 "$rc" "$DS_OUT $reason sta
 ds_happy
 rc=1; [ "$DS_RC" = 0 ] && ! grep -q '^push' "$DS_GLOG" && rc=0
 check "drive: never pushes" 0 "$rc" "$DS_OUT $(cat "$DS_GLOG")" "commit -m"
+
+# ── drive: resume ancestry, failed code record, driver lock, stale tmp, template exemption ──
+# AC9 / AC18 / AC15 / SEC-3 / SEC-5. Every git call here sets its own identity, so nothing relies
+# on a global or repo config (CI runs with user.useConfigOnly=true).
+gitc() { git -c user.email=t@t -c user.name=t "$@"; }
+# Env-file names are assembled from pieces so this script's own text holds no literal env name.
+ENV_TPL="$(printf '.env.%s' example)"
+ENV_LOOK="$(printf '.env.%s' examples)"
+
+ds_happy
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["stages"][0]["status"]="error"; json.dump(d, open(p,"w"))' "$DS_R/docs/plans/alpha/run-state.json"
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: resume refused when code record failed" 0 "$rc" "$DS_OUT" "--resume-from validate: the recorded code stage ended error; rerun from code"
+
+ds_happy
+base_sha=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["base"])' "$DS_R/docs/plans/alpha/run-state.json")
+git -C "$DS_R" checkout -q -b other "$base_sha"
+gitc -C "$DS_R" commit -q --allow-empty -m other
+other_sha=$(git -C "$DS_R" rev-parse HEAD)
+git -C "$DS_R" checkout -q feat/x
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["base"]=sys.argv[2]; json.dump(d, open(p,"w"))' "$DS_R/docs/plans/alpha/run-state.json" "$other_sha"
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: resume refused when HEAD does not descend from base" 0 "$rc" "$DS_OUT" "--resume-from validate: HEAD does not descend from the recorded base $other_sha; the branch was rewritten"
+
+ds_happy
+ds_go --plan docs/plans/alpha/plan.md --resume-from validate
+[ "$DS_RC" != 2 ] && [ "$(ds_calls)" = 2 ]; rc=$?
+check "drive: resume allowed when HEAD descends from base" 0 "$rc" "$DS_OUT $(ds_facts)" "calls=2 stages=validate,review"
+
+ds_new locked feat/x
+lock_ready="$W/drive-lock-ready"; rm -f "$lock_ready"
+python3 -c 'import fcntl,os,sys,time; fd=os.open(sys.argv[1], os.O_RDWR|os.O_CREAT); fcntl.flock(fd, fcntl.LOCK_EX); print("ready", flush=True); time.sleep(60)' \
+    "$DS_R/docs/plans/alpha/run-state.lock" > "$lock_ready" &
+lock_pid=$!
+for _ in $(seq 1 100); do grep -q ready "$lock_ready" 2>/dev/null && break; sleep 0.1; done
+ds_go --plan docs/plans/alpha/plan.md
+kill "$lock_pid" 2>/dev/null; wait "$lock_pid" 2>/dev/null
+[ "$DS_RC" = 2 ] && [ "$(ds_calls)" = 0 ]; rc=$?
+check "drive: second driver refused while lock held" 0 "$rc" "$DS_OUT" "another drive.py run holds"
+
+ds_new stale feat/x
+printf 'partial\n' > "$DS_R/docs/plans/alpha/run-state.json.99999.tmp"
+ds_go --plan docs/plans/alpha/plan.md
+[ "$DS_RC" = 0 ] && [ ! -e "$DS_R/docs/plans/alpha/run-state.json.99999.tmp" ]; rc=$?
+check "drive: stale run-state tmp removed" 0 "$rc" "$DS_OUT" "drive: removed stale run-state.json.99999.tmp"
+
+ds_new symlink feat/x
+outside="$W/ds-symlink/outside.txt"; printf 'keep\n' > "$outside"
+ln -s "$outside" "$DS_R/docs/plans/alpha/run-state.json.1.tmp"
+ds_go --plan docs/plans/alpha/plan.md
+[ -L "$DS_R/docs/plans/alpha/run-state.json.1.tmp" ] && [ "$(cat "$outside")" = keep ]; rc=$?
+check "drive: stale tmp cleanup leaves symlink target" 0 "$rc" "$DS_OUT"
+
+sw_file="$W/drive-sweep-file"; printf 'x\n' > "$sw_file"
+sw_out=$(PYTHONDONTWRITEBYTECODE=1 python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import drive
+try:
+    drive.sweep_stale_tmp(sys.argv[2])
+except drive.Refused as exc:
+    print(f"refused: {exc}")
+    sys.exit(0)
+print("no refusal")
+sys.exit(1)
+' "$(dirname "$DR_PY")" "$sw_file" 2>&1); sw_rc=$?
+check "drive: sweep error refused" 0 "$sw_rc" "$sw_out" "cannot sweep stale run-state tmp"
+
+ds_new envtpl feat/x
+printf 'src/a.go\n%s\n' "$ENV_TPL" > "$DS_FIX/code.write"
+ds_go --plan docs/plans/alpha/plan.md
+committed=$(git -C "$DS_R" diff-tree --no-commit-id --name-only -r HEAD)
+[ "$DS_RC" = 0 ] && [ "$(ds_calls)" = 3 ] && printf '%s\n' "$committed" | grep -qxF "$ENV_TPL"; rc=$?
+check "drive: commits env template file" 0 "$rc" "$DS_OUT $committed" "$ENV_TPL"
+
+ds_new lookalike feat/x; c0=$(ds_commits)
+printf 'src/a.go\n%s\n' "$ENV_LOOK" > "$DS_FIX/code.write"
+ds_go --plan docs/plans/alpha/plan.md
+reason=$(ds_stop)
+[ "$DS_RC" = 1 ] && [ "$(ds_commits)" = "$c0" ] \
+    && case "$reason" in "staged file matches deny list: $ENV_LOOK") true ;; *) false ;; esac; rc=$?
+check "drive: template exemption is exact" 0 "$rc" "$DS_OUT $reason" "STOPPED — staged file matches deny list: $ENV_LOOK"
+
+rx="$ROOT/.devkit/release-exclude"
+grep -qxF '**/run-state.lock' "$rx" && grep -qxF '**/run-state.json.*.tmp' "$rx"; rc=$?
+check "release-exclude: run-state lock and tmp" 0 "$rc"
+
+# drive: a stage that never ran to an exit stops the run with its reason, not an empty subtype (AC11)
+dr_rs="$W/dr-reason"; rm -rf "$dr_rs"
+( dr_repo "$dr_rs/repo" feat/x && dr_plan "$dr_rs/repo" alpha approved )
+out=$(hl_py <<PY
+import json, os, subprocess
+import drive
+os.chdir("$dr_rs/repo")
+def timed_out(argv, cwd):
+    raise subprocess.TimeoutExpired(argv, 3600)
+rc = drive.main(["--plan", "docs/plans/alpha/plan.md"], runner=timed_out)
+with open("docs/plans/alpha/run-state.json", encoding="utf-8") as fh:
+    stop = json.load(fh)["stop_reason"]
+print(f"rc={rc} stop={stop}")
+PY
+); rc=$?
+check "drive: stage error stop shows reason" 0 "$rc" "$out" "rc=1 stop=stage error: timeout after 3600s"
+
+# ── T7: run_stage reports stdout; drive takes caps and stdout from headless's public API ──
+out=$(hl_py <<'PY'
+from headless import run_stage
+collected = []
+S = '{"type": "result", "subtype": "success", "is_error": false, "result": "done", "total_cost_usd": 0.1}'
+def fake(argv, cwd):
+    return 0, S, ""
+r = run_stage("code", "P", "sonnet", ".", budget_usd=1.0, tmp_dir=".", allowed_tools="Bash",
+              runner=fake, on_stdout=collected.append)
+print(f"collected_ok={collected == [S]} status={r.status}")
+PY
+); rc=$?
+check "headless: run_stage reports stdout" 0 "$rc" "$out" "collected_ok=True status=ok"
+
+out=$(python3 - "$ROOT/plugins/coding-pipeline/scripts/drive.py" <<'PY'
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+private = sorted(a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "headless"
+                 for a in n.names if a.name.startswith("_"))
+print(f"private={private}")
+PY
+); rc=$?
+check "drive: imports no private headless names" 0 "$rc" "$out" "private=[]"
+
+dr_b="$W/dr-t7"; rm -rf "$dr_b"
+( dr_repo "$dr_b/repo" feat/x && dr_plan "$dr_b/repo" alpha approved )
+out=$(hl_py <<PY
+import os, subprocess
+import drive
+os.chdir("$dr_b/repo")
+seen = []
+def record_then_stop(argv, cwd):
+    seen.append(argv)
+    raise subprocess.TimeoutExpired(argv, 1)
+rc = drive.main(["--plan", "docs/plans/alpha/plan.md"], runner=record_then_stop)
+i = seen[0].index("--max-budget-usd")
+print(f"budget={seen[0][i + 1]}")
+PY
+); rc=$?
+check "drive: default budget 8" 0 "$rc" "$out" "budget=8.00"
+
+out=$(hl_py <<PY
+import json, os, subprocess
+import drive
+os.chdir("$dr_b/repo")
+def timed_out(argv, cwd):
+    raise subprocess.TimeoutExpired(argv, 1)
+rc = drive.main(["--plan", "docs/plans/alpha/plan.md"], runner=timed_out)
+with open("docs/plans/alpha/run-state.json", encoding="utf-8") as fh:
+    stop = json.load(fh)["stop_reason"]
+print(f"rc={rc} stop={stop}")
+PY
+); rc=$?
+check "drive: stage timeout 3600" 0 "$rc" "$out" "rc=1 stop=stage error: timeout after 3600s"
+
+out=$(python3 - "$ROOT" <<'PY'
+import os, sys
+root = sys.argv[1]
+bad = []
+for f in ["plugins/coding-pipeline/scripts/drive.py",
+          "plugins/coding-pipeline/references/headless-runs.md", "README.md"]:
+    text = open(os.path.join(root, f), encoding="utf-8").read()
+    if "[--budget-usd 8]" not in text or "--budget-usd 3" in text:
+        bad.append(f)
+for f in ["bench/arms.json", "bench/README.md"]:
+    text = open(os.path.join(root, f), encoding="utf-8").read()
+    if "capped at USD 3" in text or "capped at USD 8" not in text:
+        bad.append(f)
+print(f"stale={bad}")
+PY
+); rc=$?
+check "drive: budget default stated as 8 everywhere" 0 "$rc" "$out" "stale=[]"
+
+out=$(br_py "$ROOT" <<'PY'
+import importlib.util, os, sys
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("bench_run", os.path.join(root, "bench", "run.py"))
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+import headless
+caps_ok = (mod.STAGE_BUDGET_USD == headless.DEFAULT_BUDGET_USD == 8.0
+           and mod.STAGE_TIMEOUT_S == headless.DEFAULT_TIMEOUT_S == 3600)
+print(f"caps_ok={caps_ok}")
+PY
+); rc=$?
+check "bench: caps follow headless defaults" 0 "$rc" "$out" "caps_ok=True"
+
+# ── lang-detect.sh: which languages a diff touches (AC20, SEC-7) ─────────────
+# Every fixture is a throwaway repo under $W with a repo-level identity, so no
+# test depends on the global git config. ld_check_exact compares the whole output,
+# because a line-level claim ("go counted 2") is a substring trap otherwise.
+LD="$V/lang-detect.sh"
+ld_repo() {  # ld_repo <dir> — a repo with one committed base file and no other state
+    mkdir -p "$1" && (
+        cd "$1" || exit
+        git init -q -b main
+        printf 'base\n' > base.txt
+        git add base.txt
+        git -c user.email=t@t -c user.name=t commit -q -m base
+    )
+}
+ld_check_exact() {  # ld_check_exact <name> <want-exit> <got-exit> <got-output> <want-output>
+    if [ "$2" = "$3" ] && [ "$4" = "$5" ]; then pass=$((pass + 1)); else echo "FAIL: $1 — exit $3 (want $2), output: $4"; fail=1; fi
+}
+
+ld_maps="$W/ld-maps"
+ld_repo "$ld_maps"
+(
+    cd "$ld_maps" || exit
+    printf 'package x\n' > a.go
+    printf 'package x\n' > a_test.go
+    for f in c.ts d.tsx e.kt f.rs g.php h.java i.dart j.css README.md; do printf 'x\n' > "$f"; done
+)
+out=$(cd "$ld_maps" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: maps extensions" 0 "$rc" "$out" "LANGUAGE: flutter references/languages/flutter.md 1
+LANGUAGE: go references/languages/go.md 2
+LANGUAGE: html-css references/languages/html-css.md 1
+LANGUAGE: java references/languages/java.md 1
+LANGUAGE: kotlin references/languages/kotlin.md 1
+LANGUAGE: php references/languages/php.md 1
+LANGUAGE: react references/languages/react.md 1
+LANGUAGE: rust references/languages/rust.md 1
+LANGUAGE: typescript references/languages/typescript.md 1
+LANGUAGES: flutter go html-css java kotlin php react rust typescript"
+
+ld_next="$W/ld-next"
+ld_repo "$ld_next"
+(
+    cd "$ld_next" || exit
+    printf 'export default {}\n' > next.config.mjs
+    git add next.config.mjs
+    git -c user.email=t@t -c user.name=t commit -q -m "next config"
+    mkdir app && printf 'x\n' > app/page.tsx
+)
+out=$(cd "$ld_next" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: nextjs replaces react" 0 "$rc" "$out" "LANGUAGE: nextjs references/languages/nextjs.md 1
+LANGUAGES: nextjs"
+
+ld_htmx="$W/ld-htmx"
+ld_repo "$ld_htmx"
+(
+    cd "$ld_htmx" || exit
+    printf '<button hx-get="/x">go</button>\n' > p.html
+    printf '<p>plain</p>\n' > q.html
+)
+out=$(cd "$ld_htmx" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: htmx by content" 0 "$rc" "$out" "LANGUAGE: html-css references/languages/html-css.md 1
+LANGUAGE: htmx references/languages/htmx.md 1
+LANGUAGES: html-css htmx"
+
+ld_docs="$W/ld-docs"
+ld_repo "$ld_docs"
+printf 'docs\n' > "$ld_docs/README.md"
+out=$(cd "$ld_docs" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: docs only" 0 "$rc" "$out" "LANGUAGES: none"
+
+ld_bad="$W/ld-bad"
+ld_repo "$ld_bad"
+out=$(cd "$ld_bad" && bash "$LD" --diff nosuchref 2>&1); rc=$?
+check "lang-detect: invalid base" 2 "$rc" "$out" "lang-detect: invalid base nosuchref"
+
+ld_opt="$W/ld-opt"
+ld_repo "$ld_opt"
+out=$(cd "$ld_opt" && bash "$LD" --diff --output=x 2>&1); rc=$?
+check "lang-detect: option-looking base refused" 2 "$rc" "$out" "lang-detect: invalid base"
+[ ! -e "$ld_opt/x" ] && pass=$((pass + 1)) || { echo "FAIL: lang-detect: option-looking base refused — file x was created"; fail=1; }
+
+ld_tmpl="$W/ld-tmpl"
+ld_repo "$ld_tmpl"
+(
+    cd "$ld_tmpl" || exit
+    printf '<button hx-post="/x">go</button>\n' > a.tmpl
+    printf '<div>plain</div>\n' > b.tmpl
+    printf '{{.Name}}\n{{ if a<b }}x{{ end }}\n' > c.tmpl
+)
+out=$(cd "$ld_tmpl" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: tmpl by content" 0 "$rc" "$out" "LANGUAGE: html-css references/languages/html-css.md 1
+LANGUAGE: htmx references/languages/htmx.md 1
+LANGUAGES: html-css htmx"
+
+ld_unc="$W/ld-unc"
+ld_repo "$ld_unc"
+(
+    cd "$ld_unc" || exit
+    printf 'package x\n' > a.go
+    git add a.go
+    git -c user.email=t@t -c user.name=t commit -q -m "add a.go"
+    printf 'package y\n' > a.go
+    printf 'fn main() {}\n' > b.rs
+)
+out=$(cd "$ld_unc" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: uncommitted and untracked counted" 0 "$rc" "$out" "LANGUAGE: go references/languages/go.md 1
+LANGUAGE: rust references/languages/rust.md 1
+LANGUAGES: go rust"
+
+ld_odd="$W/ld-odd"
+ld_repo "$ld_odd"
+nl_name=$(printf 'x\ny.rs')
+(
+    cd "$ld_odd" || exit
+    printf 'package x\n' > "a b.go"
+    printf 'fn main() {}\n' > "$nl_name"
+)
+out=$(cd "$ld_odd" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: odd file names" 0 "$rc" "$out" "LANGUAGE: go references/languages/go.md 1
+LANGUAGE: rust references/languages/rust.md 1
+LANGUAGES: go rust"
+
+ld_norepo="$W/ld-norepo"
+mkdir -p "$ld_norepo"
+out=$(cd "$ld_norepo" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: outside a git repo" 2 "$rc" "$out" "lang-detect: not inside a git repository"
+
+ld_unr="$W/ld-unreadable"
+ld_repo "$ld_unr"
+printf '<p>plain</p>\n' > "$ld_unr/p.html"
+chmod 000 "$ld_unr/p.html"
+out=$(cd "$ld_unr" && bash "$LD" --diff HEAD 2>&1); rc=$?
+chmod 600 "$ld_unr/p.html"
+check "lang-detect: unreadable content file" 2 "$rc" "$out" "lang-detect: cannot read p.html"
+
+ld_sub="$W/ld-subdir"
+ld_repo "$ld_sub"
+mkdir -p "$ld_sub/sub"
+printf 'package x\n' > "$ld_sub/sub/a.go"
+printf 'package x\n' > "$ld_sub/b.go"
+out=$(cd "$ld_sub/sub" && bash "$LD" --diff HEAD 2>&1); rc=$?
+ld_check_exact "lang-detect: untracked counted from a subdirectory" 0 "$rc" "$out" "LANGUAGE: go references/languages/go.md 2
+LANGUAGES: go"
+
+# ── review wiring (T12, AC21/AC22): languages reach the reviewer, proof line ─
+RW_SK="$ROOT/plugins/pr-workflow/skills/review-code/SKILL.md"
+RW_DV="$ROOT/plugins/pr-workflow/skills/review-code/references/diff-verdict-and-rules.md"
+RW_RV="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+RW_CD="$ROOT/plugins/coding-pipeline/agents/coder.md"
+RW_LR="$ROOT/plugins/coding-pipeline/references/language-rules-reference.md"
+
+# The sensor line and the dispatch line are each one line of SKILL.md; the
+# checks read those lines, so a field moved elsewhere does not count as wired.
+grep -F '**Sensors**' "$RW_SK" | grep -qF 'lang-detect.sh --diff $BASE' \
+    && grep -F '**Sensors**' "$RW_SK" | grep -qF 'lang-detect: UNMEASURED — script not found' \
+    && grep -F '**Sensors**' "$RW_SK" | grep -qF 'lang-detect: UNMEASURED — exit' \
+    && grep -F '**Dispatch**' "$RW_SK" | grep -qF 'Languages: {names from the LANGUAGES line | none | unknown}'; rc=$?
+check "review-code: languages reach the reviewer" 0 "$rc"
+
+# The proof line sits inside the End-with block, and the text names its source.
+sed -n '/^End with:/,/^Recommendation:/p' "$RW_RV" \
+    | grep -qF 'Language {name}: references/languages/{name}.md · {K} findings' \
+    && grep -qF "for exactly the names in the dispatch's \`Languages:\` field" "$RW_RV"; rc=$?
+check "reviewer: language proof line" 0 "$rc"
+
+rw_mis=$(cat "$RW_SK" "$RW_DV"); rw_ok=1
+for rw_s in 'Language review missing:' 'Language {name}: UNMEASURED' 'only the Standards return' 'first pass'; do
+    printf '%s\n' "$rw_mis" | grep -qF -- "$rw_s" || rw_ok=0
+done
+[ "$rw_ok" = 1 ]; rc=$?
+check "review-code: missing language line handled" 0 "$rc"
+
+# Exit 1 is the only pass: 0 means a stale claim was found, 2 means a file was
+# unreadable — both fail closed.
+grep -qF -e '60–155 lines' -e '~870 lines' -e '~340' "$RW_RV" "$RW_CD" "$RW_LR"; rc=$?
+check "agents: no stale language size claims" 1 "$rc"
+
+# ── language error-handling gaps (AC28): one home per rule ──────────────────
+# Each language file must carry its missing error rule (needle) in its own
+# text. kotlin.md and htmx.md alone own a `## Error Handling` section; the
+# existing rows that AC28 cites (`Missing error boundary`, `!!` operator) must
+# still occur exactly once, so no rule is restated under a second severity.
+check_language_error_gaps() {  # returns 0 only when every needle, heading and count holds
+    local dir="$ROOT/plugins/coding-pipeline/references/languages" bad=0 f n
+    while IFS='|' read -r f n; do
+        grep -qF -- "$n" "$dir/$f.md" || { echo "missing '$n' in $f.md"; bad=1; }
+    done <<'NEEDLES'
+java|new XException(msg, e)
+typescript|throw a string
+rust|.context(
+php|$previous
+flutter|PlatformDispatcher.instance.onError
+react|event handlers
+nextjs|global-error.tsx
+kotlin|CancellationException
+htmx|htmx:responseError
+NEEDLES
+    for f in kotlin htmx; do
+        grep -qxF -- '## Error Handling' "$dir/$f.md" || { echo "no '## Error Handling' in $f.md"; bad=1; }
+    done
+    for f in java typescript rust php flutter react nextjs; do
+        grep -qxF -- '## Error Handling' "$dir/$f.md" && { echo "'## Error Handling' must not be in $f.md"; bad=1; }
+    done
+    # Counted as table rows (`| ...`): the kotlin Coding Rules prose also says "No `!!` operator".
+    [ "$(grep -cF -- '| Missing error boundary' "$dir/react.md")" = 1 ] || { echo "react.md: 'Missing error boundary' row must occur once"; bad=1; }
+    [ "$(grep -cF -- '| `!!` operator' "$dir/kotlin.md")" = 1 ] || { echo "kotlin.md: '\`!!\` operator' row must occur once"; bad=1; }
+    [ "$bad" = 0 ]
+}
+check_language_error_gaps; rc=$?
+check "languages: error handling gaps filled" 0 "$rc"
+
+# Release 3.3.0 wiring (AC19). Each helper returns 0 only when every needle holds.
+check_release_version() {  # every shipped plugin.json is 3.3.0 and CHANGELOG has the heading
+    local p bad=0
+    for p in coding-pipeline pr-workflow devtools engineering; do
+        python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("version") == "3.3.0" else 1)' \
+            "$ROOT/plugins/$p/.claude-plugin/plugin.json" || { echo "$p plugin.json is not 3.3.0"; bad=1; }
+    done
+    grep -q '^## \[3\.3\.0\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG has no ## [3.3.0] heading"; bad=1; }
+    [ "$bad" = 0 ]
+}
+check_release_version; rc=$?
+check "release: version 3.3.0" 0 "$rc"
+
+check_readme_fixes_in_rounds() {  # README no longer says validate-code reports only; its row names the Score Loop
+    local f="$ROOT/README.md" bad=0
+    grep -qF 'Reports, never fixes' "$f" && { echo "README still says 'Reports, never fixes'"; bad=1; }
+    grep -F '| `/validate-code' "$f" | grep -qF 'Score Loop' || { echo "README /validate-code row does not mention Score Loop"; bad=1; }
+    [ "$bad" = 0 ]
+}
+check_readme_fixes_in_rounds; rc=$?
+check "readme: validate-code fixes in rounds" 0 "$rc"
+
+check_readme_reader_structure() {  # README: a first-time reader finds install, first run, flow diagram, skills, gates, Score Loop, hooks, driver, config, troubleshooting
+    local f="$ROOT/README.md" bad=0 h v
+    for h in '## Install' '## Your first run' '## How a change flows' '## Skills' '## Quality gates' '### The Score Loop' '## Hooks' '## Headless driver' '## Configuration' '## Troubleshooting'; do
+        grep -qF -- "$h" "$f" || { echo "README lacks heading: $h"; bad=1; }
+    done
+    grep -qF '```mermaid' "$f" || { echo "README has no mermaid diagram"; bad=1; }
+    for v in DEVKIT_HOOK_PROFILE DEVKIT_DISABLED_HOOKS DEVKIT_GATE_FILTER DEVKIT_DISPATCH_BUDGET; do
+        grep -qF -- "$v" "$f" || { echo "README does not name $v"; bad=1; }
+    done
+    [ "$bad" = 0 ]
+}
+check_readme_reader_structure; rc=$?
+check "readme: reader structure" 0 "$rc"
+
+check_readme_links_and_facts() {  # README: relative links resolve; the facts it states match the code
+    local f="$ROOT/README.md" bad=0 t n
+    grep -oE '\]\(([^)#:]+)(#[^)]*)?\)' "$f" | sed -E 's/^\]\(//; s/(#[^)]*)?\)$//' | sort -u | while IFS= read -r t; do
+        [ -e "$ROOT/$t" ] || echo "broken README link: $t"
+    done | grep -q . && { echo "README has a broken relative link"; bad=1; }
+    grep -qF 'default 20' "$f" || { echo "README lacks the dispatch budget default 20"; bad=1; }
+    grep -qF '[--budget-usd 8]' "$f" || { echo "README lacks [--budget-usd 8]"; bad=1; }
+    grep -qF '**Go test files are paired.**' "$f" || { echo "README lacks the Go test pairing rule"; bad=1; }
+    grep -qF 'Reports, never fixes' "$f" && { echo "README still says 'Reports, never fixes'"; bad=1; }
+    n=$(grep -c . "$f"); [ "$n" -gt 0 ] || { echo "README is empty"; bad=1; }
+    [ "$bad" = 0 ]
+}
+check_readme_links_and_facts; rc=$?
+check "readme: links and facts hold" 0 "$rc"
+
+check_changelog_names() {  # the 3.3.0 Added names the new files, Fixed names the pre-commit flag
+    local sec added fixed bad=0 n
+    sec=$(awk '/^## \[3\.3\.0\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+    [ -n "$sec" ] || { echo "no ## [3.3.0] section"; return 1; }
+    added=$(printf '%s\n' "$sec" | awk '/^### /{s=$0} s=="### Added"')
+    fixed=$(printf '%s\n' "$sec" | awk '/^### /{s=$0} s=="### Fixed"')
+    for n in lang-detect.sh go-error-handling.md golangci.yml; do
+        printf '%s\n' "$added" | grep -qF -- "$n" || { echo "Added does not name $n"; bad=1; }
+    done
+    printf '%s\n' "$fixed" | grep -qF -- '--fast-only' || { echo "Fixed does not name --fast-only"; bad=1; }
+    [ "$bad" = 0 ]
+}
+check_changelog_names; rc=$?
+check "release: changelog names the new work" 0 "$rc"
+
+check_changelog_measured() {  # the 3.3.0 Measured section is the release's end-to-end evidence
+    local measured bad=0 n
+    measured=$(awk '/^## \[3\.3\.0\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md" \
+        | awk '/^### /{s=$0} s=="### Measured"')
+    [ -n "$measured" ] || { echo "no ### Measured in ## [3.3.0]"; return 1; }
+    printf '%s\n' "$measured" | grep -qE 'bench/results/[0-9]{8}T[0-9]{6}Z' || { echo "no bench/results directory named"; bad=1; }
+    printf '%s\n' "$measured" | grep -qF 'B-sonnet' || { echo "arm B-sonnet not named"; bad=1; }
+    printf '%s\n' "$measured" | grep -qE 'total cost \$[0-9]+\.[0-9]{2}' || { echo "no total cost"; bad=1; }
+    for n in doc-cosmetic go-concurrency go-gap go-simple ts-handler ts-validator; do
+        printf '%s\n' "$measured" | grep -qF -- "$n" || { echo "no verdict for fixture $n"; bad=1; }
+    done
+    [ "$bad" = 0 ]
+}
+check_changelog_measured; rc=$?
+check "release: changelog measured section" 0 "$rc"
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

@@ -1,5 +1,5 @@
 {
-  "basis": "Measured total_cost_usd of one fixture run on the Go go-gap fixture, n=1 per arm, 2026-11-10 (research notes bench-e2e/README.md). A planning figure, not a bound; each stage is capped at USD 3.",
+  "basis": "Measured total_cost_usd of one fixture run on the Go go-gap fixture, n=1 per arm, 2026-11-10 (research notes bench-e2e/README.md). A planning figure, not a bound; each stage is capped at USD 8, the driver's per-stage default.",
   "arms": {
     "B-haiku": {"topology": "fresh", "models": {"code": "haiku", "validate": "haiku", "review": "haiku"}, "est_usd_per_run": 0.28},
     "B-mixed": {"topology": "fresh", "models": {"code": "haiku", "validate": "sonnet", "review": "sonnet"}, "est_usd_per_run": 0.55},

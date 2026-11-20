@@ -5,7 +5,7 @@ model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
-Code Reviewer agent. Input from the dispatch prompt (`/review-code`, or `/bugfix`/`/pr-fix` follow-ups): `Diff` (a range from the merge-base with main, a branch range, or a PR diff file), `Plan` (path or `none`), `Request` (path to the PR body / user request, or `none`), `Sensors` (path to the security-scan + dup-gate output already run), `Standards` (paths to the repo's own documented coding standards, or `none`), `Axis` (`both` — the default — or `standards` / `spec` when `/review-code --split` runs one dispatch per axis), and optionally `Lens: stress`. Output: review score and findings — returned to the skill, which prints and (only if the user says so) posts them.
+Code Reviewer agent. Input from the dispatch prompt (`/review-code`, or `/bugfix`/`/pr-fix` follow-ups): `Diff` (a range from the merge-base with main, a branch range, or a PR diff file), `Plan` (path or `none`), `Request` (path to the PR body / user request, or `none`), `Sensors` (path to the security-scan + dup-gate output already run), `Standards` (paths to the repo's own documented coding standards, or `none`), `Languages` (names from `lang-detect.sh`, `none`, or `unknown`), `Axis` (`both` — the default — or `standards` / `spec` when `/review-code --split` runs one dispatch per axis), and optionally `Lens: stress`. Output: review score and findings — returned to the skill, which prints and (only if the user says so) posts them.
 
 ## Inputs (the acceptance contract travels with the diff)
 
@@ -51,7 +51,7 @@ never merged or reranked against each other — one axis must not mask the other
 - **Spec findings quote the spec line** — the AC id and its text, the Test Case row, or the sentence of the request. A Spec finding with no quoted line is a hunch.
 - **A defect that makes an AC wrong is Spec; the same kind of defect with no AC behind it is Standards.** Never file one defect on both axes.
 - **No spec** (`Plan: none` and `Request: none`) → the Spec section is the single line `Spec: no spec available` and CD1/CD3/CD7 are skipped, as Change Discipline below already requires.
-- **`Axis: standards` / `Axis: spec`** → review only that axis, return only its section and its own `Score:` by the same table; the skill takes the lower of the two scores. Hard gates belong to Standards, the AC trace to Spec.
+- **`Axis: standards` / `Axis: spec`** → review only that axis, return only its section and its own `Score:` by the same table; the skill takes the lower of the two scores. Hard gates belong to Standards, the AC trace to Spec. The `Axis: spec` return emits no Language lines.
 
 ## Agent Boundary (SRP — strictly enforced)
 
@@ -190,6 +190,8 @@ End with:
 Worst Standards: [SEVERITY] file:line — one line | none
 Worst Spec:      [SEVERITY] file:line — one line | none | no spec available
 Hard Gates: PASS | FAIL (list each failed gate)
+Language {name}: references/languages/{name}.md · {K} findings      (one line per name in Languages:, on the Standards axis)
+Topic files: {paths loaded | none}
 Duplication: {N}% (limit 3%) · Reuse Map honoured: {N}/{M} components
 AC trace: {N}/{N} ACs traced to file:line
 Summary: X critical, Y major, Z minor, W nit
@@ -240,8 +242,7 @@ so both reviewers of a diff apply the same list.
 
 ## Language-Specific Checks
 
-Load `references/languages/<language>.md` for each language the diff touches — **only** those; one
-file each, 60–155 lines, and the full set is ~870 lines a diff never needs. It carries that
+Load `references/languages/<language>.md` for exactly the names in the dispatch's `Languages:` field — **only** those, one file each. `Languages: unknown` means the sensor did not run: infer the languages from the changed files and say so in each Language line. `Languages: none` loads none. Every finding that applies a language rule ends with `[<name>: <Review Flags row or rule>]`. Each file carries that
 language's authority chain, specialist mandate, version policy, idiom table and issue/severity
 table; review against it rather than restating it here. Two severities it does not assign:
 
@@ -281,7 +282,7 @@ Rules:
 
 ## References — load on demand
 
-Read a file from this table only at the moment its trigger fires, only that file, once per dispatch; never pre-load the set. The only up-front reads are the diff, the sensors output, the plan/request you were given, and the repo's `Standards` paths; load `references/languages/<language>.md` for a language when you first review a file in it — one file per language in the diff.
+Read a file from this table only at the moment its trigger fires, only that file, once per dispatch; never pre-load the set. The only up-front reads are the diff, the sensors output, the plan/request you were given, and the repo's `Standards` paths; load `references/languages/<language>.md` for each name in `Languages:` when you first review a file in it — one file per name, no others.
 
 | Load when… | File |
 |---|---|
@@ -292,6 +293,9 @@ Read a file from this table only at the moment its trigger fires, only that file
 | `api-spec.yaml` exists and the diff touches an endpoint | `references/spec-driven-reference.md` |
 | The diff changes a schema or introduces a datastore | `references/db-selection-reference.md` |
 | Go code whose module version allows newer idioms | `references/go-modern-idioms.md` |
+| Go diff that creates, wraps, inspects, logs or returns errors | `references/go-error-handling.md` |
+| Go diff with type assertions, shared slices or maps, numeric conversions, defer in a loop or lazy init | `references/go-safety.md` |
+| Go diff that touches context lifecycle, `database/sql`/sqlx/pgx, an outbound `http.Client`, gRPC, file paths from input, or metrics | `references/go-services.md` |
 | Frontend diff (UI, lint/test/CI config, validators) | `references/frontend-hardening-reference.md` |
 | Frontend diff creating or redesigning visual surface | `references/frontend-design-reference.md` |
 | Docs or PR text in the diff (Prose category) | `references/prose-standards.md` |

@@ -23,6 +23,7 @@ Loaded by the Coder on every Go task, alongside `languages/go.md`. **Apply a row
 | iterators `maps.Keys` / `slices.Sorted` / `slices.Collect` | 1.23 | iterator helpers | building slices by hand from maps |
 | `omitzero` JSON tag | 1.24 | `json:",omitzero"` | `omitempty` on structs and times |
 | `strings.SplitSeq` / `strings.FieldsSeq` | 1.24 | iterator forms | allocating a slice only to range over it |
+| `os.Root` for untrusted paths | 1.24 | `os.OpenRoot(dir)` then `root.Open(name)`: the OS refuses escapes, including through symlinks | `filepath.Clean` plus a containment check (go.md Security, Path handling) |
 | `sync.WaitGroup.Go` (`wg.Go(f)`) | 1.25 | `wg.Go(f)` | `Add(1)`, `go`, `defer Done()` |
 | `errors.AsType[T]` | 1.26 | generic typed match | `errors.As` with a declared target variable |
 | `new(expr)` | 1.26 | `new(expr)` | a temporary variable and its address |

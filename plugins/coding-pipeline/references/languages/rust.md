@@ -35,6 +35,8 @@ No `unwrap()` in prod — use `?` or `match`; ownership over clone; `thiserror` 
 | Rule | Requirement |
 |------|-------------|
 | Errors | `thiserror` for library errors, `anyhow` only at the binary edge; `unwrap()`/`expect()` outside tests and `main` is a finding |
+| Propagation | In a binary, every `?` that leaves a function adds `.context(...)` naming the step; library code keeps its typed `thiserror` errors without string context |
+| FFI | A panic never unwinds out of an `extern "C"` function — since Rust 1.81 that aborts the process; return an error code, and use `extern "C-unwind"` only where unwinding is the designed contract |
 | Ownership | Borrow by default. `Clone` is a decision to justify, never the fix for a borrow-checker complaint |
 | Types | Newtypes carry domain invariants; `Option`/`Result` in signatures, never a sentinel value |
 | Traits | Small traits defined at the consumer; `impl Trait` in argument position; generics over `dyn` unless a boundary needs erasure |
@@ -51,6 +53,8 @@ No `unwrap()` in prod — use `?` or `match`; ownership over clone; `thiserror` 
 |-------|----------|
 | `unwrap()` / `expect()` in production code (not tests) | MAJOR |
 | `panic!()` in library code | MAJOR |
+| `?` leaves a binary without `.context(...)` | MINOR |
+| Panic can unwind out of an `extern "C"` function | MAJOR |
 | `clone()` where ownership transfer is possible | MINOR |
 | Missing `thiserror` — plain strings or `Box<dyn Error>` for domain errors | MAJOR |
 | HTTP handler missing `#[utoipa::path(...)]` annotation | MAJOR |

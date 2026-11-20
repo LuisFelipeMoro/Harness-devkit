@@ -46,6 +46,8 @@ App Router for new projects (Pages Router only for legacy); Server Components by
 | Mutations | Server Actions for writes, with input validated **inside** the action; the client is never trusted, including for the ids it sends |
 | Secrets | Server-only modules for anything holding a key; `NEXT_PUBLIC_` is a publication — treat it as one |
 | Routing | `loading.tsx` / `error.tsx` colocated per segment; a server redirect wherever a client-side one would flash |
+| Root errors | `app/global-error.tsx` catches errors from the root layout, which `error.tsx` cannot; it renders its own `<html>` and `<body>` |
+| Control-flow throws | `redirect()` and `notFound()` work by throwing; a `try`/`catch` around them rethrows, never swallows |
 | Streaming | Suspense boundaries around slow segments instead of blocking the whole route |
 | Viewport | `viewport` export or `generateViewport`, never `userScalable: false` or a `maximumScale` below 2; `next/image` carries `sizes` when its width changes by breakpoint. Layout and keyboard floor: `../frontend-hardening-reference.md` §9 |
 | Assets | `next/image` and `next/font` — a raw `<img>` for a content image is a CLS regression |
@@ -69,6 +71,8 @@ verify the flat-config blocks do not shadow one another
 | External font CDN instead of `next/font` | MINOR |
 | `userScalable: false` or a `maximumScale` below 2 in `viewport` | MAJOR |
 | `next build` not run before handoff | MAJOR |
+| `app/global-error.tsx` missing at the app root | MAJOR |
+| `redirect()` / `notFound()` inside a catch that does not rethrow | MAJOR |
 | `security/*` or `regexp/*` rules absent from the config, or present at `warn` **[FH]** | MAJOR |
 | `coverageConfigDefaults.exclude` filtered in `vitest.config.*` / `jest.config.*` **[FH]** | MAJOR |
 | `.github/workflows/` file present when the project deploys through another CI system **[FH]** | MAJOR |

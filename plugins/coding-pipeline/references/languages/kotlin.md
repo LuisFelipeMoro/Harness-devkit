@@ -43,6 +43,16 @@ No `!!` operator; no `GlobalScope` — use `viewModelScope`/`lifecycleScope`; MV
 | Compose | State hoisted; composables free of side effects outside `LaunchedEffect`/`DisposableEffect`; `remember` keyed on what it depends on |
 | Resources | No hard-coded user-facing strings or dimensions in code |
 
+## Error Handling
+Authority: [Kotlin coroutines — exception handling](https://kotlinlang.org/docs/exception-handling.html) → [Android Kotlin style guide](https://developer.android.com/kotlin/style-guide).
+
+| Rule | Requirement |
+|------|-------------|
+| Cancellation | `catch` and `runCatching` in a suspend function rethrow `CancellationException`; swallowing it breaks structured concurrency, so the scope never ends cleanly |
+| Root handler | A `CoroutineExceptionHandler` sits at the root scope, where uncaught `launch` failures land; it logs and maps the failure to UI state, never hides it |
+| Expected failure | An expected outcome returns `Result` or a sealed type (see Types); an exception signals a broken invariant |
+| Launch blocks | No exception is swallowed inside a `launch` block — each failure is logged or written to state |
+
 ## Linting Commands
 `./gradlew detekt` (zero violations) · `ktlint --reporter plain` (zero) · `./gradlew lint` (zero errors)
 
@@ -53,6 +63,10 @@ No `!!` operator; no `GlobalScope` — use `viewModelScope`/`lifecycleScope`; MV
 | Blocking main thread (`runBlocking` on UI thread) | CRITICAL |
 | Hardcoded credentials in `strings.xml` or Kotlin source | CRITICAL |
 | `!!` operator without documented justification | MAJOR |
+| `catch` / `runCatching` in a suspend function does not rethrow `CancellationException` | MAJOR |
+| Root `CoroutineScope` launches without a `CoroutineExceptionHandler` | MAJOR |
+| Exception swallowed inside a `launch` block (no log, no state change) | MAJOR |
+| Expected failure modelled as a thrown exception instead of `Result` or a sealed type | MINOR |
 | Business logic in Activity/Fragment (should be in ViewModel) | MAJOR |
 | Missing `EncryptedSharedPreferences` for sensitive local storage | MAJOR |
 | `SharedPreferences` for auth tokens | MAJOR |

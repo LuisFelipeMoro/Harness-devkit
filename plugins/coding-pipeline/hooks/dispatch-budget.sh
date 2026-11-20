@@ -8,9 +8,10 @@
 #
 # This counts, warns once at the budget, and never blocks: a pipeline legitimately
 # needs many dispatches, and a guard that stops one mid-delivery strands the work.
-# DEVKIT_DISPATCH_BUDGET tunes it (default 14). That is derived, not guessed: a plan round
-# (1 map + 2 reviews) + a 5-row /code run + /validate-code (2) + /review-code (1) + slack. A larger
-# plan legitimately exceeds it, which is why this warns once and never blocks.
+# DEVKIT_DISPATCH_BUDGET tunes it (default 20). That is derived, not guessed: a plan
+# (1 map + 2 reviews = 3) + a 5-row /code run (5) + /validate-code (2) + one score round (3)
+# + /review-code (1) + one score round (2) = 16, + slack = 20. A larger plan legitimately
+# exceeds it, which is why this warns once and never blocks.
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./hook-lib.sh
@@ -45,7 +46,7 @@ state="$(devkit_state_dir "$input")" || exit 0
 
 printf 'x' >> "$state/dispatches"
 count=$(wc -c < "$state/dispatches" | tr -d ' ')
-budget="${DEVKIT_DISPATCH_BUDGET:-14}"
+budget="${DEVKIT_DISPATCH_BUDGET:-20}"
 
 [ "$count" -le "$budget" ] && exit 0
 [ -f "$state/dispatch-warned" ] && exit 0
@@ -54,5 +55,5 @@ budget="${DEVKIT_DISPATCH_BUDGET:-14}"
 echo "devkit dispatch-budget: $count subagent dispatches this session (budget $budget). \
 Each one is a separate request with its own prompt. Before the next: can a mechanical \
 check answer it — scripts/verify/*.sh, grep, or the gate output you already have? \
-Expected shape: 1 coder per Tasks row, 2 for /validate-code, 1 for /review-code."
+Expected shape: 1 coder per Tasks row, qa + stress per round, 1 for /review-code."
 exit 0

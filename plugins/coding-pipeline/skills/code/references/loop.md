@@ -91,8 +91,8 @@ touching both paths, a deletion as touching the deleted path — missing or extr
 HEAD beyond `--base`, no leftover `*.devkit-break` marker anywhere in the tree, and the duplication gate
 (`git-hooks/dup-gate.sh`) — into one `M: PASS` / `M: FAIL (n)` line. Exit 2 is unmeasured, not a pass —
 route it exactly like a FAIL.
-- The main session still re-breaks a sample of the falsification evidence by hand with `break-run.sh`
-  (one line per row, two if the row carries a SEC test) — an agent's claimed break is a claim, not proof;
+- The main session still re-breaks a sample of the code-row falsification evidence by hand with `break-run.sh`
+  (one line per code row, two if the row carries a SEC test; prose rows marked `n/a — Markdown, wiring check` are not broken) — an agent's claimed break is a claim, not proof;
   `checkpoint-m.sh` proves the marker is gone, not that the break itself was real.
 - `--gates` carries format + lint + the existing test suite for the stack
   (`references/quality-gate-reference.md`). Mechanical gates run in every mode, at every size.
