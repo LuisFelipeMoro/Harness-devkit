@@ -21,8 +21,27 @@ instruction at 60% and 80%, so the ceiling no longer depends on the model estima
   re-injects that plus `PROGRESS.md` and re-arms the 60/80% latches. Past this line, re-read files
   rather than trusting memory of them — the next thing produced from memory is the least likely to
   be right. `/handoff` remains for ending a session on purpose.
-- **Window size**: `DEVKIT_CONTEXT_WINDOW` when set; otherwise inferred (1M if the model id says so
-  or usage has already passed 200k, else 200k).
+- **Window size** — the hook takes the first of these that is set (first match wins):
+  1. `DEVKIT_CONTEXT_WINDOW` — the devkit's own override, always wins.
+  2. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` — integer, `k`/`M` suffix accepted (`300k`, `1M`).
+  3. `autoCompactWindow` in the first of `<repo>/.claude/settings.local.json`,
+     `<repo>/.claude/settings.json`, `~/.claude/settings.json` that holds a valid value.
+  4. Inferred: 1M if the model id says so or usage has already passed 200k, else 200k.
+
+  A value below `100000` (Claude Code's floor) or not a positive integer is ignored and the lookup
+  falls through. A malformed settings file is skipped.
+
+- **Plugin installs write no settings.** The flat install (`install-global.sh`) sets
+  `"autoCompactWindow": 300000` in `~/.claude/settings.json` when the key is absent, so the harness
+  compacts at 300k and the 60% and 80% lines land at 180k and 240k, before compaction. Plugin users
+  choose their own window. Either run `/autocompact 300k` (or any value), or set `autoCompactWindow`
+  in a settings file, or export `CLAUDE_CODE_AUTO_COMPACT_WINDOW`. Claude Code's own setting is
+  documented at code.claude.com/docs/en/model-config#set-the-auto-compact-window.
+
+- **Models with a 200k window**: `autoCompactWindow` above the model's real window does not
+  change what Claude Code can hold, and the hook cannot read that cap. On such a model the hook
+  measures against 300k and its lines land late. Set `DEVKIT_CONTEXT_WINDOW=200000` in the
+  environment to make the hook measure against the real window.
 - **Handoff state lives in `PROGRESS.md` and the handoff doc — never in the code.** No `TODO`, no
   `FIXME`, no commented-out stub, no placeholder marking where the session stopped. A source file
   must not record that an agent ran out of context; that is what the Memory leg is for, and a

@@ -39,6 +39,12 @@
         ]
       },
       {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tasks-state-guard.sh\"", "timeout": 3 }
+        ]
+      },
+      {
         "matcher": "Agent|Task",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-budget.sh\"", "timeout": 3 }

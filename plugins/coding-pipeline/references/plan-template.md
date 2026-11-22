@@ -13,6 +13,7 @@ to survive a reader who has the repository open and has not seen you write it.
 # Plan — {feature title}
 
 Status: draft | reviewed | approved · Branch: feat/{slug} · Language: {runtime + version + framework, e.g. Go 1.26} · Tier: Backend | Frontend | Both
+Gates: `{format + lint + test command for the stack}`
 
 ## Goal
 {One paragraph: what this solves, the user-visible outcome, and why it exists.}

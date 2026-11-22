@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.4.0] — 2026-11-22
+
+Multi-session `/code` runs resume from facts instead of prose. The design follows Anthropic, "Effective harnesses for long-running agents" (https://www.anthropic.com/research/effective-harnesses-for-long-running-agents) and its companion quickstart (https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding): a JSON row list where only the status may change, a fixed resume ritual at session start, and a final proof before the run is called done.
+
+### Added
+
+- **Row state in `tasks.json`.** `scripts/tasks_state.py` (`init`, `set`, `status`, `verify`) keeps one row per Tasks row in `docs/plans/{slug}/tasks.json`, with a `tasks.json.sum` checksum. Only the allowed status transitions are accepted, so a row cannot be edited into a state the tool did not write (AC1–AC4).
+- **`hooks/tasks-state-guard.sh`** (id `pre:write:tasks-state`, PreToolUse on Write/Edit) blocks direct writes to `tasks.json` and `tasks.json.sum`. Row state changes only through `tasks_state.py` (AC5).
+- **Bootstrap row status.** `session-bootstrap.sh` prints one `tasks_state` status line before the PROGRESS block. When it drops old entries to fit the cap, it keeps their `- Lessons:` lines (AC6, AC7).
+- **`/code` § Resume and § Final proof.** Resume: `tasks_state.py init` runs before the first dispatch, each row is set `in_progress` and then `done`, and a resumed session continues from the rows still `todo` or `in_progress`. Final proof: once every row is `done`, falsification and the full gates run once after the last row (AC11, AC17).
+- **`delivery-gate` clean-state check.** The Stop hook resolves the repo root from the payload `cwd` (AC8) and reports rows still `in_progress`, so a session cannot end silently on half-finished row state.
+- **Gates line in the plan header.** `references/plan-template.md` gains `Gates: {command}` on a second header line, and planning Phase 4 fills it (AC12).
+- **Auto-compact window.** The flat install (`scripts/install-global.sh`) sets `autoCompactWindow` to 300000 in `~/.claude/settings.json` when the key is absent, and never overwrites an existing value. `context-budget.sh` reads the compact window from the environment and settings, so the checkpoint fires before compaction. Plugin installs write no settings; the README and `references/context-budget.md` say to run `/autocompact 300k` (AC15).
+- **Decision questions.** A question put to the user offers at least three options, each with its trade-off (AC16).
+
+### Changed
+
+- `references/progress-file.md` documents the entry format the hooks and the real `PROGRESS.md` use (AC10).
+- Falsification and the full gates run once per run, after the last row (Final proof), not after every row. Per-row checks remain the coder's `break-run.sh` evidence (AC17).
+
+### Fixed
+
+- `harness-metrics.py` read 0 of 0 for sensor escapes on real `PROGRESS.md` files. The sensor escape count now reads `- Failed:` bullets inside `## [` entries (AC9).
+
+### Known issues
+
+- The FINAL-PROOF prompt names one `Language`. A plan that spans several stacks must pass each row's `Language` by hand.
+
 ## [3.3.0] — 2026-11-18
 
 ### Added

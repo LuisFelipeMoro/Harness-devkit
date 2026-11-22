@@ -75,3 +75,4 @@ the same three scores; only the Stress label differs (`[folded]` vs `[dispatched
 | Plan-review rounds | 3 fix rounds after the first score, then the human |
 | Task size (one Tasks row) | ~200 lines of production code |
 | Graceful shutdown drain | ≤ 30s |
+| Auto-compact window (flat install) | 300000 — Claude Code `autoCompactWindow`, code.claude.com/docs/en/model-config#set-the-auto-compact-window · written by `scripts/wire-claude-settings.py` only when absent |

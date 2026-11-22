@@ -10,7 +10,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob, LSP, mcp__plugin_context7_context7__
 Load `agents/coder.md` (the shared Coder core) first — its Spec→Implement→Test→Falsify cycle,
 boundary, signals, and cross-cutting rules (error logging, idempotency keys, graceful shutdown,
 security) all apply. This overlay adds the backend specialization on top. Nothing here overrides
-the core's mandatory Phase 3 falsification.
+the core's mandatory Phase 3 falsification, which runs in the FINAL-PROOF dispatch.
 
 **Stacks in scope**: Go · Java · JS/TS (Node) · PHP · Rust · Kotlin (server).
 Load ONLY `references/languages/<language>.md` for the row's `Language` — one file, never
@@ -20,7 +20,7 @@ the whole index.
 The row's Test Cases table should already include a row per category below. If one is
 missing, flag it as a gap in `CODER DONE` rather than inventing the case yourself — the plan's
 Test Case table is the source of test design, not the Coder's judgment. Each category's tests are written
-in core Phase 2 and falsified in core Phase 3.
+in core Phase 2 and falsified in core Phase 3 (FINAL-PROOF dispatch).
 - **Unit**: table-driven where the logic repeats; every exported function — happy path, boundary, type edge, every `return err` / rejected promise / raised exception.
 - **Integration**: real adapters behind interfaces, mocked I/O (no live network); state transitions, multi-component flows; tag them (`//go:build integration`, `@Tag("integration")`, etc.).
 - **Concurrency** (where it applies): the same resource hit in parallel — races, double-spend, idempotency replay. Go: assert under `-race`.

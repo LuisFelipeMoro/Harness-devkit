@@ -100,6 +100,31 @@ after="$(cksum < "$H/.claude/settings.json")"
 check "aborts_on_invalid_json" "exited 0 or rewrote the malformed file" $?
 rm -rf "$H"
 
+# wire-claude-settings: sets autoCompactWindow 300000 when absent — the flat install must
+# checkpoint before Claude Code compacts; hooks are still merged in the same write
+H="$(newhome)"
+python3 "$WIRE" "$PLUGIN" --home "$H" >/dev/null 2>&1
+python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d.get("autoCompactWindow") == 300000, "autoCompactWindow not 300000"
+assert d.get("hooks"), "hooks not written"
+' "$H/.claude/settings.json" 2>/dev/null
+check "wire-settings: sets autoCompactWindow 300000 when absent" "key missing or not 300000, or hooks dropped" $?
+rm -rf "$H"
+
+# wire-claude-settings: keeps an existing autoCompactWindow — the user's own choice is never overwritten
+H="$(newhome)"; mkdir -p "$H/.claude"
+printf '{"autoCompactWindow": 500000}\n' > "$H/.claude/settings.json"
+python3 "$WIRE" "$PLUGIN" --home "$H" >/dev/null 2>&1
+python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d.get("autoCompactWindow") == 500000, "existing autoCompactWindow overwritten"
+' "$H/.claude/settings.json" 2>/dev/null
+check "wire-settings: keeps an existing autoCompactWindow" "existing value 500000 was overwritten" $?
+rm -rf "$H"
+
 # ── install.sh helpers ───────────────────────────────────────────────────────
 # shellcheck source=../../install.sh
 DEVKIT_LIB_ONLY=1 . "$REPO/install.sh"
@@ -270,6 +295,13 @@ wired=$?
 check "installs_go_test_guard_hook" "fresh install lacks the Write entry for go-test-name-guard.sh or the staged go-test-name.sh" $?
 rm -rf "$GTG" "$GTGW"
 
+# wires tasks-state-guard — a flat install must wire the Write/Edit guard exactly once
+TSG="$(newhome)"; TSGW="$(newhome)"
+( cd "$TSGW" && HOME="$TSG" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
+[ "$(hook_count "$TSG/.claude/settings.json" tasks-state-guard.sh)" = "1" ]
+check "install: wires tasks-state-guard" "flat install does not wire tasks-state-guard.sh exactly once" $?
+rm -rf "$TSG" "$TSGW"
+
 # detects_up_to_date — second run recognises the commit it already installed
 out2="$( cd "$WORK" && bash "$REPO/install.sh" --yes --no-deps --home "$H" 2>&1 )"
 printf '%s' "$out2" | grep -q "up to date"
@@ -297,8 +329,9 @@ H="$(newhome)"; WORK="$(newhome)"
 ( cd "$WORK" && HOME="$H" bash "$PLUGIN/scripts/install-global.sh" ) >/dev/null 2>&1
 D="$H/.claude/devkit/scripts"
 [ -x "$D/verify/break-run.sh" ] && [ -x "$D/verify/verdict.sh" ] && [ -f "$D/verify/diff-lib.sh" ] \
-    && [ -x "$D/estimate-run.py" ] && [ -x "$D/harness-metrics.py" ] && [ -x "$D/headless.py" ]
-check "stages_sensor_scripts" "verify/*.sh, estimate-run.py, harness-metrics.py or headless.py missing or not executable under ~/.claude/devkit/scripts" $?
+    && [ -x "$D/estimate-run.py" ] && [ -x "$D/harness-metrics.py" ] && [ -x "$D/headless.py" ] \
+    && [ -x "$D/tasks_state.py" ]
+check "stages_sensor_scripts" "verify/*.sh, estimate-run.py, harness-metrics.py, headless.py or tasks_state.py missing or not executable under ~/.claude/devkit/scripts" $?
 rm -rf "$H" "$WORK"
 
 # installs_drive_scripts — the driver is the one entry point that runs /code, /validate-code and

@@ -14,12 +14,20 @@ Ownership: an entry is "ours" when its command references a script under
 That second clause is what heals a rename — the stale entry is dropped instead of
 accumulating beside its replacement. Anything else in settings.json is left alone.
 
+It also sets top-level "autoCompactWindow" when the key is absent, so a flat install
+checkpoints before Claude Code compacts. An existing value is never overwritten.
+
 Usage: wire-claude-settings.py <plugin-dir> [--home DIR] [--dry-run]
 """
 import json
 import os
 import re
 import sys
+
+# Claude Code compacts at the window it is given; 300k leaves the devkit's warn and
+# ceiling checkpoints room to fire first. The number is stated once in
+# plugins/coding-pipeline/references/thresholds.md ("Auto-compact window (flat install)").
+AUTO_COMPACT_WINDOW = 300000
 
 
 def load_hook_graph(plugin_dir, hooks_home):
@@ -122,8 +130,17 @@ def main():
     merge(settings, graph, hooks_home, shipped)
     count = sum(len(v) for v in settings["hooks"].values())
 
+    window_set = "autoCompactWindow" not in settings
+    if window_set:
+        settings["autoCompactWindow"] = AUTO_COMPACT_WINDOW
+    window_note = (
+        f"set autoCompactWindow to {AUTO_COMPACT_WINDOW}" if window_set
+        else f"autoCompactWindow already {settings['autoCompactWindow']} — left unchanged"
+    )
+
     if dry_run:
         print(f"would wire {count} hook entr{'y' if count == 1 else 'ies'} into {settings_path}")
+        print(f"would {window_note}")
         return 0
 
     os.makedirs(claude_dir, exist_ok=True)
@@ -132,7 +149,7 @@ def main():
         json.dump(settings, f, indent=2)
         f.write("\n")
     os.replace(tmp, settings_path)
-    print(f"✓ settings.json — {count} hook entries wired")
+    print(f"✓ settings.json — {count} hook entries wired; {window_note}")
     return 0
 
 

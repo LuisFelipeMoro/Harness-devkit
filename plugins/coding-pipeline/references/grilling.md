@@ -23,23 +23,30 @@ that can be asked *now* without guessing at an answer not yet heard.
 ## Round format
 
 ```text
-❓ **Q1 — <question title>**: <the assumption being challenged, and the consequence if it is wrong;
-the options, when there are several>
-
-➡️ Recommended: <your answer>
+❓ **Q1 — <question title>**: <the assumption being challenged, and the consequence if it is wrong>
+- A. <option> — trade-off: <cost; risk; what it gives up>
+- B. <option> — trade-off: <cost; risk; what it gives up> · Recommended
+- C. <option> — trade-off: <cost; risk; what it gives up>
 
 ---
 
-❓ **Q2 — <question title>**: …
-
-➡️ Recommended: …
+❓ **Q2 — <confirmation of an already-decided action>**: <the action>. Approve / change?
 ```
 
-- **Word each question so "yes" accepts the recommendation** — the user can answer a round with
-  `1 yes, 2 yes, 3: use the queue instead`.
+- **Decision questions offer options, never a bare recommendation** — see § Decision questions.
+  The user answers a round by letter, e.g. `1 B, 2 A, 3: C`.
 - One recommendation per question, concrete — never "it depends".
 - No softening ("just wondering"), no praise before critique, no question the user already
   answered or the plan already decides.
+
+## Decision questions
+
+Every question that asks the user to choose a design or solution offers **at least 3 concrete
+options**, labelled A/B/C…. Each option states its **trade-off**: the cost, the risk, and what it
+gives up. Exactly one option is marked `Recommended`. The user answers by letter.
+
+Exempt: a question that confirms one already-decided action — approve the plan, commit or push,
+proceed, run the grill — is a confirmation, not a decision, and needs no options.
 
 ## Done
 
