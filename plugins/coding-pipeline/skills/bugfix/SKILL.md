@@ -1,7 +1,6 @@
 ---
 name: bugfix
 description: Build a feedback loop that goes red on a bug, rank and test hypotheses to its root cause, then apply the fix depth you choose and prove it RED to GREEN with the full suite and every gate. Usage: /bugfix [description], e.g. "/bugfix cart total goes negative after removing a coupon".
-disable-model-invocation: true
 ---
 
 **Input**: a bug description; the questions in step 1 fill in the rest.

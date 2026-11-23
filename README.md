@@ -139,7 +139,7 @@ Two rules hold at every arrow. The implementer is not the validator: `coder` bui
 
 ## Skills
 
-Invoke by name. Each skill has `disable-model-invocation: true`, so Claude never starts one on its own.
+Invoke by name. At a `Next:` step Claude asks whether to run the next pipeline skill now, leave it for you, or stop; it runs one only on "now". The six pipeline skills (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`) are the only ones Claude may start, and every other skill stays user-started (`disable-model-invocation: true`).
 
 | Skill | Use it when |
 |---|---|
@@ -476,5 +476,5 @@ python3 .github/scripts/validate-wiring.py   # manifests, hooks, links, skills t
 ```
 
 `validate-wiring.py` exists because nearly every capability is one file pointing at another, and
-nothing executes those links at authoring time. It also enforces that every skill is manual, at most
-60 lines, and never invokes another skill.
+nothing executes those links at authoring time. It also enforces that the six pipeline skills are model-invocable,
+every other skill is manual, every skill is at most 60 lines, and no skill invokes another.

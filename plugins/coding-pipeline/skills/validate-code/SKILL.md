@@ -1,7 +1,6 @@
 ---
 name: validate-code
 description: Validate the current diff against its base branch — every quality gate for the detected stack, the verify sensors, a qa audit and a stress pass at the depth the diff needs, then the scripted verdict — and loop any low, failing or blocked result through fix rounds until it passes or the human decides. Usage: /validate-code [plan-path] [--full], e.g. "/validate-code docs/plans/checkout-retry/plan.md".
-disable-model-invocation: true
 ---
 
 **Input**: the working diff vs `BASE=$(git merge-base HEAD main)` (fall back to `master`); optionally the plan path; `--full` forces full depth.

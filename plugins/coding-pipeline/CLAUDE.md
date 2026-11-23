@@ -41,7 +41,7 @@ This devkit is a Harness. Four components, all mandatory:
   figure from the session transcript, so this stopped being a number the model reports about
   itself. Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a multi-step run propagates through every step downstream. At 80%, checkpoint and continue — no human step: write the `PROGRESS.md` entries, commit the branch (push only if the user has asked for pushes), carry on; the harness compacts, and `precompact-snapshot.sh` + `session-bootstrap.sh` restore state. Never carry on past it without that checkpoint, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
 - **Memory & Progress**: `PROGRESS.md` at repo root — one appended `## [slug] YYYY-MM-DD — title` entry per checkpoint with `Done` / `Failed` / `Current State` / `Next` / `Lessons` bullets, never rewritten; row state lives in `docs/plans/{slug}/tasks.json` (written only by `tasks_state.py`). Read at session start by the SessionStart bootstrap hook. Atomic commits.
-- **Separation**: **implementer ≠ validator** — `coder` builds; `qa`, `reviewer` and `stress` validate. The acceptance contract (ACs + Test Case table) is frozen BEFORE any code. **The plan is validated the same way**: `plan-reviewer` reads the plan against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say. Skills run one at a time, started by the user; a skill may dispatch agents but never another skill.
+- **Separation**: **implementer ≠ validator** — `coder` builds; `qa`, `reviewer` and `stress` validate. The acceptance contract (ACs + Test Case table) is frozen BEFORE any code. **The plan is validated the same way**: `plan-reviewer` reads the plan against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say. Skills run one at a time. At a skill's `Next:` step Claude asks — run it now / you run it later / stop — and invokes the next pipeline skill only on "now"; a skill may dispatch agents but never another skill itself, and non-pipeline skills are started by the user.
 
 ## Is the Harness working?
 
@@ -148,7 +148,7 @@ Front-load reasoning into planning so execution is mechanical: get the plan tigh
 - **After git push**: the hook reports how many PR comments are open. `/pr-fix` triages them: a valid issue (bug/missing test/security hole) is fixed and answered with what changed; a non-actionable one (style preference/opinion/already done) is answered with why. Never leave PR comments unanswered.
 - **Load references lazily**: a reference is read only when its trigger fires, one file at a time; exactly one language file up front (see Quality Gates); dispatch prompts pass paths, never contents.
 
-## Skills (invoke manually)
+## Skills
 
 | Need | Skill |
 |------|-------|
@@ -177,7 +177,7 @@ Front-load reasoning into planning so execution is mechanical: get the plan tigh
 | Create a new skill | `/write-a-skill` |
 | What the devkit has: skills, flows, one skill's usage | `/devkit-help` |
 
-Skills never run each other. Claude may suggest the next skill; only the user starts one. After any code change, `/validate-code` then `/review-code` are the recommended final steps, then `/pr` to open the pull request: gates without a reviewer are insufficient, because logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
+At a skill's `Next:` step Claude asks — run it now / you run it later / stop — and invokes the next pipeline skill (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`) only on "now". A skill never runs another skill itself; every other skill is started by the user. After any code change, `/validate-code` then `/review-code` are the recommended final steps, then `/pr` to open the pull request: gates without a reviewer are insufficient, because logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 
 ## Coding Discipline (12 rules — non-negotiable)
 

@@ -1,7 +1,6 @@
 ---
 name: review-code
 description: Review a diff or pull request on two separate axes — Standards (repo standards, OWASP, language, design, reuse, tests, code smells) and Spec (does it do what the plan or issue asked) — print every finding, then post to the PR only in the language and style you pick. Usage: /review-code [PR-number | branch] [--spec path] [--split] [--stress], e.g. "/review-code 42".
-disable-model-invocation: true
 ---
 
 **Input**: a PR number, a branch, or nothing (= the current diff vs `git merge-base HEAD main`, falling back to `master`, uncommitted work included); `--spec path` names the spec to review against; `--split` reviews each axis in its own parallel dispatch; `--stress` adds the reviewer's stress lens for a PR you cannot run `/validate-code` on (someone else's branch); on your own change, stress belongs to `/validate-code`. With a plan for the branch, its ACs, Test Case table, Reuse Map and codebase map travel with the diff.

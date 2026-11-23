@@ -148,6 +148,14 @@ expect "tasks-state-guard: case variant blocked" tasks-state-guard.sh "$(tsg_jso
 ln -s "$TS/docs/plans/x" "$TS/link"
 expect "tasks-state-guard: symlinked plan dir blocked" tasks-state-guard.sh "$(tsg_json "$TS/link/tasks.json")" 2
 expect "tasks-state-guard: nested docs/plans path passes" tasks-state-guard.sh "$(tsg_json "$TS/docs/plans/a/b/tasks.json")" 0
+# A checkout whose own path holds docs/plans/ must not hide a plan file (AC23): the plan
+# segment is taken after the last docs/plans/, so this direct plan file is still blocked.
+mkdir -p "$TS/docs/plans/me/docs/plans/p"
+checkout_out=$(printf '%s' "$(tsg_json "$TS/docs/plans/me/docs/plans/p/tasks.json")" | bash "$HOOKS/tasks-state-guard.sh" 2>&1; echo "exit=$?")
+case "$checkout_out" in
+    *"BLOCKED "*"exit=2") pass=$((pass + 1)) ;;
+    *) echo "FAIL: tasks-state guard: checkout path containing docs/plans — want exit 2 with BLOCKED, got: $checkout_out"; fail=1 ;;
+esac
 rm -rf "$TS"
 
 # ── delivery-gate: warns on unproven work, silent once a gate ran ────────────
@@ -279,6 +287,46 @@ if not ok:
 sys.exit(0 if ok else 1)
 PY
 if [ "$lit_rc" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: tasks-state: hook validators match the CLI regexes — see literals above"; fail=1; fi
+
+# tasks-state: hook parser agrees with the CLI on next row (AC23). The bootstrap hook embeds its
+# own Tasks parser; for each none token a Depends-on cell may hold, and for an `and`-joined cell,
+# its `next:` must name the row tasks_state.py status names. Both answers must also equal the
+# literal row the table implies, so two parsers that agree on a wrong row still fail.
+# The fixtures are built by tasks_state.py init and set, never by hand.
+pin_rc=0
+PIN="$(mktemp -d "${TMPDIR:-/tmp}/devkit-pin.XXXXXX")"
+PIN_CLI="$(cd plugins/coding-pipeline/scripts && pwd)/tasks_state.py"
+PIN_HOOK="$(cd "$HOOKS" && pwd)/session-bootstrap.sh"
+pin_next_cli() { python3 -I "$PIN_CLI" status "$1" | sed -n 's/.*next: //p'; }
+pin_next_hook() {   # pin_next_hook <dir> — the bootstrap's next: for the one plan under <dir>
+    printf '{"session_id":"pin","source":"startup","cwd":"%s"}' "$1" \
+        | (cd "$1" && env TMPDIR="$1/tmp" bash "$PIN_HOOK") 2>&1 | sed -n 's/^\[pin\] .* next: //p'
+}
+i=0
+for tok in '—' '-' 'none' ''; do
+    i=$((i + 1)); d="$PIN/t$i"; plan="$d/docs/plans/pin/plan.md"
+    mkdir -p "$d/docs/plans/pin" "$d/tmp/claude-devkit"
+    printf '%s\n' '# Pin' '' \
+        '| ID | Task | Files | Test rows | Language | Tier | Depends on |' \
+        '|---|---|---|---|---|---|---|' \
+        '| T1 | one | a.txt | — | Bash | — | — |' \
+        '| T2 | two | b.txt | — | Bash | — | T1 and T3 |' \
+        "| T3 | three | c.txt | — | Bash | — | $tok |" > "$plan"
+    python3 -I "$PIN_CLI" init "$plan" >/dev/null || pin_rc=1
+    python3 -I "$PIN_CLI" set "$plan" T1 in_progress >/dev/null || pin_rc=1
+    python3 -I "$PIN_CLI" set "$plan" T1 done --evidence "M: PASS pin" >/dev/null || pin_rc=1
+    cli_a=$(pin_next_cli "$plan"); hook_a=$(pin_next_hook "$d")
+    python3 -I "$PIN_CLI" set "$plan" T3 in_progress >/dev/null || pin_rc=1
+    python3 -I "$PIN_CLI" set "$plan" T3 done --evidence "M: PASS pin" >/dev/null || pin_rc=1
+    cli_b=$(pin_next_cli "$plan"); hook_b=$(pin_next_hook "$d")
+    # T3 is eligible on a none token and T2 only once `T1 and T3` both hold.
+    if [ "$cli_a" != T3 ] || [ "$hook_a" != "$cli_a" ] || [ "$cli_b" != T2 ] || [ "$hook_b" != "$cli_b" ]; then
+        echo "FAIL: tasks-state: hook parser agrees with the CLI on next row — token '$tok': cli '$cli_a'→'$cli_b', hook '$hook_a'→'$hook_b' (want T3→T2)"
+        pin_rc=1
+    fi
+done
+rm -rf "$PIN"
+if [ "$pin_rc" = 0 ]; then pass=$((pass + 1)); else fail=1; fi
 
 rm -rf "$DG" "${TMPDIR:-/tmp}"/claude-devkit/dg* "${TMPDIR:-/tmp}"/claude-devkit/citest2 2>/dev/null
 

@@ -1,7 +1,6 @@
 ---
 name: map
 description: Write a read-only, file:line-cited map of the code a topic touches (blast radius, reuse, prior art, conventions, contracts, tests). Usage: /map <topic> [--print], e.g. "/map rate limiting on the public API".
-disable-model-invocation: true
 ---
 
 **Input**: a topic or area (ask if missing); `--print` to print instead of writing.

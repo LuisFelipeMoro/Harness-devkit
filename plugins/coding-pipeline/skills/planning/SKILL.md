@@ -1,7 +1,6 @@
 ---
 name: planning
 description: Produce a reviewed, approved plan in the devkit plan template, from scratch or from your own notes, mapped and checked against the real codebase. Usage: /planning [path-to-base-plan-or-notes], e.g. "/planning docs/notes/checkout-retry.md".
-disable-model-invocation: true
 ---
 
 **Input**: a feature request, optionally a base plan/notes path (ask for the goal if neither is given).

@@ -11,7 +11,7 @@ disable-model-invocation: true
 ## Steps
 
 1. **Pick the mode.** No argument → step 2. `flows` → step 3 only. Anything else → step 4.
-2. **Skills.** Read the `## Skills (invoke manually)` table — up to the next `## ` heading — from `~/.claude/devkit/CLAUDE.md`, falling back to `plugins/coding-pipeline/CLAUDE.md` in the repo. Neither readable → say which paths were tried and stop. Print each row (`/skill` — its Need cell) under these groups, in this order, a group printed only when it has a row:
+2. **Skills.** Read the `## Skills` table — up to the next `## ` heading — from `~/.claude/devkit/CLAUDE.md`, falling back to `plugins/coding-pipeline/CLAUDE.md` in the repo. Neither readable → say which paths were tried and stop. Print each row (`/skill` — its Need cell) under these groups, in this order, a group printed only when it has a row:
 
    | Group | Skills |
    |---|---|
@@ -31,7 +31,7 @@ disable-model-invocation: true
    Bug:          /bugfix → /validate-code → /review-code → /pr
    Small change: /code "..." → /validate-code
    ```
-   and that every skill is started by the user and only suggests the next one.
+   and that a skill only suggests the next one: Claude asks before running a pipeline skill (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`), and every other skill is started by the user.
 4. **One skill.** Strip a leading `/`. Read `~/.claude/skills/<name>/SKILL.md`, falling back to `plugins/*/skills/<name>/SKILL.md` in the repo. Not found → say so, list the table's skill names from step 2's file, and stop. Print only: its `description` (with the `Usage:` example), its `**Input**`, `**Output**` and `**Boundary**` lines, and its `Next:` line (or `Next: none` when it has none). Never its steps or any reference file.
 
 Next: start any skill the list names, e.g. `/planning` or `/code "..."`.

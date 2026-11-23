@@ -164,7 +164,7 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, "plugins")):
             else:
                 err("ref", rel(path), f"'{plugin}:{item}' matches no agent or skill in that plugin")
 
-# ── 5. CLAUDE.md "Skills (invoke manually)" table resolves, and is complete ──
+# ── 5. CLAUDE.md "## Skills" table resolves, and is complete ──
 all_skill_names = set()
 for pdir in declared.values():
     sdir = os.path.join(pdir, "skills")
@@ -178,9 +178,9 @@ if os.path.isfile(routing_md):
     text = read(routing_md)
     # The heading is prose and can be reworded. A miss is an error, not a silent skip,
     # or this check would scan an empty string and pass while verifying nothing.
-    m = re.search(r"^## Skills \(invoke manually\)[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    m = re.search(r"^## Skills[ \t]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
     if not m:
-        err("routing", rel(routing_md), "'## Skills (invoke manually)' section not found — this check verified nothing")
+        err("routing", rel(routing_md), "'## Skills' section not found — this check verified nothing")
     table_block = m.group(1) if m else ""
     routed = sorted(set(re.findall(r"`/([a-z0-9][a-z0-9-]*)`", table_block)))
     if m and not routed:
@@ -197,8 +197,12 @@ if os.path.isfile(routing_md):
 # A folded/multi-line YAML description is captured too: continuation lines are indented.
 DESC_FIELD = re.compile(r"^description:[ \t]*(.*(?:\n[ \t]+\S.*)*)$", re.M)
 # A skill must not tell the model to run another skill. Suggesting one ("Next: /validate-code")
-# is allowed — only a user starts a skill.
+# is allowed — a skill asks at its Next step and never starts another itself.
 SKILL_CALL = re.compile(r"Skill\(|\b(?:load|invoke|run)(?: and follow)? (?:the )?`/[a-z0-9-]+` skill", re.I)
+# AC24: the pipeline skills are model-invocable behind a question (Next: step asks run now / run later / stop).
+# Every other skill is started by the user only. Both halves are enforced here.
+PIPELINE_SKILLS = frozenset({"map", "planning", "code", "validate-code", "bugfix", "review-code"})
+MANUAL_FLAG = re.compile(r"^disable-model-invocation:[ \t]*true[ \t]*$", re.M)
 for name, pdir in declared.items():
     sdir = os.path.join(pdir, "skills")
     if not os.path.isdir(sdir):
@@ -216,7 +220,11 @@ for name, pdir in declared.items():
         dm = DESC_FIELD.search(fm.group(1))
         if not dm or not dm.group(1).strip().strip("'\""):
             err("desc", rel(skill_md), "missing description field")
-        if not re.search(r"^disable-model-invocation:[ \t]*true[ \t]*$", fm.group(1), re.M):
+        flagged = MANUAL_FLAG.search(fm.group(1)) is not None
+        if d in PIPELINE_SKILLS:
+            if flagged:
+                err("desc", rel(skill_md), "pipeline skill is model-invocable (asks first); remove disable-model-invocation")
+        elif not flagged:
             err("desc", rel(skill_md), "frontmatter lacks 'disable-model-invocation: true' (skills are manual)")
         if SKILL_CALL.search(text):
             err("desc", rel(skill_md), "tells the model to invoke another skill — skills never call skills; suggest it instead")
@@ -245,7 +253,7 @@ CONTRACT = [
 
     # standards file: manual skills table, fan-out rules, no roster machinery
     ("plugins/coding-pipeline/CLAUDE.md",
-     ["## Skills (invoke manually)", "Skills never run each other",
+     ["## Skills", "A skill never runs another skill itself",
       "**Read-only fan-out**", "**Never spawn 4+ writers**", "Freeze the shared contract",
       "the gate chain stays in the foreground", "`references/branching.md`",
       "`references/agent-teams.md`", "aliases resolve to the newest model in each family",

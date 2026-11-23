@@ -29,6 +29,7 @@ disable-model-invocation: true
 ```
 
 Description: one sentence plus `Usage:`; no trigger phrases (the skill is manual).
+New skills stay manual: keep the flag. The one exception is the coding pipeline's six skills (`map`, `planning`, `code`, `validate-code`, `review-code`, `bugfix`), which omit it so Claude can run them after asking at their `Next:` step.
 Always quote the value so colons inside it stay valid YAML.
 
 ## Body structure

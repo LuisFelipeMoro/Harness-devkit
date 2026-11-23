@@ -4776,5 +4776,54 @@ else
     echo "FAIL: watchdog pids cleared after wait — cmd_pid / gates_pid is not cleared right after its wait"; fail=1
 fi
 
+# watchdog helpers identical in both scripts (ADR-7, AC23 b). start_group, stop_group and
+# gate_timeout are copied into break-run.sh and checkpoint-m.sh by design; the span from the
+# start_group comment through the end of gate_timeout must stay byte-identical. The check reads
+# DEVKIT_WD_BREAK_RUN when set, so a falsification run points it at a scratch copy of break-run.sh.
+wd_span() { awk '/^# start_group/{p=1} p{print} p && /^gate_timeout\(\)/{g=1} g && /^}/{exit}' "$1"; }
+wd_a="${DEVKIT_WD_BREAK_RUN:-$V/break-run.sh}"
+wd_span "$wd_a" > "$W/wd-break-run.txt"
+wd_span "$V/checkpoint-m.sh" > "$W/wd-checkpoint.txt"
+if [ -s "$W/wd-break-run.txt" ] && cmp -s "$W/wd-break-run.txt" "$W/wd-checkpoint.txt"; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: watchdog helpers identical in both scripts — the break-run.sh and checkpoint-m.sh copies differ or the span is missing"; fail=1
+fi
+
+# ── pipeline skills are model-invocable behind a question (3.4.0 T21, AC24): wiring check ──
+# validate-wiring.py enforces both halves: a pipeline skill carrying the manual-only flag fails,
+# and any other skill lacking it fails. Each altered case runs on a scratch copy of the tree;
+# the real tree is only read.
+wiring_copy() {  # wiring_copy <dir> — the whole tree minus git, worktrees and plan artifacts
+    mkdir -p "$1" && tar -C "$ROOT" --exclude=./.git --exclude=./.worktrees --exclude=./docs -cf - . | tar -C "$1" -xf -
+}
+out=$(python3 "$ROOT/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable" 0 "$rc" "$out" "wiring OK"
+
+wa="$W/wiring-pipeline-flagged"; wiring_copy "$wa"
+{ head -n 3 "$wa/plugins/coding-pipeline/skills/code/SKILL.md"; echo 'disable-model-invocation: true'; tail -n +4 "$wa/plugins/coding-pipeline/skills/code/SKILL.md"; } > "$wa/code.tmp" && mv "$wa/code.tmp" "$wa/plugins/coding-pipeline/skills/code/SKILL.md"
+out=$(python3 "$wa/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable — pipeline skill that regains the flag fails" 1 "$rc" "$out" "plugins/coding-pipeline/skills/code/SKILL.md: pipeline skill is model-invocable (asks first)"
+
+wb="$W/wiring-manual-lost"; wiring_copy "$wb"
+grep -v '^disable-model-invocation' "$wb/plugins/pr-workflow/skills/pr/SKILL.md" > "$wb/pr.tmp" && mv "$wb/pr.tmp" "$wb/plugins/pr-workflow/skills/pr/SKILL.md"
+out=$(python3 "$wb/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable — manual skill that loses the flag fails" 1 "$rc" "$out" "plugins/pr-workflow/skills/pr/SKILL.md: frontmatter lacks 'disable-model-invocation: true'"
+
+check_skill_invocation_docs() {  # check_skill_invocation_docs <row> — the ask-before-invoking rule is stated in every guide and no stale "only the user starts a skill" line survives
+    local row="$1" R="$ROOT" miss="" f
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/CLAUDE.md" 'run it now / you run it later / stop' '`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`')"
+    miss="$miss$(gate_timeout_missing "$R/AGENTS.md" 'run it now / you run it later / stop')"
+    miss="$miss$(gate_timeout_missing "$R/README.md" 'leave it for you, or stop' '`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/write-a-skill/references/skill-template.md" 'so Claude can run them after asking')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/write-a-skill/references/writing-for-agents.md" 'so Claude can run them after asking')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/devkit-help/SKILL.md" 'Claude asks before running a pipeline skill')"
+    for f in plugins/coding-pipeline/CLAUDE.md AGENTS.md README.md plugins/devtools/skills/devkit-help/SKILL.md plugins/devtools/skills/write-a-skill/SKILL.md; do
+        grep -qE 'Skills never run each other|invoke manually|every skill is started by the user|every skill is manual' "$R/$f" && miss="${miss}[$f: stale manual-only wording] "
+    done
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
+}
+check_skill_invocation_docs "docs: ask-before-invoking rule stated"
+
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

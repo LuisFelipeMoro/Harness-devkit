@@ -52,8 +52,9 @@ case "$abs" in
 esac
 
 # One directory level under plans: the `*` above also matches slashes, so the segment
-# between `docs/plans/` and the file name must hold no further slash.
-tail="${abs#*/docs/plans/}"
+# between `docs/plans/` and the file name must hold no further slash. The LAST docs/plans/
+# is the plan's: a checkout whose own path holds docs/plans/ must not hide a plan file.
+tail="${abs##*/docs/plans/}"
 seg="${tail%/*}"
 case "$seg" in
     */*) exit 0 ;;

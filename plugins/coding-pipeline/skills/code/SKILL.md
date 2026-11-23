@@ -1,7 +1,6 @@
 ---
 name: code
 description: Implement a plan (or a small inline task) row by row — spec, implement, test — then falsify and gate the whole run once in a Final proof stage, in the run mode you pick from token estimates. Usage: /code [plan-path | "task text"], e.g. "/code docs/plans/checkout-retry/plan.md".
-disable-model-invocation: true
 ---
 
 **Input**: a plan path, inline task text, or nothing (the skill looks for a plan).

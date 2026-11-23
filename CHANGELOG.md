@@ -18,6 +18,7 @@ Multi-session `/code` runs resume from facts instead of prose. The design follow
 ### Changed
 
 - `references/progress-file.md` documents the entry format the hooks and the real `PROGRESS.md` use (AC10).
+- Pipeline skills (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`) are model-invocable behind a question: at a `Next:` step Claude asks run now / you run it later / stop, and `validate-wiring.py` enforces the split (AC24).
 - Falsification and the full gates run once per run, after the last row (Final proof), not after every row. Per-row checks remain the coder's `break-run.sh` evidence (AC17).
 
 ### Fixed
