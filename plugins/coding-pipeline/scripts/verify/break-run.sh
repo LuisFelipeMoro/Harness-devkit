@@ -21,6 +21,10 @@
 #          the row — neither is evidence the row's check was exercised.
 # Exit 2 — misuse (bad args, <file> missing, --old not present exactly once)
 #          or the post-run restore did not reproduce the pristine copy.
+#
+# The test command runs as the leader of its own process group; a timeout or
+# interrupt stops that whole group (TERM, 5 s wall clock, KILL). A process that
+# leaves the group (setsid, daemonising) is out of reach of the stop.
 set -u
 
 usage() {
@@ -129,40 +133,33 @@ if [ "$count" -ne 1 ]; then
     exit 2
 fi
 
-# collect_tree <pid> — print <pid> and every descendant, one per line. The whole
-# tree is collected before anything is signalled: once a parent dies its
-# children reparent to init and `pgrep -P` can no longer find them.
-collect_tree() {
-    local pid="$1" kid
-    echo "$pid"
-    for kid in $(pgrep -P "$pid" 2>/dev/null); do
-        collect_tree "$kid"
-    done
+# start_group <out> <cmd...> — run <cmd> with stdin closed and stdout+stderr in <out>, as the
+# leader of its own process group (the python wrapper calls setpgid(0,0) then execs, so the
+# pid it leaves in $grp_pid is also the pgid). Sets grp_pid.
+start_group() {
+    local of="$1"
+    shift
+    python3 -c 'import os, sys
+os.setpgid(0, 0)
+os.execvp(sys.argv[1], sys.argv[1:])' "$@" </dev/null >"$of" 2>&1 &
+    grp_pid=$!
 }
 
-# pid_alive <pid> — running, not a zombie awaiting its parent's wait.
-pid_alive() {
-    local st
-    st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
-    [ -n "$st" ] || return 1
-    case "$st" in Z*) return 1 ;; esac
-    return 0
-}
-
-# stop_tree <pid> — TERM the whole tree, poll up to 5 s, KILL every survivor. A
-# command that traps or ignores TERM cannot outlive this, so the caller's
-# following `wait` cannot block on it.
-stop_tree() {
-    local pids p i alive
-    pids=$(collect_tree "$1")
-    for p in $pids; do kill -TERM "$p" 2>/dev/null; done
-    for i in $(seq 1 25); do
-        alive=0
-        for p in $pids; do pid_alive "$p" && alive=1; done
-        [ "$alive" -eq 0 ] && return 0
-        sleep 0.2
-    done
-    for p in $pids; do kill -KILL "$p" 2>/dev/null; done
+# stop_group <pgid> — TERM the whole group, poll it until it is gone or 5 s of wall clock have
+# passed (date +%s, so a wide tree cannot stretch the bound), then KILL the group unconditionally
+# and wait. Stderr is silenced throughout so bash's `Killed` job notice never reaches the output.
+stop_group() {
+    local pgid="$1" deadline
+    {
+        kill -TERM -- "-$pgid" 2>/dev/null || kill -TERM "$pgid" 2>/dev/null
+        deadline=$(( $(date +%s) + 5 ))
+        while kill -0 -- "-$pgid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep 0.1
+        done
+        kill -KILL -- "-$pgid" 2>/dev/null
+        kill -KILL "$pgid" 2>/dev/null
+        wait "$pgid"
+    } 2>/dev/null
     return 0
 }
 
@@ -238,7 +235,7 @@ trap cleanup EXIT
 # then translate the signal into a plain `exit 2` so cleanup's own EXIT trap
 # performs the one restore path above, instead of duplicating it here.
 on_interrupt() {
-    [ -n "$cmd_pid" ] && stop_tree "$cmd_pid"
+    [ -n "$cmd_pid" ] && stop_group "$cmd_pid"
     exit 2
 }
 trap on_interrupt INT TERM
@@ -265,8 +262,8 @@ out_tmp=$(mktemp "${TMPDIR:-/tmp}/break-run.out.XXXXXX") || {
 }
 # stdin is /dev/null and DEVKIT_GATE_TIMEOUT bounds the run: a test command
 # that never ends must not leave the file mutated, or the caller waiting.
-"${cmd[@]}" </dev/null >"$out_tmp" 2>&1 &
-cmd_pid=$!
+start_group "$out_tmp" "${cmd[@]}"
+cmd_pid=$grp_pid
 run_limit=$(gate_timeout)
 run_waited=0
 while kill -0 "$cmd_pid" 2>/dev/null && [ "$run_waited" -lt "$run_limit" ]; do
@@ -274,8 +271,7 @@ while kill -0 "$cmd_pid" 2>/dev/null && [ "$run_waited" -lt "$run_limit" ]; do
     run_waited=$((run_waited + 1))
 done
 if kill -0 "$cmd_pid" 2>/dev/null; then
-    stop_tree "$cmd_pid"
-    wait "$cmd_pid" 2>/dev/null
+    stop_group "$cmd_pid"
     echo "break-run: TIMEOUT after ${run_limit}s" >&2
     exit 2
 fi

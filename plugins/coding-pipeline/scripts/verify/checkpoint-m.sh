@@ -23,6 +23,9 @@
 # Exit 0 — every check passed: `M: PASS`.
 # Exit 1 — one or more checks failed: one `M: FAIL <check> — <detail>` line
 #          per failure, then `M: FAIL (n)`.
+# The --gates command runs as the leader of its own process group; a timeout or
+# interrupt stops that whole group (TERM, 5 s wall clock, KILL). A process that
+# leaves the group (setsid, daemonising) is out of reach of the stop.
 # Exit 2 — bad usage, not a git repository, or a sub-sensor itself came back
 #          unmeasured (spec-coverage.sh / classify-diff.sh exiting 2) — never
 #          folded into an ordinary FAIL, because "could not measure" is not
@@ -44,10 +47,10 @@ cleanup_tmp() {
 }
 trap cleanup_tmp EXIT
 gates_pid=""
-# INT/TERM: stop the running gate's whole tree (TERM, 5 s, KILL) before exiting 2,
+# INT/TERM: stop the running gate's whole process group (TERM, 5 s, KILL) before exiting 2,
 # so an interrupted checkpoint never orphans its gate.
 on_interrupt() {
-    [ -n "$gates_pid" ] && stop_tree "$gates_pid"
+    [ -n "$gates_pid" ] && stop_group "$gates_pid"
     exit 2
 }
 trap on_interrupt INT TERM
@@ -57,40 +60,33 @@ unmeasured() {
     exit 2
 }
 
-# collect_tree <pid> — print <pid> and every descendant, one per line. The whole
-# tree is collected before anything is signalled: once a parent dies its
-# children reparent to init and `pgrep -P` can no longer find them.
-collect_tree() {
-    local pid="$1" kid
-    echo "$pid"
-    for kid in $(pgrep -P "$pid" 2>/dev/null); do
-        collect_tree "$kid"
-    done
+# start_group <out> <cmd...> — run <cmd> with stdin closed and stdout+stderr in <out>, as the
+# leader of its own process group (the python wrapper calls setpgid(0,0) then execs, so the
+# pid it leaves in $grp_pid is also the pgid). Sets grp_pid.
+start_group() {
+    local of="$1"
+    shift
+    python3 -c 'import os, sys
+os.setpgid(0, 0)
+os.execvp(sys.argv[1], sys.argv[1:])' "$@" </dev/null >"$of" 2>&1 &
+    grp_pid=$!
 }
 
-# pid_alive <pid> — running, not a zombie awaiting its parent's wait.
-pid_alive() {
-    local st
-    st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
-    [ -n "$st" ] || return 1
-    case "$st" in Z*) return 1 ;; esac
-    return 0
-}
-
-# stop_tree <pid> — TERM the whole tree, poll up to 5 s, KILL every survivor. A
-# command that traps or ignores TERM cannot outlive this, so the caller's
-# following `wait` cannot block on it.
-stop_tree() {
-    local pids p i alive
-    pids=$(collect_tree "$1")
-    for p in $pids; do kill -TERM "$p" 2>/dev/null; done
-    for i in $(seq 1 25); do
-        alive=0
-        for p in $pids; do pid_alive "$p" && alive=1; done
-        [ "$alive" -eq 0 ] && return 0
-        sleep 0.2
-    done
-    for p in $pids; do kill -KILL "$p" 2>/dev/null; done
+# stop_group <pgid> — TERM the whole group, poll it until it is gone or 5 s of wall clock have
+# passed (date +%s, so a wide tree cannot stretch the bound), then KILL the group unconditionally
+# and wait. Stderr is silenced throughout so bash's `Killed` job notice never reaches the output.
+stop_group() {
+    local pgid="$1" deadline
+    {
+        kill -TERM -- "-$pgid" 2>/dev/null || kill -TERM "$pgid" 2>/dev/null
+        deadline=$(( $(date +%s) + 5 ))
+        while kill -0 -- "-$pgid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep 0.1
+        done
+        kill -KILL -- "-$pgid" 2>/dev/null
+        kill -KILL "$pgid" 2>/dev/null
+        wait "$pgid"
+    } 2>/dev/null
     return 0
 }
 
@@ -479,16 +475,15 @@ if [ -n "$gates_cmd" ]; then
     # open pipe; a watchdog so one that never ends is UNMEASURED, not a wait.
     gates_limit=$(gate_timeout)
     gates_tmp=$(new_tmp gates)
-    bash -c "$gates_cmd" </dev/null >"$gates_tmp" 2>&1 &
-    gates_pid=$!
+    start_group "$gates_tmp" bash -c "$gates_cmd"
+    gates_pid=$grp_pid
     gates_waited=0
     while kill -0 "$gates_pid" 2>/dev/null && [ "$gates_waited" -lt "$gates_limit" ]; do
         sleep 1
         gates_waited=$((gates_waited + 1))
     done
     if kill -0 "$gates_pid" 2>/dev/null; then
-        stop_tree "$gates_pid"
-        wait "$gates_pid" 2>/dev/null
+        stop_group "$gates_pid"
         rm -f "$gates_tmp"
         unmeasured "gates: TIMEOUT after ${gates_limit}s"
     fi

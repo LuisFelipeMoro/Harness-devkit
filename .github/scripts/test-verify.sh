@@ -4597,6 +4597,77 @@ else
     echo "FAIL: checkpoint-m: TERM-ignoring gate is killed — survivor or took $((t1 - t0))s"; fail=1
 fi
 pkill -f "sleep 17.$u16" 2>/dev/null
+
+# AC21: the stop is bounded by the clock over the whole process group, however wide or busy the tree
+br10="$W/br10"
+mkdir -p "$br10"
+printf 'ENABLED=yes\n' > "$br10/cfg.txt"
+cp "$br10/cfg.txt" "$br10/cfg.orig"
+u10="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nfor _ in $(seq 1 200); do sleep 13.%s & done\nwait\n' "$u10" > "$br10/wide.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$br10/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br10/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br10/wide.sh"
+rc=$bounded_rc; out=$(cat "$br10/out")
+t1=$(date +%s)
+check "break-run: wide TERM-ignoring tree is stopped within the bound" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+if cmp -s "$br10/cfg.txt" "$br10/cfg.orig" && [ ! -f "$br10/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 12 ] \
+    && ! pgrep -f "sleep 13.$u10" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: wide TERM-ignoring tree is stopped within the bound — file not restored, marker left, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 13.$u10" 2>/dev/null
+
+cp_gates_fixture cp18
+u18="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nfor _ in $(seq 1 200); do sleep 12.%s & done\nwait\n' "$u18" > "$W/wide-gate.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$W/cp18.out" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp18-spec.md" \
+    --tests filler_test.go --expect filler_test.go filler.go --gates "bash $W/wide-gate.sh"
+rc=$bounded_rc; out=$(cat "$W/cp18.out")
+t1=$(date +%s)
+check "checkpoint-m: wide TERM-ignoring gate tree is stopped within the bound" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+if [ $((t1 - t0)) -lt 12 ] && ! pgrep -f "sleep 12.$u18" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: wide TERM-ignoring gate tree is stopped within the bound — survivor or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 12.$u18" 2>/dev/null
+
+br11="$W/br11"
+mkdir -p "$br11"
+printf 'ENABLED=yes\n' > "$br11/cfg.txt"
+cp "$br11/cfg.txt" "$br11/cfg.orig"
+u11="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nwhile :; do sleep 11.%s & sleep 0.1; done\n' "$u11" > "$br11/respawn.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$br11/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br11/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br11/respawn.sh"
+rc=$bounded_rc
+t1=$(date +%s)
+if [ "$rc" = 2 ] && [ $((t1 - t0)) -lt 12 ] && cmp -s "$br11/cfg.txt" "$br11/cfg.orig" \
+    && [ ! -f "$br11/cfg.txt.devkit-break" ] && ! pgrep -f "sleep 11.$u11" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: descendants spawned during the stop are stopped — rc=$rc, file not restored, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 11.$u11" 2>/dev/null
+
+br12="$W/br12"
+mkdir -p "$br12"
+printf 'ENABLED=yes\n' > "$br12/cfg.txt"
+u12="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 10.%s\n' "$u12" > "$br12/stubborn.sh"
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$br12/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br12/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br12/stubborn.sh"
+out=$(cat "$br12/out")
+if [ "$bounded_rc" = 2 ] && ! printf '%s\n' "$out" | grep -q 'Killed'; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: no job notice after a kill — rc=$bounded_rc, output: $out"; fail=1
+fi
+pkill -f "sleep 10.$u12" 2>/dev/null
 cd - >/dev/null || exit
 
 # wait_for_child <unique sleep arg> — poll (bounded, ~10 s) until the child exists
