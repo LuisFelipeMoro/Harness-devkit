@@ -127,6 +127,151 @@ test_markdown_wiring_standards() {  # the phrase lives in each guide that demand
 test_markdown_wiring_standards; rc=$?
 check "standards: markdown rows get a wiring check" 0 "$rc"
 
+# ── progress schema (3.4.0 T8, AC10): wiring checks, prose rows ─────────────
+PF="$ROOT/plugins/coding-pipeline/references/progress-file.md"
+PH="$ROOT/plugins/devtools/skills/handoff/references/progress-file.md"
+HS="$ROOT/plugins/devtools/skills/handoff/SKILL.md"
+CM="$ROOT/plugins/coding-pipeline/CLAUDE.md"
+schema_block() {  # schema_block <file> — the first fenced ```markdown block, fences excluded
+    awk '/^```markdown$/ {f=1; next} /^```$/ {if (f) exit} f' "$1"
+}
+test_progress_entry_format() {  # the entry heading, the Lessons bullet and the append rule are all named; no _Last updated:
+    grep -qF -- '## [{slug}] YYYY-MM-DD — {title}' "$PF" &&
+        grep -qF -- '- Lessons:' "$PF" && grep -qF -- 'never rewritten' "$PF" &&
+        ! grep -qF -- '_Last updated:' "$PF"
+}
+test_progress_entry_format; rc=$?
+check "progress-file: schema documents the entry format" 0 "$rc"
+
+test_progress_mirror_equal() {  # the handoff copy's fenced block is byte-equal to the canonical one, and not empty
+    local a b
+    a=$(schema_block "$PF"); b=$(schema_block "$PH")
+    [ -n "$a" ] && [ "$a" = "$b" ] && grep -qF -- 'Canonical elsewhere' "$PH"
+}
+test_progress_mirror_equal; rc=$?
+check "progress-file: handoff mirror carries the same schema block" 0 "$rc"
+
+test_handoff_reads_and_appends() {  # step 1 reads row status from tasks_state; step 3 appends one entry, no rewrite
+    grep -qF -- 'tasks_state.py status' "$HS" && grep -qF -- 'append one entry' "$HS" &&
+        ! grep -qF -- 'rewrite `Current State`' "$HS"
+}
+test_handoff_reads_and_appends; rc=$?
+check "handoff: reads row status and appends one entry" 0 "$rc"
+
+test_claude_md_memory_bullet() {  # the Memory bullet names the entry heading and tasks.json; both hook rows name their new duties
+    local mem
+    mem=$(grep -F -- '**Memory & Progress**' "$CM")
+    case "$mem" in *'## [slug]'*) ;; *) return 1 ;; esac
+    case "$mem" in *tasks.json*) ;; *) return 1 ;; esac
+    grep -F -- '`session-bootstrap.sh`' "$CM" | grep -qF -- 'Lessons' &&
+        grep -F -- '`delivery-gate.sh`' "$CM" | grep -qF -- 'devkit-break' &&
+        grep -qF -- 'pre:write:tasks-state' "$CM"
+}
+test_claude_md_memory_bullet; rc=$?
+check "claude-md: Memory bullet names entry format and tasks.json" 0 "$rc"
+
+# ── row state in /code and the resume protocol (3.4.0 T9, AC11 · AC12): wiring checks, prose rows ──
+CS="$ROOT/plugins/coding-pipeline/skills/code/SKILL.md"
+CL="$ROOT/plugins/coding-pipeline/skills/code/references/loop.md"
+PT="$ROOT/plugins/coding-pipeline/references/plan-template.md"
+PP="$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md"
+test_code_loop_resume() {  # the Resume section names bearings (verify, marker list), restore, repair and smoke
+    local sec
+    sec=$(awk '/^## Resume$/ {f=1; next} /^## / {f=0} f' "$CL")
+    [ -n "$sec" ] || return 1
+    grep -qF -- 'tasks_state.py verify' <<<"$sec" &&
+        grep -qF -- "find . -name '*.devkit-break'" <<<"$sec" &&
+        grep -qF -- 'pgrep -f break-run.sh' <<<"$sec" &&
+        grep -qF -- 'cp -p M F && cmp -s M F && rm M' <<<"$sec" &&
+        grep -qF -- 'repair, not trust' <<<"$sec" &&
+        grep -qF -- '**Smoke**' <<<"$sec"
+}
+test_code_loop_resume; rc=$?
+check "code-loop: Resume section lists bearings, restore, repair and smoke" 0 "$rc"
+
+test_code_skill_row_state() {  # SKILL.md calls init, set (in_progress / done with an M: PASS line) and status; routes on the three states
+    grep -qF -- 'tasks_state.py init' "$CS" && grep -qF -- 'set {ID} in_progress' "$CS" &&
+        grep -qF -- 'set {ID} done --evidence "M: PASS' "$CS" && grep -qF -- 'tasks_state.py status' "$CS" &&
+        grep -qF -- '{n}/{n} done' "$CS" && grep -qF -- 'every row `done` → Final proof' "$CS" &&
+        grep -qF -- 'all `todo` → fresh run' "$CS" && grep -qF -- 'loop.md` § Resume' "$CS" &&
+        grep -qF -- 'failed' "$CS"
+}
+test_code_skill_row_state; rc=$?
+check "code-skill: row state calls init, set and status" 0 "$rc"
+
+# ── falsification moves to Final proof (3.4.0 T13, AC17): wiring checks, prose rows ──
+# Markdown wiring check: the Final proof section names the gates once, the FINAL-PROOF dispatch,
+# the re-break sample and the --spec/--gates checkpoint; the per-row checkpoint runs without --gates.
+test_code_loop_final_proof() {
+    local fp mc
+    fp=$(awk '/^## Final proof$/ {f=1; next} /^## / {f=0} f' "$CL")
+    mc=$(awk '/^## Checkpoint M/ {f=1; next} /^## / {f=0} f' "$CL")
+    [ -n "$fp" ] && [ -n "$mc" ] || return 1
+    grep -qF -- "Gates:" <<<"$fp" &&
+        grep -qF -- 'Task: FINAL-PROOF' <<<"$fp" &&
+        grep -qF -- 're-break' <<<"$fp" &&
+        grep -qF -- 'checkpoint-m.sh --base $START --spec docs/plans/{slug}/plan.md' <<<"$fp" &&
+        grep -qF -- '--gates "<plan Gates>"' <<<"$fp" &&
+        grep -qF -- 'n/a — Markdown, wiring check' <<<"$fp" &&
+        grep -qF -- 'without `--gates`' <<<"$mc" &&
+        ! grep -qF -- 'main session still re-breaks' "$CL"
+}
+test_code_loop_final_proof; rc=$?
+check "code-loop: Final proof runs gates once then falsifies every code row" 0 "$rc"
+
+test_code_loop_final_proof_language() {  # step 2 passes each row's Language, labels prose lines wiring:, routes NOT FALSIFIED to step 5
+    local fp
+    fp=$(awk '/^## Final proof$/ {f=1; next} /^## / {f=0} f' "$CL")
+    [ -n "$fp" ] || return 1
+    grep -qF -- 'Language of each row, from its Tasks row' <<<"$fp" &&
+        grep -qF -- 'one dispatch per `Language`' <<<"$fp" &&
+        grep -qF -- '`wiring:` line' <<<"$fp" &&
+        grep -qF -- 'NOT FALSIFIED' <<<"$fp" &&
+        grep -qF -- 'a `NOT FALSIFIED` line from step 2' <<<"$fp" &&
+        ! grep -qF -- 'Wiring check:' <<<"$fp"
+}
+test_code_loop_final_proof_language; rc=$?
+check "code-loop: Final proof names each row's Language and reports unfalsified rows" 0 "$rc"
+
+test_coder_final_proof_timing() {  # the core and both overlays put Phase 3 in FINAL-PROOF; a row dispatch skips it
+    local f
+    for f in "$ROOT/plugins/coding-pipeline/agents/coder.md" "$ROOT/plugins/coding-pipeline/agents/coder-frontend.md" \
+        "$ROOT/plugins/coding-pipeline/agents/coder-backend.md"; do
+        grep -qF -- 'FINAL-PROOF' "$f" || return 1
+    done
+    grep -qF -- 'A row dispatch stops after Phase 2' "$ROOT/plugins/coding-pipeline/agents/coder.md" &&
+        grep -qF -- 'without falsification lines' "$ROOT/plugins/coding-pipeline/agents/coder.md" &&
+        grep -qF -- 'Phase 3 runs only in a `FINAL-PROOF` dispatch' "$ROOT/plugins/coding-pipeline/agents/coder.md" &&
+        grep -qF -- '**Bug fixes are the one place a test comes first**' "$ROOT/plugins/coding-pipeline/agents/coder.md"
+}
+test_coder_final_proof_timing; rc=$?
+check "coder: row dispatch skips Phase 3 and FINAL-PROOF runs it" 0 "$rc"
+
+test_claude_md_step4_final_proof() {  # CLAUDE.md step 4 names the Final proof stage; the bug-fix exception stays
+    local c="$ROOT/plugins/coding-pipeline/CLAUDE.md"
+    grep -E '^4\. \*\*Falsify\*\*' "$c" | grep -qF -- "Final proof" &&
+        grep -qF -- '**Bug fixes are the one exception**' "$c" &&
+        grep -qF -- 'Falsify** — the evidence step that replaces RED' "$c"
+}
+test_claude_md_step4_final_proof; rc=$?
+check "claude-md: Spec-First step 4 falsifies in Final proof" 0 "$rc"
+
+test_plan_template_gates() {  # the first fenced block of the template carries a Gates: line in its header
+    schema_block "$PT" | grep -qE '^Gates: `.+`$'
+}
+test_plan_template_gates; rc=$?
+check "plan-template: header carries a Gates line" 0 "$rc"
+
+test_planning_phase4_gates() {  # Phase 4 names the Gates: line and the quality-gate reference it is filled from
+    local sec
+    sec=$(awk '/^## Phase 4 / {f=1; next} /^## / {f=0} f' "$PP")
+    [ -n "$sec" ] || return 1
+    case "$sec" in *'Gates:'*) ;; *) return 1 ;; esac
+    case "$sec" in *'quality-gate-reference.md'*) ;; *) return 1 ;; esac
+}
+test_planning_phase4_gates; rc=$?
+check "planning: Phase 4 fills the Gates line" 0 "$rc"
+
 # ── security-scan: "0 candidates" must mean scanned, not skipped ────────────
 out=$(bash "$V/security-scan.sh" "" 2>&1); rc=$?
 check "security-scan: empty path is UNMEASURED, not 0 candidates" 2 "$rc" "$out" "UNMEASURED"
@@ -190,6 +335,12 @@ bash "$V/verdict.sh" --no-stress --roster light --classify-exit 0 --review 8 --s
 check "verdict: no-stress without no-review is usage, never silently ignored" 2 "$rc"
 bash "$V/verdict.sh" --no-review --no-stress >/dev/null 2>&1; rc=$?
 check "verdict: no-stress without qa is usage" 2 "$rc"
+
+# AC22: classify on the 2-decimal score that is printed — (8*0.35+8*0.30)/0.65 is 7.999999999999998 as a float
+out=$(bash "$V/verdict.sh" --no-review --stress 8 --qa 8 2>&1); rc=$?
+check "verdict: equal scores at the bar are production ready" 0 "$rc" "$out" "VERDICT: PRODUCTION READY"
+out=$(bash "$V/verdict.sh" --no-review --stress 8 --qa 7.9 2>&1); rc=$?
+check "verdict: just under the bar stays conditional" 1 "$rc" "$out" "VERDICT: READY WITH CONDITIONS"
 
 # Test 2: verdict roster path hides score on hard-gate fail like legacy
 out=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 9 --stress 9 --qa 9 --hard-gate-fail lint 2>&1); rc=$?
@@ -1660,6 +1811,10 @@ cat > "$W/est-plan.md" <<'MD'
 MD
 out=$(python3 "$ER" --plan "$W/est-plan.md" 2>&1); rc=$?
 check "estimate-run: parses the Tasks table" 0 "$rc" "$out" "4 rows · 5 files · 5 test rows"
+# A Tasks row that does not match the header must stop the estimate, not be counted as a row.
+printf '%s\n' '## Tasks' '| ID | Task | Files | Test rows | Language | Tier | Depends on |' '|---|---|---|---|---|---|---|' '| T1 | money | `a/money.go` | TestA | Go 1.26 | Backend |' > "$W/est-bad.md"
+bad_out=$(python3 "$ER" --plan "$W/est-bad.md" 2>&1); bad_rc=$?
+check "estimate-run: a malformed Tasks row exits 2 UNMEASURED" 2 "$bad_rc" "$bad_out" "ESTIMATE: UNMEASURED — malformed Tasks row"
 check "estimate-run: lists the independent disjoint rows as parallel-safe" 0 "$rc" "$out" "Parallel-safe: T1, T2"
 check "estimate-run: a row with a dependency is not parallel-safe" 0 "$rc" "$out" "T3 — depends on T1, T2"
 check "estimate-run: a row sharing a file is not parallel-safe" 0 "$rc" "$out" "T4 — shares b/coupon.go with T2"
@@ -1871,6 +2026,28 @@ check "harness-metrics: says it is a diagnostic, never a gate" 0 "$rc" "$out" "d
 rm -f PROGRESS.md
 out=$(python3 "$HM" --base "$hm_base" 2>&1); rc=$?
 check "harness-metrics: no PROGRESS.md leaves sensor escape to judgement" 0 "$rc" "$out" "| Sensor escape | n/a — needs judgement:"
+# T7 / AC9: sensor escape counts `- Failed:` bullets in `## [` entries (a "none" label is not a failure)
+# and still reads a legacy `## Failed` section. Each fixture carries only the shape its row names.
+cat > PROGRESS.md <<'MD'
+# PROGRESS
+## Done
+## [cart] T1 — pre-push caught it
+- Failed: pre-push dup-gate red
+## [cart] T2 — clean
+- Failed: none
+MD
+out=$(python3 "$HM" --base "$hm_base" 2>&1); rc=$?
+check "harness-metrics: sensor escape counts Failed bullets in entries" 0 "$rc" "$out" "1 of 1 Failed entries"
+cat > PROGRESS.md <<'MD'
+# PROGRESS
+## Done
+- [cart] T1 — CI green
+## Failed
+- [cart] CI lint job failed on unused import
+MD
+out=$(python3 "$HM" --base "$hm_base" 2>&1); rc=$?
+check "harness-metrics: sensor escape still reads a Failed section" 0 "$rc" "$out" "1 of 1 Failed entries"
+rm -f PROGRESS.md
 cd - >/dev/null || exit
 mkdir -p "$W/hm-not-git"
 out=$(cd "$W/hm-not-git" && GIT_CEILING_DIRECTORIES="$W" python3 "$HM" 2>&1); rc=$?
@@ -3854,18 +4031,59 @@ NEEDLES
 check_language_error_gaps; rc=$?
 check "languages: error handling gaps filled" 0 "$rc"
 
-# Release 3.3.0 wiring (AC19). Each helper returns 0 only when every needle holds.
-check_release_version() {  # every shipped plugin.json is 3.3.0 and CHANGELOG has the heading
+# Release 3.4.0 wiring (AC13). Each helper returns 0 only when every needle holds.
+check_release_version() {  # every shipped plugin.json is 3.4.0 and CHANGELOG has the heading
     local p bad=0
     for p in coding-pipeline pr-workflow devtools engineering; do
-        python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("version") == "3.3.0" else 1)' \
-            "$ROOT/plugins/$p/.claude-plugin/plugin.json" || { echo "$p plugin.json is not 3.3.0"; bad=1; }
+        python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("version") == "3.4.0" else 1)' \
+            "$ROOT/plugins/$p/.claude-plugin/plugin.json" || { echo "$p plugin.json is not 3.4.0"; bad=1; }
     done
-    grep -q '^## \[3\.3\.0\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG has no ## [3.3.0] heading"; bad=1; }
+    grep -q '^## \[3\.4\.0\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG has no ## [3.4.0] heading"; bad=1; }
     [ "$bad" = 0 ]
 }
 check_release_version; rc=$?
-check "release: version 3.3.0" 0 "$rc"
+check "release: version 3.4.0" 0 "$rc"
+
+check_changelog_340() {  # the 3.4.0 section names the source paper and the resume protocol
+    local sec bad=0 n
+    sec=$(awk '/^## \[3\.4\.0\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md")
+    [ -n "$sec" ] || { echo "no ## [3.4.0] section"; return 1; }
+    for n in effective-harnesses-for-long-running-agents tasks.json Resume; do
+        printf '%s\n' "$sec" | grep -qF -- "$n" || { echo "[3.4.0] does not name $n"; bad=1; }
+    done
+    [ "$bad" = 0 ]
+}
+check_changelog_340; rc=$?
+check "release: CHANGELOG 3.4.0 names the paper and the resume protocol" 0 "$rc"
+
+check_readme_tasks() {  # README: the guard row, its disable id, and the tasks.json / Resume / Final proof / autocompact facts
+    local f="$ROOT/README.md" bad=0 v
+    grep -F '| `tasks-state-guard.sh`' "$f" | grep -qF 'PreToolUse' || { echo "README hooks table has no tasks-state-guard.sh row"; bad=1; }
+    grep -F 'DEVKIT_DISABLED_HOOKS=id,id' "$f" | grep -qF 'pre:write:tasks-state' || { echo "README id list lacks pre:write:tasks-state"; bad=1; }
+    for v in tasks.json Resume 'Final proof' '/autocompact 300k'; do
+        grep -qF -- "$v" "$f" || { echo "README does not name $v"; bad=1; }
+    done
+    [ "$bad" = 0 ]
+}
+check_readme_tasks; rc=$?
+check "readme: hooks, ids, tasks.json, resume and autocompact" 0 "$rc"
+
+gate_timeout_missing() {  # gate_timeout_missing <file> <needle>... — prints each needle the file lacks (a missing file lacks all)
+    local f="$1" n
+    shift
+    for n in "$@"; do grep -qF -- "$n" "$f" 2>/dev/null || printf '[%s] ' "$n"; done
+}
+check_gate_timeout_docs() {  # check_gate_timeout_docs <row> — the stall rule and both timeout knobs are stated where coder, validator and operator read them
+    local row="$1" R="$ROOT" miss="" sec
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/skills/code/references/loop.md" '`</dev/null`' '10 minutes is a stall')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/skills/validate-code/references/execution-and-report.md" '`</dev/null`' '10 minutes is a stall')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/references/thresholds.md" '`DEVKIT_GATE_TIMEOUT`, positive integer; unset or invalid → 900' '10 s per line (`DEVKIT_PUSH_STDIN_TIMEOUT`' 'Background run stall | 10 minutes with no change to its output file')"
+    sec=$(awk '/^## \[3\.4\.0\]/{f=1;next} /^## \[/{f=0} f' "$R/CHANGELOG.md")
+    printf '%s\n' "$sec" | grep -qF -- 'DEVKIT_GATE_TIMEOUT' || miss="${miss}[CHANGELOG [3.4.0]: DEVKIT_GATE_TIMEOUT] "
+    miss="$miss$(gate_timeout_missing "$R/README.md" 'DEVKIT_GATE_TIMEOUT')"
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
+}
+check_gate_timeout_docs "gate timeout docs state the stall rule"
 
 check_readme_fixes_in_rounds() {  # README no longer says validate-code reports only; its row names the Score Loop
     local f="$ROOT/README.md" bad=0
@@ -3935,6 +4153,682 @@ check_changelog_measured() {  # the 3.3.0 Measured section is the release's end-
 }
 check_changelog_measured; rc=$?
 check "release: changelog measured section" 0 "$rc"
+
+# ── tasks_state.py: init / status / verify (tasks.json row state, T2) ──────
+TS="$ROOT/plugins/coding-pipeline/scripts/tasks_state.py"
+tsd="$W/tasks-state"; mkdir -p "$tsd"
+
+check_tasks_plan() {  # check_tasks_plan <plan.md> <ID[:dep,dep]>... — writes a plan with a Tasks table
+    local plan="$1" spec id deps
+    shift
+    {
+        printf '%s\n' '# Plan' '' '## Tasks' '| ID | Task | Files | Test rows | Language | Tier | Depends on |' '|---|---|---|---|---|---|---|'
+        for spec in "$@"; do
+            id=${spec%%:*}; deps=-
+            case "$spec" in *:*) deps=${spec#*:} ;; esac
+            printf '| %s | task | `f/file.go` | TestX | Go 1.26 | Backend | %s |\n' "$id" "$deps"
+        done
+    } > "$plan"
+}
+
+check_tasks_edit() {  # check_tasks_edit <tasks.json> <restamp 0|1> <python stmt on rows> — a state the tool did not write
+    python3 -c '
+import hashlib, json, sys
+p, restamp, stmt = sys.argv[1], sys.argv[2] == "1", sys.argv[3]
+doc = json.load(open(p, encoding="utf-8"))
+rows = doc["rows"]
+exec(stmt)
+if restamp:
+    text = json.dumps(doc["rows"], sort_keys=True, separators=(",", ":"))
+    doc["sum"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+with open(p, "w", encoding="utf-8") as f:
+    f.write(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+' "$@"
+}
+
+d="$tsd/init-order"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3:T1
+out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
+python3 - "$d/tasks.json" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+assert doc["schema"] == 1
+assert [r["id"] for r in doc["rows"]] == ["T1", "T2", "T3"]
+assert all(r["status"] == "todo" for r in doc["rows"])
+PY
+bad=$(( rc != 0 || $? != 0 ))
+check "tasks-state: init writes one todo row per Tasks row in plan order" 0 "$bad"
+
+d="$tsd/init-append"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['status']='done'; rows[0]['evidence']='M: PASS'"
+check_tasks_plan "$d/plan.md" T1 T2 T3 T4:T1
+out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
+python3 - "$d/tasks.json" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+rows = doc["rows"]
+assert [r["id"] for r in rows] == ["T1", "T2", "T3", "T4"]
+assert rows[0]["status"] == "done" and rows[0]["evidence"] == "M: PASS"
+assert rows[3]["status"] == "todo"
+PY
+bad=$(( rc != 0 || $? != 0 ))
+check "tasks-state: init on an existing file appends new plan rows and keeps statuses" 0 "$bad"
+
+d="$tsd/init-gone"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+cp "$d/tasks.json" "$d/before.json"
+check_tasks_plan "$d/plan.md" T1
+out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
+bad=0; [ "$rc" = 1 ] || bad=1
+case "$out" in *T2*) ;; *) bad=1 ;; esac
+cmp -s "$d/tasks.json" "$d/before.json" || bad=1
+check "tasks-state: init refuses when a stored row is gone from the plan" 0 "$bad" "$out" "T2"
+
+d="$tsd/init-unsafe-none"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" 'T1;x'
+out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
+bad=0; [ "$rc" = 1 ] || bad=1; [ -e "$d/tasks.json" ] && bad=1
+case "$out" in *"T1;x"*) ;; *) bad=1 ;; esac
+d="$tsd/init-unsafe-existing"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1; cp "$d/tasks.json" "$d/before.json"
+check_tasks_plan "$d/plan.md" 'T1;x'
+out2=$(python3 "$TS" init "$d/plan.md" 2>&1); rc2=$?
+[ "$rc2" = 1 ] || bad=1
+case "$out2" in *"T1;x"*) ;; *) bad=1 ;; esac
+cmp -s "$d/tasks.json" "$d/before.json" || bad=1
+check "tasks-state: row id with unsafe characters refused" 0 "$bad" "$out" "T1;x"
+
+d="$tsd/s1/demo"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3:T2 T4:T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['status']='done'; rows[1]['status']='in_progress'"
+out=$(python3 "$TS" status "$d/plan.md" 2>&1); rc=$?
+bad=0; [ "$rc" = 0 ] || bad=1
+[ "$out" = "[demo] 1/4 done · in_progress: T2 · failed: — · next: T4" ] || bad=1
+check "tasks-state: status line counts and names next row" 0 "$bad" "$out" "next: T4"
+
+d="$tsd/verify-pass"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3:T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+out=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: verify passes a consistent file" 0 "$rc" "$out" "TASKS: PASS"
+
+d="$tsd/verify-reordered"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0], rows[1] = rows[1], rows[0]"
+out=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: verify fails a reordered file" 1 "$rc" "$out" "TASKS: FAIL"
+
+d="$tsd/verify-status"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['status']='passed'"
+out_s=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc_s=$?
+d="$tsd/verify-field"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['note']='x'"
+out_f=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc_f=$?
+bad=0; [ "$rc_s" = 1 ] || bad=1; [ "$rc_f" = 1 ] || bad=1
+case "$out_s" in *"TASKS: FAIL"*) ;; *) bad=1 ;; esac
+case "$out_f" in *"TASKS: FAIL"*) ;; *) bad=1 ;; esac
+check "tasks-state: verify fails an unknown status or field" 0 "$bad" "$out_s" "TASKS: FAIL"
+
+d="$tsd/verify-outside"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 0 "rows[0]['status']='done'"
+out=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: verify fails when rows changed outside the tool" 1 "$rc" "$out" "tasks.json changed outside tasks_state.py"
+
+d="$tsd/verify-none"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+out=$(python3 "$TS" verify "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: verify without tasks.json is unmeasured" 2 "$rc" "$out" "TASKS: UNMEASURED"
+
+d="$tsd/init-symlink"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+echo "outside" > "$d/outside.json"; cp "$d/outside.json" "$d/before.json"
+ln -s outside.json "$d/tasks.json"
+out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
+out_set=$(python3 "$TS" set "$d/plan.md" T1 in_progress 2>&1); rc_set=$?
+bad=0; [ "$rc" = 2 ] || bad=1; [ "$rc_set" = 2 ] || bad=1; cmp -s "$d/outside.json" "$d/before.json" || bad=1
+case "$out_set" in *symlink*) ;; *) bad=1 ;; esac
+check "tasks-state: symlinked tasks.json refused" 0 "$bad" "$out" "symlink"
+
+d="$tsd/s2/demo"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3:T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['status']='done'; rows[1]['status']='failed'; rows[1]['evidence']='stopped'"
+out=$(python3 "$TS" status "$d/plan.md" 2>&1); rc=$?
+bad=0; [ "$rc" = 0 ] || bad=1
+[ "$out" = "[demo] 1/3 done · in_progress: — · failed: T2 · next: —" ] || bad=1
+check "tasks-state: status line lists failed rows" 0 "$bad" "$out" "failed: T2"
+
+# ── tasks_state.py set: transitions, deps, evidence, head, lock (tasks.json row state, T3) ──
+check_row_field() {  # check_row_field <tasks.json> <ID> <field> — prints one stored field of that row
+    python3 - "$@" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+print(next(r[sys.argv[3]] for r in doc["rows"] if r["id"] == sys.argv[2]))
+PY
+}
+
+check_sum_matches() {  # check_sum_matches <tasks.json> — true when the embedded sum is the canonical hash of its rows and no .sum file exists
+    python3 - "$1" <<'PY'
+import hashlib, json, os, sys
+p = sys.argv[1]
+doc = json.load(open(p, encoding="utf-8"))
+want = hashlib.sha256(json.dumps(doc["rows"], sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+sys.exit(0 if doc.get("sum") == want and not os.path.lexists(p + ".sum") else 1)
+PY
+}
+
+d="$tsd/set-deps"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2 T3:T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+out=$(python3 "$TS" set "$d/plan.md" T3 in_progress 2>&1); rc=$?
+bad=0; [ "$rc" = 1 ] || bad=1
+case "$out" in *"T3 depends on T1 (todo)"*) ;; *) bad=1 ;; esac
+check "tasks-state: in_progress refused while a dependency is not done" 0 "$bad" "$out" "T3 depends on T1"
+
+d="$tsd/set-pass"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "looks fine" 2>&1); rc=$?
+bad=0; [ "$rc" = 1 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 status)" = in_progress ] || bad=1
+check "tasks-state: done refused without M: PASS evidence" 0 "$bad" "$out" "M: PASS"
+
+d="$tsd/set-illegal"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "M: PASS" 2>&1); rc=$?
+bad=0; [ "$rc" = 1 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 status)" = todo ] || bad=1
+check "tasks-state: illegal transition todo to done refused" 0 "$bad" "$out" "illegal transition todo → done"
+
+r="$tsd/set-head"; d="$r/demo"; mkdir -p "$d"; git -C "$r" init -q
+git -C "$r" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "M: PASS" 2>&1); rc=$?
+want=$(git -C "$r" rev-parse --short HEAD)
+bad=0; [ "$rc" = 0 ] || bad=1; [ -n "$want" ] || bad=1
+[ "$(check_row_field "$d/tasks.json" T1 head)" = "$want" ] || bad=1
+[ "$(check_row_field "$d/tasks.json" T1 evidence)" = "M: PASS" ] || bad=1
+case "$(check_row_field "$d/tasks.json" T1 updated)" in ????-??-??T??:??:??Z) ;; *) bad=1 ;; esac
+check "tasks-state: done records HEAD sha and evidence" 0 "$bad"
+
+d="$tsd/set-regress"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 1 "rows[0]['status']='done'; rows[0]['evidence']='M: PASS'"
+out1=$(python3 "$TS" set "$d/plan.md" T1 todo 2>&1); rc1=$?
+out2=$(python3 "$TS" set "$d/plan.md" T1 todo --evidence "MISSING ROW x" 2>&1); rc2=$?
+bad=0; [ "$rc1" = 1 ] || bad=1; [ "$rc2" = 0 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 status)" = todo ] || bad=1
+check "tasks-state: done to todo regression needs evidence" 0 "$bad" "$out1" "evidence"
+
+d="$tsd/set-long"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1; cp "$d/tasks.json" "$d/before.json"
+long=$(python3 -c 'print("M: PASS" + "x" * 294, end="")')
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "$long" 2>&1); rc=$?
+bad=0; [ "${#long}" = 301 ] || bad=1; [ "$rc" = 2 ] || bad=1; cmp -s "$d/tasks.json" "$d/before.json" || bad=1
+check "tasks-state: evidence over 300 chars refused" 0 "$bad" "$out" "300"
+
+d="$tsd/set-ctrl"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+ev=$(printf 'M: PASS\033[31m\nX')
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "$ev" 2>&1); rc=$?
+bad=0; [ "$rc" = 0 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 evidence)" = "M: PASS[31mX" ] || bad=1
+check "tasks-state: control characters stripped from evidence" 0 "$bad" "$out"
+
+d="$tsd/set-locked"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1; cp "$d/tasks.json" "$d/before.json"
+python3 -c '
+import fcntl, sys, time
+f = open(sys.argv[1], "a+")
+fcntl.flock(f, fcntl.LOCK_EX)
+print("held", flush=True)
+time.sleep(30)
+' "$d/tasks.json.lock" > "$d/holder.out" 2>&1 &
+holder=$!
+for _ in $(seq 1 100); do grep -q held "$d/holder.out" 2>/dev/null && break; sleep 0.1; done
+out=$(DEVKIT_TASKS_LOCK_TIMEOUT=0.2 python3 "$TS" set "$d/plan.md" T1 in_progress 2>&1); rc=$?
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+bad=0; [ "$rc" = 2 ] || bad=1; cmp -s "$d/tasks.json" "$d/before.json" || bad=1
+check "tasks-state: set refuses while another writer holds the lock" 0 "$bad" "$out" "TASKS: locked"
+
+d="$tsd/set-sum"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+bad=0; check_sum_matches "$d/tasks.json" || bad=1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1 || bad=1
+check_sum_matches "$d/tasks.json" || bad=1
+python3 "$TS" verify "$d/plan.md" >/dev/null 2>&1 || bad=1
+check "tasks-state: init and set write a matching embedded sum" 0 "$bad"
+
+d="$tsd/one-file"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+bad=0
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1 || bad=1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1 || bad=1
+python3 "$TS" set "$d/plan.md" T1 done --evidence "M: PASS" >/dev/null 2>&1 || bad=1
+python3 - "$d/tasks.json" <<'PY' || bad=1
+import json, os, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sorted(doc) == ["plan", "rows", "schema", "slug", "sum"], sorted(doc)
+assert not os.path.lexists(sys.argv[1] + ".sum")
+PY
+check "tasks-state: rows and sum live in one atomic file" 0 "$bad"
+
+d="$tsd/status-forged"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 0 "rows[0]['status']='done'"
+out=$(python3 "$TS" status "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: status refuses a forged file" 1 "$rc" "$out" "tasks.json changed outside tasks_state.py"
+
+d="$tsd/set-unicode"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+ev=$(printf 'M: PASS\xe2\x80\xa8X\xe2\x80\xaeY\xe2\x81\xa6Z')
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "$ev" 2>&1); rc=$?
+bad=0; [ "$rc" = 0 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 evidence)" = "M: PASSXYZ" ] || bad=1
+check "tasks-state: unicode separators and bidi controls stripped from evidence" 0 "$bad" "$out"
+
+d="$tsd/set-restore"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+out1=$(python3 "$TS" set "$d/plan.md" T1 failed 2>&1); rc1=$?
+out2=$(python3 "$TS" set "$d/plan.md" T1 failed --evidence "stopped" 2>&1); rc2=$?
+out3=$(python3 "$TS" set "$d/plan.md" T1 in_progress 2>&1); rc3=$?
+out4=$(python3 "$TS" set "$d/plan.md" T1 todo 2>&1); rc4=$?
+out5=$(python3 "$TS" set "$d/plan.md" T1 todo --evidence "MISSING ROW x" 2>&1); rc5=$?
+bad=0; [ "$rc1" = 1 ] || bad=1; [ "$rc2" = 0 ] || bad=1; [ "$rc3" = 0 ] || bad=1
+[ "$rc4" = 1 ] || bad=1; [ "$rc5" = 0 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 status)" = todo ] || bad=1
+check "tasks-state: failed and restore transitions follow the table" 0 "$bad" "$out1" "evidence"
+
+# ── thresholds: the flat-install auto-compact window has one stated number (T11, AC15 d) ──
+grep -qF '| Auto-compact window (flat install) | 300000 ' "$ROOT/plugins/coding-pipeline/references/thresholds.md"; rc=$?
+check "thresholds: auto-compact window row" 0 "$rc"
+
+# ── grilling: decision questions offer three options with trade-offs (T12, AC16) ──
+# Markdown wiring check: the section names the rule, and no "yes accepts" wording survives under plugins/.
+G="$ROOT/plugins/coding-pipeline/references/grilling.md"
+bad=0
+grep -qF '## Decision questions' "$G" || bad=1
+grep -qF 'at least 3' "$G" || bad=1
+grep -qF 'trade-off' "$G" || bad=1
+grep -qF 'Recommended' "$G" || bad=1
+grep -qF 'confirms one already-decided action' "$G" || bad=1
+[ -z "$(grep -rl -- '"yes" accepts' "$ROOT/plugins")" ] || bad=1
+check "grilling: decision questions need three options with trade-offs" 0 "$bad"
+
+# ── grilling: planning, grill-me and CLAUDE.md point to the rule (T12, AC16) ──
+bad=0
+grep -qF 'coding-pipeline/references/grilling.md` § Decision questions' "$ROOT/plugins/devtools/skills/grill-me/SKILL.md" || bad=1
+grep -qF 'grilling.md` § Decision questions' "$ROOT/plugins/coding-pipeline/skills/planning/SKILL.md" || bad=1
+grep -qF 'grilling.md` § Decision questions' "$ROOT/plugins/coding-pipeline/skills/planning/references/phases.md" || bad=1
+grep '^6\. \*\*Surface conflicts' "$ROOT/plugins/coding-pipeline/CLAUDE.md" | grep -qF 'grilling.md` § Decision questions' || bad=1
+check "grilling: planning, grill-me and CLAUDE.md point to the rule" 0 "$bad"
+
+# ── context-budget doc: plugin users told how to set the window (T14, AC15 b) ──
+# Markdown wiring check: each name a plugin user needs to set the window is present.
+C="$ROOT/plugins/coding-pipeline/references/context-budget.md"
+bad=0
+grep -qF '/autocompact 300k' "$C" || bad=1
+grep -qF 'autoCompactWindow' "$C" || bad=1
+grep -qF 'CLAUDE_CODE_AUTO_COMPACT_WINDOW' "$C" || bad=1
+grep -qF 'settings.local.json' "$C" || bad=1
+grep -qF 'DEVKIT_CONTEXT_WINDOW=200000' "$C" || bad=1
+check "context-budget-doc: plugin users told how to set the window" 0 "$bad"
+
+# ── gate runs cannot hang (AC19): checkpoint-m --gates and break-run watchdog ──
+# Each fixture reuses the all-green shape (cp11) so only the gates command differs.
+cp_gates_fixture() {  # cp_gates_fixture <name> — leaves cwd in a passing repo
+    local n="$1"
+    mkrepo "$W/$n"
+    cd "$W/$n" || exit
+    printf 'func TestOK(t *testing.T) {}\n' > filler_test.go
+    write_dup_filler filler.go
+    cat > "$W/$n-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestOK` | a | b |
+MD
+}
+cp_gates() {  # cp_gates <name> <gates cmd> — runs checkpoint-m.sh, stdin closed
+    bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/$1-spec.md" --tests filler_test.go \
+        --expect filler_test.go filler.go --gates "$2" 2>&1 </dev/null
+}
+
+cp_gates_fixture cp13
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=1 cp_gates cp13 "sleep 20"); rc=$?
+t1=$(date +%s)
+check "checkpoint-m: gates timeout is unmeasured" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+[ $((t1 - t0)) -lt 8 ] && pass=$((pass + 1)) || { echo "FAIL: checkpoint-m: gates timeout is unmeasured — took $((t1 - t0))s"; fail=1; }
+cd - >/dev/null || exit
+
+# stdin of the checkpoint is a FIFO a `sleep 15` holds open read-write and never writes to
+cp_gates_fixture cp14
+mkfifo "$W/cp14.fifo"
+sleep 15 <>"$W/cp14.fifo" &
+holder=$!
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=10 bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp14-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "cat >/dev/null" 2>&1 <"$W/cp14.fifo"); rc=$?
+t1=$(date +%s)
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+check "checkpoint-m: gates get closed stdin" 0 "$rc" "$out" "M: PASS"
+[ $((t1 - t0)) -lt 8 ] && pass=$((pass + 1)) || { echo "FAIL: checkpoint-m: gates get closed stdin — took $((t1 - t0))s"; fail=1; }
+cd - >/dev/null || exit
+
+cp_gates_fixture cp15
+bad=""
+for v in abc 0 -3 1e3; do
+    out=$(DEVKIT_GATE_TIMEOUT="$v" cp_gates cp15 "sleep 2"); rc=$?
+    case "$out" in *"M: PASS"*) [ "$rc" = 0 ] || bad="$bad $v" ;; *) bad="$bad $v" ;; esac
+done
+check "checkpoint-m: invalid gate timeout falls back to default" 0 "$([ -z "$bad" ] && echo 0 || echo 1)" "$bad" ""
+cd - >/dev/null || exit
+
+# br_timeout fixtures live under $W like every other break-run row
+br6="$W/br6"
+mkdir -p "$br6"
+printf 'ENABLED=yes\n' > "$br6/cfg.txt"
+cp "$br6/cfg.txt" "$br6/cfg.orig"
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=1 run_br --file "$br6/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- sleep 20 2>&1); rc=$?
+t1=$(date +%s)
+check "break-run: test command timeout restores and reports" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+cmp -s "$br6/cfg.txt" "$br6/cfg.orig" && [ ! -f "$br6/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 8 ] \
+    && pass=$((pass + 1)) || { echo "FAIL: break-run: test command timeout restores and reports — file not restored, marker left, or took $((t1 - t0))s"; fail=1; }
+
+# Every row below names its sleep with a per-run unique argument, so a match can only be
+# this run's own child, never another process on the machine; survivors are always reaped.
+br7="$W/br7"
+mkdir -p "$br7"
+printf 'ENABLED=yes\n' > "$br7/cfg.txt"
+u7="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 47.%s\ntrue\n' "$u7" > "$br7/slow.sh"
+DEVKIT_GATE_TIMEOUT=1 run_br --file "$br7/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br7/slow.sh" >/dev/null 2>&1
+sleep 1
+if pgrep -f "sleep 47.$u7" >/dev/null 2>&1; then
+    echo "FAIL: break-run: timeout kills the test command's children — a 'sleep 47.$u7' survived"; fail=1
+    pkill -f "sleep 47.$u7" 2>/dev/null
+else
+    pass=$((pass + 1))
+fi
+
+# run_bounded <limit s> <outfile> <cmd...> — run with stdin closed, KILL it if it outlives the limit
+# (sets bounded_rc, 124 on expiry), so a hung watchdog fails its row instead of hanging the suite.
+run_bounded() {
+    local lim="$1" of="$2" p n=0
+    shift 2
+    "$@" </dev/null >"$of" 2>&1 &
+    p=$!
+    while kill -0 "$p" 2>/dev/null && [ "$n" -lt $((lim * 5)) ]; do sleep 0.2; n=$((n + 1)); done
+    if kill -0 "$p" 2>/dev/null; then
+        pkill -KILL -P "$p" 2>/dev/null
+        kill -KILL "$p" 2>/dev/null
+        wait "$p" 2>/dev/null
+        bounded_rc=124
+    else
+        wait "$p"
+        bounded_rc=$?
+    fi
+}
+
+# a command that ignores TERM (and passes that on to its child) must still die: TERM, 5 s, KILL
+br8="$W/br8"
+mkdir -p "$br8"
+printf 'ENABLED=yes\n' > "$br8/cfg.txt"
+cp "$br8/cfg.txt" "$br8/cfg.orig"
+u8="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 18.%s\n' "$u8" > "$br8/stubborn.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$br8/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br8/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br8/stubborn.sh"
+rc=$bounded_rc; out=$(cat "$br8/out")
+t1=$(date +%s)
+check "break-run: TERM-ignoring test command is killed and the file restored" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+if cmp -s "$br8/cfg.txt" "$br8/cfg.orig" && [ ! -f "$br8/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 12 ] \
+    && ! pgrep -f "sleep 18.$u8" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: TERM-ignoring test command is killed and the file restored — file not restored, marker left, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 18.$u8" 2>/dev/null
+
+cp_gates_fixture cp16
+u16="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 17.%s\n' "$u16" > "$W/stubborn-gate.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$W/cp16.out" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp16-spec.md" \
+    --tests filler_test.go --expect filler_test.go filler.go --gates "bash $W/stubborn-gate.sh"
+rc=$bounded_rc; out=$(cat "$W/cp16.out")
+t1=$(date +%s)
+check "checkpoint-m: TERM-ignoring gate is killed" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+if [ $((t1 - t0)) -lt 12 ] && ! pgrep -f "sleep 17.$u16" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: TERM-ignoring gate is killed — survivor or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 17.$u16" 2>/dev/null
+
+# AC21: the stop is bounded by the clock over the whole process group, however wide or busy the tree
+br10="$W/br10"
+mkdir -p "$br10"
+printf 'ENABLED=yes\n' > "$br10/cfg.txt"
+cp "$br10/cfg.txt" "$br10/cfg.orig"
+u10="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nfor _ in $(seq 1 200); do sleep 13.%s & done\nwait\n' "$u10" > "$br10/wide.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$br10/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br10/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br10/wide.sh"
+rc=$bounded_rc; out=$(cat "$br10/out")
+t1=$(date +%s)
+check "break-run: wide TERM-ignoring tree is stopped within the bound" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+if cmp -s "$br10/cfg.txt" "$br10/cfg.orig" && [ ! -f "$br10/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 12 ] \
+    && ! pgrep -f "sleep 13.$u10" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: wide TERM-ignoring tree is stopped within the bound — file not restored, marker left, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 13.$u10" 2>/dev/null
+
+cp_gates_fixture cp18
+u18="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nfor _ in $(seq 1 200); do sleep 12.%s & done\nwait\n' "$u18" > "$W/wide-gate.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$W/cp18.out" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp18-spec.md" \
+    --tests filler_test.go --expect filler_test.go filler.go --gates "bash $W/wide-gate.sh"
+rc=$bounded_rc; out=$(cat "$W/cp18.out")
+t1=$(date +%s)
+check "checkpoint-m: wide TERM-ignoring gate tree is stopped within the bound" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+if [ $((t1 - t0)) -lt 12 ] && ! pgrep -f "sleep 12.$u18" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: wide TERM-ignoring gate tree is stopped within the bound — survivor or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 12.$u18" 2>/dev/null
+
+br11="$W/br11"
+mkdir -p "$br11"
+printf 'ENABLED=yes\n' > "$br11/cfg.txt"
+cp "$br11/cfg.txt" "$br11/cfg.orig"
+u11="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nwhile :; do sleep 11.%s & sleep 0.1; done\n' "$u11" > "$br11/respawn.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 40 "$br11/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br11/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br11/respawn.sh"
+rc=$bounded_rc
+t1=$(date +%s)
+if [ "$rc" = 2 ] && [ $((t1 - t0)) -lt 12 ] && cmp -s "$br11/cfg.txt" "$br11/cfg.orig" \
+    && [ ! -f "$br11/cfg.txt.devkit-break" ] && ! pgrep -f "sleep 11.$u11" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: descendants spawned during the stop are stopped — rc=$rc, file not restored, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 11.$u11" 2>/dev/null
+
+br12="$W/br12"
+mkdir -p "$br12"
+printf 'ENABLED=yes\n' > "$br12/cfg.txt"
+u12="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 10.%s\n' "$u12" > "$br12/stubborn.sh"
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$br12/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br12/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br12/stubborn.sh"
+out=$(cat "$br12/out")
+if [ "$bounded_rc" = 2 ] && ! printf '%s\n' "$out" | grep -q 'Killed'; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: no job notice after a kill — rc=$bounded_rc, output: $out"; fail=1
+fi
+pkill -f "sleep 10.$u12" 2>/dev/null
+cd - >/dev/null || exit
+
+# wait_for_child <unique sleep arg> — poll (bounded, ~10 s) until the child exists
+wait_for_child() {
+    local n=0
+    while ! pgrep -f "$1" >/dev/null 2>&1 && [ "$n" -lt 50 ]; do sleep 0.2; n=$((n + 1)); done
+    pgrep -f "$1" >/dev/null 2>&1
+}
+
+br9="$W/br9"
+mkdir -p "$br9"
+printf 'ENABLED=yes\n' > "$br9/cfg.txt"
+cp "$br9/cfg.txt" "$br9/cfg.orig"
+u9="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 16.%s\n' "$u9" > "$br9/child.sh"
+bg_br --file "$br9/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br9/child.sh" >/dev/null 2>&1
+if wait_for_child "sleep 16.$u9"; then
+    kill -TERM "$bg_br_pid" 2>/dev/null
+    wait "$bg_br_pid" 2>/dev/null; rc=$?
+    if [ "$rc" = 2 ] && cmp -s "$br9/cfg.txt" "$br9/cfg.orig" && [ ! -f "$br9/cfg.txt.devkit-break" ] \
+        && ! pgrep -f "sleep 16.$u9" >/dev/null 2>&1; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: break-run: interrupt stops the test command's children — rc=$rc, file not restored, or the child survived"; fail=1
+    fi
+else
+    echo "FAIL: break-run: interrupt stops the test command's children — the child never started"; fail=1
+    kill -KILL "$bg_br_pid" 2>/dev/null
+fi
+pkill -f "sleep 16.$u9" 2>/dev/null
+
+cp_gates_fixture cp17
+u17="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 15.%s\n' "$u17" > "$W/child-gate.sh"
+bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp17-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "bash $W/child-gate.sh" </dev/null >/dev/null 2>&1 &
+cp17_pid=$!
+if wait_for_child "sleep 15.$u17"; then
+    kill -TERM "$cp17_pid" 2>/dev/null
+    wait "$cp17_pid" 2>/dev/null; rc=$?
+    if [ "$rc" = 2 ] && ! pgrep -f "sleep 15.$u17" >/dev/null 2>&1; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: checkpoint-m: interrupt stops the gate tree — rc=$rc or the gate's child survived"; fail=1
+    fi
+else
+    echo "FAIL: checkpoint-m: interrupt stops the gate tree — the gate never started"; fail=1
+    kill -KILL "$cp17_pid" 2>/dev/null
+fi
+pkill -f "sleep 15.$u17" 2>/dev/null
+cd - >/dev/null || exit
+
+# AC22: a descendant left in the command's group after a NORMAL exit is stopped before the run returns
+br13="$W/br13"
+mkdir -p "$br13"
+printf 'ENABLED=yes\n' > "$br13/cfg.txt"
+cp "$br13/cfg.txt" "$br13/cfg.orig"
+u13="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 14.%s &\nexit 0\n' "$u13" > "$br13/leave.sh"
+bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br13/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br13/leave.sh" </dev/null >/dev/null 2>&1
+if cmp -s "$br13/cfg.txt" "$br13/cfg.orig" && [ ! -f "$br13/cfg.txt.devkit-break" ] && ! pgrep -f "sleep 14.$u13" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: descendant left after a normal exit is stopped — file not restored, marker left, or a 'sleep 14.$u13' survived"; fail=1
+fi
+pkill -f "sleep 14.$u13" 2>/dev/null
+
+cp_gates_fixture cp19
+u19="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 9.%s &\nexit 0\n' "$u19" > "$W/leave-gate.sh"
+out=$(cp_gates cp19 "bash $W/leave-gate.sh"); rc=$?
+check "checkpoint-m: descendant left after a normal gate exit is stopped" 0 "$rc" "$out" "M: PASS"
+if ! pgrep -f "sleep 9.$u19" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: descendant left after a normal gate exit is stopped — a 'sleep 9.$u19' survived"; fail=1
+fi
+pkill -f "sleep 9.$u19" 2>/dev/null
+
+# PATH holds the tools checkpoint-m needs, minus python3
+cp_gates_fixture cp20
+nopy="$W/nopy-bin"
+mkdir -p "$nopy"
+for t in git bash dirname awk grep sed cat rm mktemp find sort tr head tail cut date sleep kill env; do
+    tp=$(command -v "$t" 2>/dev/null) && [ -x "$tp" ] && ln -sf "$tp" "$nopy/$t"
+done
+out=$(PATH="$nopy" "$nopy/bash" "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp20-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "true" 2>&1 </dev/null); rc=$?
+check "checkpoint-m: missing python3 is unmeasured" 2 "$rc" "$out" "M: UNMEASURED — gates: python3 not found"
+cd - >/dev/null || exit
+
+# The race window is milliseconds, so the clears are checked by reading: each wait is followed by its pid being cleared.
+wiring_ok=1
+grep -A4 'wait "\$cmd_pid"' "$V/break-run.sh" | grep -q '^cmd_pid=""' || wiring_ok=0
+grep -A5 'wait "\$gates_pid"' "$V/checkpoint-m.sh" | grep -q '^ *gates_pid=""' || wiring_ok=0
+if [ "$wiring_ok" = 1 ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: watchdog pids cleared after wait — cmd_pid / gates_pid is not cleared right after its wait"; fail=1
+fi
+
+# watchdog helpers identical in both scripts (ADR-7, AC23 b). start_group, stop_group and
+# gate_timeout are copied into break-run.sh and checkpoint-m.sh by design; the span from the
+# start_group comment through the end of gate_timeout must stay byte-identical. The check reads
+# DEVKIT_WD_BREAK_RUN when set, so a falsification run points it at a scratch copy of break-run.sh.
+wd_span() { awk '/^# start_group/{p=1} p{print} p && /^gate_timeout\(\)/{g=1} g && /^}/{exit}' "$1"; }
+wd_a="${DEVKIT_WD_BREAK_RUN:-$V/break-run.sh}"
+wd_span "$wd_a" > "$W/wd-break-run.txt"
+wd_span "$V/checkpoint-m.sh" > "$W/wd-checkpoint.txt"
+if [ -s "$W/wd-break-run.txt" ] && cmp -s "$W/wd-break-run.txt" "$W/wd-checkpoint.txt"; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: watchdog helpers identical in both scripts — the break-run.sh and checkpoint-m.sh copies differ or the span is missing"; fail=1
+fi
+
+# ── pipeline skills are model-invocable behind a question (3.4.0 T21, AC24): wiring check ──
+# validate-wiring.py enforces both halves: a pipeline skill carrying the manual-only flag fails,
+# and any other skill lacking it fails. Each altered case runs on a scratch copy of the tree;
+# the real tree is only read.
+wiring_copy() {  # wiring_copy <dir> — the whole tree minus git, worktrees and plan artifacts
+    mkdir -p "$1" && tar -C "$ROOT" --exclude=./.git --exclude=./.worktrees --exclude=./docs -cf - . | tar -C "$1" -xf -
+}
+out=$(python3 "$ROOT/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable" 0 "$rc" "$out" "wiring OK"
+
+wa="$W/wiring-pipeline-flagged"; wiring_copy "$wa"
+{ head -n 3 "$wa/plugins/coding-pipeline/skills/code/SKILL.md"; echo 'disable-model-invocation: true'; tail -n +4 "$wa/plugins/coding-pipeline/skills/code/SKILL.md"; } > "$wa/code.tmp" && mv "$wa/code.tmp" "$wa/plugins/coding-pipeline/skills/code/SKILL.md"
+out=$(python3 "$wa/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable — pipeline skill that regains the flag fails" 1 "$rc" "$out" "plugins/coding-pipeline/skills/code/SKILL.md: pipeline skill is model-invocable (asks first)"
+
+wb="$W/wiring-manual-lost"; wiring_copy "$wb"
+grep -v '^disable-model-invocation' "$wb/plugins/pr-workflow/skills/pr/SKILL.md" > "$wb/pr.tmp" && mv "$wb/pr.tmp" "$wb/plugins/pr-workflow/skills/pr/SKILL.md"
+out=$(python3 "$wb/.github/scripts/validate-wiring.py" </dev/null 2>&1); rc=$?
+check "wiring: pipeline skills are model-invocable — manual skill that loses the flag fails" 1 "$rc" "$out" "plugins/pr-workflow/skills/pr/SKILL.md: frontmatter lacks 'disable-model-invocation: true'"
+
+check_skill_invocation_docs() {  # check_skill_invocation_docs <row> — the ask-before-invoking rule is stated in every guide and no stale "only the user starts a skill" line survives
+    local row="$1" R="$ROOT" miss="" f
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/CLAUDE.md" 'run it now / you run it later / stop' '`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`')"
+    miss="$miss$(gate_timeout_missing "$R/AGENTS.md" 'run it now / you run it later / stop')"
+    miss="$miss$(gate_timeout_missing "$R/README.md" 'leave it for you, or stop' '`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/write-a-skill/references/skill-template.md" 'so Claude can run them after asking')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/write-a-skill/references/writing-for-agents.md" 'so Claude can run them after asking')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/devtools/skills/devkit-help/SKILL.md" 'Claude asks before running a pipeline skill')"
+    for f in plugins/coding-pipeline/CLAUDE.md AGENTS.md README.md plugins/devtools/skills/devkit-help/SKILL.md plugins/devtools/skills/write-a-skill/SKILL.md; do
+        grep -qE 'Skills never run each other|invoke manually|every skill is started by the user|every skill is manual' "$R/$f" && miss="${miss}[$f: stale manual-only wording] "
+    done
+    for f in plugins/coding-pipeline/skills/map/SKILL.md plugins/coding-pipeline/skills/planning/SKILL.md plugins/coding-pipeline/skills/code/SKILL.md plugins/coding-pipeline/skills/validate-code/SKILL.md plugins/coding-pipeline/skills/bugfix/SKILL.md plugins/pr-workflow/skills/review-code/SKILL.md; do
+        grep -E '^Next:' "$R/$f" 2>/dev/null | grep -qF -- 'run it now / you run it later / stop' || miss="${miss}[$f: Next line lacks the ask-first clause] "
+    done
+    grep -E '^Next:' "$R/plugins/coding-pipeline/skills/bugfix/SKILL.md" 2>/dev/null | grep -qF -- '`/pr` and `/improve-codebase-architecture` stay user-started' || miss="${miss}[bugfix: Next line lacks the user-started exceptions] "
+    grep -E '^Next:' "$R/plugins/pr-workflow/skills/review-code/SKILL.md" 2>/dev/null | grep -qF -- '`/pr-fix` stays user-started' || miss="${miss}[review-code: Next line lacks the user-started exception] "
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
+}
+check_skill_invocation_docs "docs: ask-before-invoking rule stated"
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

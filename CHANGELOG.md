@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.4.0] — 2026-11-22
+
+Multi-session `/code` runs resume from facts instead of prose. The design follows Anthropic, "Effective harnesses for long-running agents" (https://www.anthropic.com/research/effective-harnesses-for-long-running-agents) and its companion quickstart (https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding): a JSON row list where only the status may change, a fixed resume ritual at session start, and a final proof before the run is called done.
+
+### Added
+
+- **Row state in `tasks.json`.** `scripts/tasks_state.py` (`init`, `set`, `status`, `verify`) keeps one row per Tasks row in `docs/plans/{slug}/tasks.json`, with a checksum embedded in the same file (`sum`), so rows and stamp are one atomic write. Only the allowed status transitions are accepted, so a row cannot be edited into a state the tool did not write (AC1–AC4).
+- **`hooks/tasks-state-guard.sh`** (id `pre:write:tasks-state`, PreToolUse on Write/Edit) blocks direct writes to `tasks.json`, resolving a symlinked plan directory and ignoring case. Row state changes only through `tasks_state.py` (AC5).
+- **Bootstrap row status.** `session-bootstrap.sh` prints one `tasks_state` status line before the PROGRESS block. When it drops old entries to fit the cap, it keeps their `- Lessons:` lines (AC6, AC7).
+- **`/code` § Resume and § Final proof.** Resume: `tasks_state.py init` runs before the first dispatch, each row is set `in_progress` and then `done`, and a resumed session continues from the rows still `todo` or `in_progress`. Final proof: once every row is `done`, falsification and the full gates run once after the last row (AC11, AC17).
+- **`delivery-gate` clean-state check.** The Stop hook resolves the repo root from the payload `cwd` (AC8) and reports rows still `in_progress`, so a session cannot end silently on half-finished row state.
+- **Gates line in the plan header.** `references/plan-template.md` gains `Gates: {command}` on a second header line, and planning Phase 4 fills it (AC12).
+- **Auto-compact window.** The flat install (`scripts/install-global.sh`) sets `autoCompactWindow` to 300000 in `~/.claude/settings.json` when the key is absent, and never overwrites an existing value. `context-budget.sh` reads the compact window from the environment and settings, so the checkpoint fires before compaction. Plugin installs write no settings; the README and `references/context-budget.md` say to run `/autocompact 300k` (AC15).
+- **Decision questions.** A question put to the user offers at least three options, each with its trade-off (AC16).
+
+### Changed
+
+- `references/progress-file.md` documents the entry format the hooks and the real `PROGRESS.md` use (AC10).
+- Pipeline skills (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`) are model-invocable behind a question: at a `Next:` step Claude asks run now / you run it later / stop, and `validate-wiring.py` enforces the split (AC24).
+- Falsification and the full gates run once per run, after the last row (Final proof), not after every row. Per-row checks remain the coder's `break-run.sh` evidence (AC17).
+
+### Fixed
+
+- **Gate runs can no longer wait forever.** A background gate sweep hung 2h38m in `pre-push`'s `cat` on a stdin pipe that never closed. `pre-push` now reads git's ref lines with a bounded loop (`DEVKIT_PUSH_STDIN_TIMEOUT`, default 10 s per line) and falls back to base resolution when none arrive. `checkpoint-m.sh --gates` and `break-run.sh` run their command with stdin from `/dev/null` under a `DEVKIT_GATE_TIMEOUT` watchdog (default 900 s): the process tree is killed, `break-run.sh` restores the file, and the run exits 2. `/code` and `/validate-code` state that background runs close stdin and that an output file unchanged for 10 minutes is a stall (AC19).
+- A crash between the two writes of `tasks.json` and its checksum could wedge a plan. The checksum now lives inside `tasks.json`, so one atomic write cannot leave rows and stamp apart; `status` also refuses a file changed outside the tool, the guard resolves symlinked plan directories and case variants, and evidence strips Unicode line separators and bidi controls.
+- `harness-metrics.py` read 0 of 0 for sensor escapes on real `PROGRESS.md` files. The sensor escape count now reads `- Failed:` bullets inside `## [` entries (AC9).
+- Final proof passes each row's `Language` to its FINAL-PROOF dispatch (one per Language or test suite), names prose evidence lines `wiring:`, and routes a test that does not fail to step 5 as `NOT FALSIFIED`.
+
 ## [3.3.0] — 2026-11-18
 
 ### Added

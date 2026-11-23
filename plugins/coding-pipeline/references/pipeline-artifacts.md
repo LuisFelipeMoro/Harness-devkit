@@ -45,7 +45,7 @@ Key rules: every functional requirement has ≥ 2 binary ACs · NFRs have measur
 ---
 
 ## docs/plans/{slug}/evidence.md
-Produced by: `/code` (appends each coder's `Falsification evidence` lines under `## {Task ID}`) | Consumed by: `/validate-code` (`scripts/verify/falsification.sh`), `qa`
+Produced by: `/code`'s Final proof stage (the FINAL-PROOF dispatches return each row's `Falsification evidence` lines and the main session appends them under `## {Task ID}`; `skills/code/references/loop.md` § Final proof) | Consumed by: `/validate-code` (`scripts/verify/falsification.sh`), `qa`
 
 ---
 

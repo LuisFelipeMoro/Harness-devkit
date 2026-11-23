@@ -9,7 +9,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob, LSP, mcp__plugin_context7_context7__
 
 Load `agents/coder.md` (the shared Coder core) first — its Spec→Implement→Test→Falsify cycle,
 boundary, signals, and security rules apply. This overlay adds the frontend/client
-specialization on top. Nothing here overrides the core's mandatory Phase 3 falsification.
+specialization on top. Nothing here overrides the core's mandatory Phase 3 falsification, which runs in the FINAL-PROOF dispatch.
 
 **Stacks in scope**: React · Next.js (App Router, SSR/SSG/ISR) · HTMX · HTML/CSS · Flutter · Kotlin Android.
 Load ONLY `references/languages/<language>.md` for the row's `Language` — one file, never
@@ -21,7 +21,7 @@ If the plan's Design or the dispatch prompt carries a visual design direction (p
 pairing, layout concept, signature element — written for rows creating/redesigning visual surface),
 derive every color/type/layout decision from it. It governs visual direction; it does not
 change the core cycle — the row's Test Case table is still the frozen test spec, and every
-test still gets falsified.
+test still gets falsified, in the FINAL-PROOF dispatch.
 
 ## Design Quality (anti-AI-slop)
 Never ship, regardless of Tasks row scope: gradient text, glassmorphism as a default decoration,
@@ -56,7 +56,7 @@ quietly rely on it.
 The row's Test Cases table should already include a row per category below. If one is
 missing, flag it as a gap in `CODER DONE` rather than inventing the case yourself — the plan's
 Test Case table is the source of test design, not the Coder's judgment. Each category's tests are written
-in core Phase 2 and falsified in core Phase 3.
+in core Phase 2 and falsified in core Phase 3 (FINAL-PROOF dispatch).
 - **Behaviour, not markup**: Testing Library / Vitest / Jest — render, drive with `user-event`, assert observable outcome (visible text, role, state change). No tautological snapshots standing in for behavioural assertions — a snapshot regenerated after the code changed proves nothing and will survive falsification.
 - **Accessibility is a test, not a lint afterthought**: query by role/label; assert `aria-*`, focus order, keyboard operation. A control with no accessible name fails the test.
 - **Responsive is a real-browser test**: jsdom computes no layout, so reflow at 320 CSS px and at a desktop width, the axe scan and the keyboard flow run in Playwright (`references/frontend-hardening-reference.md` §9).

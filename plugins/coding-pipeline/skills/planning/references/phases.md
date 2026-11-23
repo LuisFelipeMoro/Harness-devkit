@@ -18,7 +18,8 @@ keeps its Review log and resumes at the first phase whose output is missing.
 language context and security constraints. **Security ACs are mandatory for any change touching I/O,
 auth or data handling** — write `SEC-n` rows, or `none — {reason}` only when there is genuinely no
 such surface. Ask the user (AskUserQuestion, ≤ 4 per call) only for what the request and the code
-cannot answer.
+cannot answer; each decision question offers at least 3 options with trade-offs, one `Recommended` —
+`references/grilling.md` § Decision questions.
 
 Show: `✓ docs/plans/{slug}/plan.md (draft — requirements)`
 
@@ -89,7 +90,7 @@ Show: `✓ docs/plans/{slug}/plan.md (draft — design)`
 Ask (AskUserQuestion): "Grill the draft before review?" Recommend **Yes** for anything beyond a small,
 single-row change. On Yes, read `references/grilling.md` and grill the design + Tasks table inline in
 its rounds — the design tree's whole frontier per round, numbered, each question with your
-recommended answer worded so "yes" accepts it, the frontier recomputed after every round: missing
+decision questions per `references/grilling.md` § Decision questions (at least 3 options with trade-offs, one `Recommended`), the frontier recomputed after every round: missing
 error cases, auth gaps, schema problems, undecided edge cases, unowned failure modes. Facts come from
 the codebase map, or a grep / read when the map does not carry them — never from the user. The goal
 is to surface and **close gaps now**, while changes are cheap — not at code time.
@@ -137,7 +138,7 @@ Present to the user:
 - Blast-radius total and the Reuse Map verdict (`{N}/{M} planned components reused or justified`)
 - Gaps found in the base file (if one was given)
 - **Open questions** the grill and the review could not resolve — ask the human to decide each
-  (AskUserQuestion, ≤ 4 per call, each with a recommended option) and write every answer into the plan
+  (AskUserQuestion, ≤ 4 per call; each with at least 3 options with trade-offs, one `Recommended` — `references/grilling.md` § Decision questions) and write every answer into the plan
 - **Plan review result** — score, reuse verdict, and any `[OPEN QUESTION]` finding
 
 Ask: *"Does the design make sense? Any changes to libraries, strategies, or design? Approve / request
@@ -168,6 +169,10 @@ The Tasks table in the plan is what `/code` executes, one row at a time or in th
 `Language` comes from the Design's tech-stack decision — runtime, version and framework (e.g. `Go 1.26`,
 `TypeScript 5 / Next.js 15`, `Java 21 / Spring Boot 3`). Every downstream agent reads it from the row —
 never inferred. `Tier` (Backend / Frontend, or `—` for scripts/docs/config) picks the coder overlay.
+
+Fill the header's `Gates:` line (`references/plan-template.md`) as one runnable command: the format, lint and existing
+test commands for the plan's Language, from `references/quality-gate-reference.md`; or the repo's CI commands where CI
+already defines them. `/code` runs that line once, in the Final proof stage (`skills/code/references/loop.md` § Final proof).
 `Files` is complete: it becomes the checkpoint's `--expect` set and decides which rows can run in
 parallel (disjoint `Files`, no `Depends on`). A path not yet in the repo gets a `### New files` row.
 

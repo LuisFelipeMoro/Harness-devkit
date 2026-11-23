@@ -38,6 +38,7 @@ from collections import namedtuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import headless  # noqa: E402 — the one run-state reader, shared with harness-metrics.py
+import tasks_state  # noqa: E402 — the one Tasks-table parser, shared with the tasks.json tool
 
 Const = namedtuple("Const", "value n")  # n == 0 → assumed; n >= 1 → measured (n samples)
 
@@ -93,77 +94,10 @@ SPREAD = Const((0.7, 1.4), 0)
 MAX_WRITERS = 3          # CLAUDE.md Sub-agent Discipline: never 4+ writers in a turn
 SINGLE_CODER_WARN_ROWS = 4
 
-REQUIRED = ["id", "task", "files", "test rows", "language", "tier", "depends on"]
-NONE_TOKENS = {"", "-", "—", "–", "none", "n/a"}
-
 
 def fail(msg):
     print(f"ESTIMATE: UNMEASURED — {msg}")
     sys.exit(2)
-
-
-def cells(line):
-    s = line.strip()
-    if not (s.startswith("|") and s.endswith("|")):
-        return None
-    return [c.strip() for c in s[1:-1].split("|")]
-
-
-def split_list(cell):
-    # A `code span` is taken verbatim (a glob's `*` is part of the path); outside one, `*` is
-    # markdown emphasis and dropped.
-    items = [(m.group(1) if (m := re.search(r"`([^`]*)`", x)) else re.sub(r"[`*]", "", x)).strip()
-             for x in re.split(r"[,;]| and ", cell)]
-    return [x for x in items if x.lower() not in NONE_TOKENS]
-
-
-def parse(path):
-    try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError as e:
-        fail(f"cannot read plan: {e}")
-    # The Tasks table is the one whose header carries every required column.
-    start = None
-    for i, line in enumerate(lines):
-        c = cells(line)
-        if c and {x.lower() for x in c} >= set(REQUIRED):
-            start, header = i, [x.lower() for x in c]
-            break
-    if start is None:
-        fail("no Tasks table (| ID | Task | Files | Test rows | Language | Tier | Depends on |)")
-    idx = {name: header.index(name) for name in REQUIRED}
-    rows = []
-    for line in lines[start + 1:]:
-        c = cells(line)
-        if c is None:
-            break
-        if all(re.fullmatch(r":?-+:?", x) for x in c if x):
-            continue
-        if len(c) != len(header):
-            fail(f"malformed Tasks row ({len(c)} cells, header has {len(header)}): {line.strip()}")
-        rid = re.sub(r"[`*]", "", c[idx["id"]]).strip()
-        if not rid:
-            fail(f"Tasks row without an ID: {line.strip()}")
-        rows.append({
-            "id": rid,
-            "files": split_list(c[idx["files"]]),
-            "tests": split_list(c[idx["test rows"]]),
-            "deps": split_list(c[idx["depends on"]]),
-        })
-    if not rows:
-        fail("Tasks table has no rows")
-    ids = [r["id"] for r in rows]
-    dup = sorted({i for i in ids if ids.count(i) > 1})
-    if dup:
-        fail(f"duplicate Task ID(s): {', '.join(dup)}")
-    for r in rows:
-        for d in r["deps"]:
-            if d not in ids:
-                fail(f"{r['id']} depends on unknown task '{d}'")
-        if not r["files"]:
-            fail(f"{r['id']} lists no Files — the checkpoint needs them as --expect")
-    return rows
 
 
 def basis(consts):
@@ -235,7 +169,10 @@ def rng(n, spread):
 
 
 def estimate(argv):
-    rows = parse(argv[1])
+    try:
+        rows = tasks_state.parse(argv[1])
+    except tasks_state.TableError as e:
+        fail(str(e))
     n = len(rows)
     files = len({f for r in rows for f in r["files"]})
     tests = sum(len(r["tests"]) for r in rows)

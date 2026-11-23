@@ -8,7 +8,7 @@ Every skill is a focused playbook for one problem. Define input, output, and bou
 
 ## Rules
 
-- Frontmatter: `disable-model-invocation: true` and a one-sentence description ending in `Usage: /name [args], e.g. "..."` — skills are started by the user, never auto-routed; a skill never invokes another skill, it may only suggest a next one.
+- Frontmatter: `disable-model-invocation: true` and a one-sentence description ending in `Usage: /name [args], e.g. "..."` — new skills are started by the user, never auto-routed (only the six pipeline skills are model-invocable, after Claude asks); a skill never invokes another skill, it may only suggest a next one.
 - Each phase must declare Input, Output, and Boundary.
 - No phase should produce raw tool output — always compact before handing off to the next phase.
 - Keep the SKILL.md ≤60 lines; move tables, templates, and examples into `references/`.

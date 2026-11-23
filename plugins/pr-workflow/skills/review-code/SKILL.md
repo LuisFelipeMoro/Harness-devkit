@@ -1,7 +1,6 @@
 ---
 name: review-code
 description: Review a diff or pull request on two separate axes — Standards (repo standards, OWASP, language, design, reuse, tests, code smells) and Spec (does it do what the plan or issue asked) — print every finding, then post to the PR only in the language and style you pick. Usage: /review-code [PR-number | branch] [--spec path] [--split] [--stress], e.g. "/review-code 42".
-disable-model-invocation: true
 ---
 
 **Input**: a PR number, a branch, or nothing (= the current diff vs `git merge-base HEAD main`, falling back to `master`, uncommitted work included); `--spec path` names the spec to review against; `--split` reviews each axis in its own parallel dispatch; `--stress` adds the reviewer's stress lens for a PR you cannot run `/validate-code` on (someone else's branch); on your own change, stress belongs to `/validate-code`. With a plan for the branch, its ACs, Test Case table, Reuse Map and codebase map travel with the diff.
@@ -31,4 +30,4 @@ disable-model-invocation: true
    - When AskUserQuestion is unavailable (headless run), take the three answers from the prompt's `Answers:` line per `coding-pipeline/references/headless-runs.md`; no key → print `NEEDS_USER: <question>` and stop. Headless, the review posts only when `review_post` says so, and the last line printed is `REVIEW_SCORE: <score> <pass|block>`; the sentinel is the plain last line: no markdown, bold, backticks or blockquote around it.
 7. **Post only after the answers.** At this step, read `references/posting.md`: write each comment in its § Voice, translate, show the exact bodies, post with `gh` (what the Gaps block found as one general comment), set the event (`REQUEST_CHANGES` if any CRITICAL or hard-gate FAIL, else `COMMENT`; never `APPROVE` unless asked), print the review URL.
 
-Next: `/pr-fix` once comments are posted, or `/code` to fix locally. The score above is this review's own gate; `/validate-code` gives the separate verdict on gates, tests and stress.
+Next: `/pr-fix` once comments are posted, or `/code` to fix locally. Claude asks first, for `/code` only (`/pr-fix` stays user-started): run it now / you run it later / stop. The score above is this review's own gate; `/validate-code` gives the separate verdict on gates, tests and stress.

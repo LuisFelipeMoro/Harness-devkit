@@ -12,21 +12,15 @@ memory, never committed, and it must stay in agreement with the rich `/tmp` hand
 ```markdown
 # PROGRESS
 
-## Done
-- [Completed work, newest last]
-
-## Failed
-- [What was attempted and did not work, with the reason]
-
-## Current State
-- [Where the codebase / task stands right now]
-
-## Next
-- [Ordered next actions for the following session]
-
-## Lessons
-- [Rule learned] — evidence: [the failure or gate output that taught it] ([date])
+## [{slug}] YYYY-MM-DD — {title}
+- Done: {atomic, verifiable accomplishment} ({commit sha or test/gate that proves it})
+- Failed: {what was attempted and why it failed — exact error, not a paraphrase}
+- Current State: {where the work stands right now: branch, what is green, what is in flight}
+- Next: {the single next action a fresh session should take}
+- Lessons: {rule learned} — evidence: {the failure or gate output that taught it} ({date})
 ```
+
+Entries are appended, never rewritten. `tasks.json` (via `coding-pipeline/scripts/tasks_state.py`) is authoritative for row status; PROGRESS.md carries the narrative.
 
 Rules:
 - Append at each checkpoint; never silently rewrite history.

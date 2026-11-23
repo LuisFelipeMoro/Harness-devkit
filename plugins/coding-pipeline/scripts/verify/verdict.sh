@@ -155,6 +155,7 @@ def floor_reasons(lenses):
 def scored_verdict(score, lenses, gate_fail, crit_sec, crit_other):
     """Legacy and --no-review: hard reasons, overall floor, lens floors, then classify."""
     reasons = hard_reasons(gate_fail, crit_sec)
+    score = round(score, 2)  # classify on the figure that is printed, not on float noise
     if score < 6.5:
         reasons.append(f"overall {score:.2f} < 6.5")
     reasons += floor_reasons(lenses)
@@ -251,6 +252,7 @@ else:
 
 if blocked:
     score = min(score, 5.0)
+score = round(score, 2)  # classify on the figure that is printed, not on float noise
 
 if score < 6.5:
     reasons.append(f"overall {score:.2f} < 6.5")

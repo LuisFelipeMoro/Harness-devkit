@@ -11,10 +11,14 @@
 # window. It still lags by the tool results appended since that turn, so it reads
 # low by at most one turn's tool output — which is why the warn line sits at 60%.
 #
-# Window: DEVKIT_CONTEXT_WINDOW when set. Otherwise 1M when the model id carries a
-# 1m marker or any turn in the transcript already exceeded 200k — a window that
-# held 300k is not a 200k window — else 200k. The transcript records the model id
-# but not the window, so observed usage is the only evidence that cannot lie.
+# Window, first match wins: DEVKIT_CONTEXT_WINDOW → CLAUDE_CODE_AUTO_COMPACT_WINDOW
+# (k/M suffix accepted) → autoCompactWindow in the repo's .claude/settings.local.json,
+# .claude/settings.json, then ~/.claude/settings.json. Values below 100000 are
+# ignored (Claude Code's floor); a malformed settings file is skipped. Otherwise
+# 1M when the model id carries a 1m marker or any turn in the transcript already
+# exceeded 200k — a window that held 300k is not a 200k window — else 200k. The
+# transcript records the model id but not the window, so observed usage is the
+# only evidence that cannot lie.
 #
 # Thresholds (fractions of the window):
 #   DEVKIT_CONTEXT_WARN     0.60  — compact completed epics to one-line refs
@@ -44,7 +48,7 @@ if [ -z "$transcript" ] || [ ! -f "$transcript" ]; then
 fi
 [ -f "$transcript" ] || exit 0
 
-read -r used pct ceiling warn <<<"$(tail -n 400 "$transcript" 2>/dev/null | python3 -c '
+read -r used pct ceiling warn <<<"$(tail -n 400 "$transcript" 2>/dev/null | CTX_PAYLOAD="$input" python3 -c '
 import sys, json, os
 last = peak = 0
 model = ""
@@ -72,10 +76,64 @@ def frac(name, default):
         return int(float(os.environ.get(name) or default) * 100)
     except ValueError:
         return int(default * 100)
+def window_value(v):
+    # Claude Code takes the auto-compact window as an integer, k or M suffix accepted.
+    if isinstance(v, bool):
+        return 0
+    if isinstance(v, int):
+        n = v
+    elif isinstance(v, str):
+        s = v.strip().lower()
+        mult = 1000 if s[-1:] == "k" else 1000000 if s[-1:] == "m" else 1
+        if mult > 1:
+            s = s[:-1]
+        if not (s.isascii() and s.isdigit()):
+            return 0
+        n = int(s) * mult
+    else:
+        return 0
+    return n if n >= 100000 else 0
+def devkit_window():
+    try:
+        return int(os.environ.get("DEVKIT_CONTEXT_WINDOW") or 0)
+    except ValueError:
+        return 0
+def settings_window(paths):
+    for path in paths:
+        try:
+            with open(path) as f:
+                d = json.load(f)
+        except Exception:
+            continue
+        w = window_value(d.get("autoCompactWindow")) if isinstance(d, dict) else 0
+        if w:
+            return w
+    return 0
+def repo_root(cwd):
+    d = os.path.abspath(cwd)
+    while not os.path.exists(os.path.join(d, ".git")):
+        parent = os.path.dirname(d)
+        if parent == d:
+            return cwd
+        d = parent
+    return d
 try:
-    window = int(os.environ.get("DEVKIT_CONTEXT_WINDOW") or 0)
-except ValueError:
-    window = 0
+    payload = json.loads(os.environ.get("CTX_PAYLOAD") or "{}")
+    cwd = payload.get("cwd") if isinstance(payload, dict) else None
+except Exception:
+    cwd = None
+if not isinstance(cwd, str) or not cwd:
+    cwd = os.getcwd()
+window = devkit_window()
+if window <= 0:
+    window = window_value(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW") or "")
+if window <= 0:
+    root = repo_root(cwd)
+    window = settings_window([
+        os.path.join(root, ".claude", "settings.local.json"),
+        os.path.join(root, ".claude", "settings.json"),
+        os.path.join(os.path.expanduser("~"), ".claude", "settings.json"),
+    ])
 if window <= 0:
     window = 1000000 if ("1m" in model.lower() or peak > 200000) else 200000
 print(last, last * 100 // window, frac("DEVKIT_CONTEXT_CEILING", 0.80), frac("DEVKIT_CONTEXT_WARN", 0.60))

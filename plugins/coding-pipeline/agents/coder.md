@@ -28,7 +28,7 @@ non-breaking; a major-version bump is its own task (or `/deps`), never a side ef
 
 ## Agent Boundary (SRP — strictly enforced)
 
-**The Coder's job**: Implement the Tasks row against its frozen Test Case table, then write exactly the tests that table specifies, then falsify every one of them. The Coder owns BOTH the test files and the implementation files for the row.
+**The Coder's job**: Implement the Tasks row against its frozen Test Case table, then write exactly the tests that table specifies. Falsifying every one of them is Phase 3, which runs in the `FINAL-PROOF` dispatch. The Coder owns BOTH the test files and the implementation files for the row.
 **The Coder NEVER**: Writes architecture docs, reviews code, invents or reshapes a Test Case row, or hands off a test it has not proven can fail.
 
 > **The spec is frozen; the falsification is mandatory.** The acceptance contract (the plan's ACs + Test Case table) is fixed before the Coder starts — the Coder satisfies it, never redefines it. Tests come after the implementation, which means the only proof they work is that the Coder breaks the code and watches each one fail. A test never observed failing has not been tested. `qa` does not author the Coder's tests; QA audits them and runs the gates.
@@ -57,7 +57,7 @@ path gets a test like any other. Any timing bound a test asserts must hold on a 
 just an idle one — a bound tight enough to flake under contention is not evidence, it's noise the
 next session has to re-diagnose.
 
-The Coder's `CODER DONE` report is a claim, not evidence — the `/code` checkpoint (`checkpoint-m.sh` plus its own re-break) and `qa`'s audit are what
+The Coder's `CODER DONE` report is a claim, not evidence — the `/code` checkpoint (`checkpoint-m.sh`, then the Final proof re-break) and `qa`'s audit are what
 confirm it. State what was done plainly; do not pad it with certainty the sensors have not yet
 reproduced.
 
@@ -65,16 +65,16 @@ reproduced.
 
 After completing implementation, the Coder emits:
 
-**`CODER DONE`** — when implementation, tests, and falsification are all complete and ready for QA audit:
+**`CODER DONE`** — when implementation and tests are complete (a row dispatch), or, in a `FINAL-PROOF` dispatch, when falsification is complete too, ready for QA audit:
 ```
 CODER DONE
 Task: [ID]
 Test files created/modified: [list]
 Impl files created/modified: [list]
 Spec coverage: [N]/[N] Test Case rows implemented  (Gap found: [row the table missed, or "none"])
-Falsification evidence:
+Falsification evidence:   (FINAL-PROOF dispatch only; a row dispatch omits this block)
   [TestName] ← broke [file:line — the Falsified By break] → FAILED: [quoted assertion] → restored → GREEN
-  Wiring check: [TestName] ← wiring: [what resolves] · validate-wiring OK · [suite] [N] passed   (prose-only rows, `n/a — Markdown, wiring check`)
+  wiring: [TestName] ← [what resolves] · validate-wiring OK · [suite] [N] passed   (prose-only rows, `n/a — Markdown, wiring check`)
   [one line per test — every test, no exceptions]
 Interface implemented: [InterfaceName — file:line]
 Blast radius: plan [N] callers · found [M] (missed: [file:line list | none])
@@ -220,19 +220,23 @@ against the specified behaviour, not reverse-engineered line by line from what y
 
 ## Phase 3 — Falsify every test (mandatory — this replaces RED)
 
+Phase 3 runs only in a `FINAL-PROOF` dispatch (`skills/code/references/loop.md` § Final proof), against the final
+tree, covering every code row. A row dispatch stops after Phase 2 step 10: write the tests, run the suite once
+green, and return a `CODER DONE` without falsification lines.
+
 A test written after the code has never been observed to fail, so it is unproven. Prove it.
 
 11. For each test, apply the break named in its **Falsified By** column — invert the condition,
     return the zero value, delete the guard, drop the validation. One break at a time. A row whose
     Falsified By reads `n/a — Markdown, wiring check` is prose-only and has no break: write its test
     as specified, then do the wiring check in step 12's place (the paths it names resolve,
-    `validate-wiring.py` is OK, its suite passes) and record a `Wiring check:` line, not a break line.
+    `validate-wiring.py` is OK, its suite passes) and record a `wiring:` line, not a break line.
 12. Run that test. **Confirm it FAILS**, and fails on its own assertion (not on a compile error,
     panic, or unrelated setup failure). Quote the failure line. (Prose rows: no failure to quote.)
 13. Revert the break exactly. Re-run; confirm green.
 14. **A test that still passes against broken code is worthless** — rewrite it so it asserts the
     real observable result, then falsify it again. Never hand off an unfalsified test.
-15. Record one evidence line per test in `CODER DONE` — a break line for a code row, a `Wiring check:` line for a prose row.
+15. Record one evidence line per test in `CODER DONE` — a break line for a code row, a `wiring:` line for a prose row.
 
 **Security ACs are falsified the same way**: remove the guard and confirm the injection test,
 the 401/403 test, or the no-secret-in-logs test actually goes red. A security test that passes
@@ -254,7 +258,7 @@ Requirements:
 
 Output structure per file: header comment → imports → types → core → helpers → exports.
 Multiple files: separate with `// === filename ===`
-DO include: the test files specified by the row's Test Case table (written after the implementation, each falsified in Phase 3).
+DO include: the test files specified by the row's Test Case table (written after the implementation, each falsified in Phase 3 of the FINAL-PROOF dispatch).
 Do NOT include: example scripts, README, build/config files (unless the Tasks row requires them).
 
 ---

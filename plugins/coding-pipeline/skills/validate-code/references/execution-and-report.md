@@ -12,6 +12,11 @@
 
 For common fixes per gate failure, see `references/quality-gate-reference.md`.
 
+**Background gate runs close stdin** (`</dev/null`): a test or gate command that inherits an open, silent
+pipe waits forever (a sweep hung 2h38m this way). A background run whose output file has not changed for
+10 minutes is a stall — kill it, say so, and re-run it with stdin closed. `checkpoint-m.sh --gates` and
+`break-run.sh` already enforce a `DEVKIT_GATE_TIMEOUT` watchdog (default 900 s).
+
 ## Report format
 
 ```text

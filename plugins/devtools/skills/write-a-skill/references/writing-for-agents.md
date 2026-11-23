@@ -19,7 +19,7 @@ pointer first, and inline the material only if sharpening fails.
 - **Name the step, not "as needed".** "At step 4, read …" fires at step 4; "see … when relevant" fires at random.
 
 A manual skill's description is not a trigger — nothing auto-routes it — so it carries no trigger list:
-one sentence saying what the skill does, plus `Usage:`.
+one sentence saying what the skill does, plus `Usage:`. The coding pipeline's six skills are the one exception: they omit the flag so Claude can run them after asking at their `Next:` step.
 
 ## The two loads
 

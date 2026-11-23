@@ -33,6 +33,7 @@ FIX_SUBJECT = re.compile(r"^fix(\(.+\))?!?:")            # conventional-commit f
 GAP_LINE = re.compile(r"Gap found:\s*(.*)", re.IGNORECASE)
 NONE_WORDS = {"", "none", '"none"', "n/a", "-", "—"}
 ESCAPE_WORDS = re.compile(r"pre-push|\bCI\b")
+FAILED_LABEL = re.compile(r"\s*- Failed:\s*(.*)")
 
 
 def fail(msg):
@@ -126,16 +127,22 @@ def question_timing(plans, since):
 
 def sensor_escape():
     """references/harness-metrics.md — Sensor escape: gate failures first caught at pre-push
-    or CI. Countable only where they were recorded: PROGRESS.md's Failed section."""
+    or CI. Countable only where they were recorded in PROGRESS.md: bullets of a legacy
+    `## Failed` section, and `- Failed:` bullets inside `## [` entries that name a failure."""
     if not os.path.isfile("PROGRESS.md"):
         return "n/a — needs judgement: no PROGRESS.md; CI failure history lives in the CI provider"
-    failed, section = [], None
+    failed, section, in_entry = [], None, False
     with open("PROGRESS.md", encoding="utf-8", errors="replace") as fh:
         for x in fh:
             if x.startswith("## "):
-                section = x[3:].strip().lower()
+                in_entry = x.startswith("## [")
+                section = None if in_entry else x[3:].strip().lower()
             elif section == "failed" and x.lstrip().startswith("- "):
                 failed.append(x)
+            elif in_entry:
+                m = FAILED_LABEL.match(x)
+                if m and m.group(1).strip().strip("`*").strip().lower() not in NONE_WORDS:
+                    failed.append(x)
     escaped = sum(1 for x in failed if ESCAPE_WORDS.search(x))
     return f"{escaped} of {len(failed)} Failed entries in PROGRESS.md were caught at pre-push or CI"
 

@@ -1,7 +1,6 @@
 ---
 name: bugfix
 description: Build a feedback loop that goes red on a bug, rank and test hypotheses to its root cause, then apply the fix depth you choose and prove it RED to GREEN with the full suite and every gate. Usage: /bugfix [description], e.g. "/bugfix cart total goes negative after removing a coupon".
-disable-model-invocation: true
 ---
 
 **Input**: a bug description; the questions in step 1 fill in the rest.
@@ -28,4 +27,4 @@ disable-model-invocation: true
 6. **Verify yourself** — every gate for the detected stack, not just the test suite (`references/quality-gate-reference.md`, read at this step): the regression test GREEN · the HANDOFF's original, un-minimised loop command green · full suite · format · type/vet · lint · **build** · coverage · race (Go) · vuln · `bash ~/.claude/git-hooks/dup-gate.sh --worktree`. A fix that passes its new test but fails lint/typecheck/build must not be called done. Re-break the fix once with `scripts/verify/break-run.sh` (revert the fix line → the regression test, or the loop on a no-seam finding, must fail by name). Any FAIL → a fresh coder dispatch with the output (Loop Integrity applies); after 3 failed rounds stop and suggest `/planning` with the BUG REPORT as input — the bug is bigger than a fix.
 7. **Clean up, report and record.** Tick the cleanup checklist in `references/dispatch.md` (original loop green · regression test green or no-seam documented · no `[DEBUG-` tag left (`grep -rn "\[DEBUG-" .` empty) · throwaway prototypes deleted · confirmed hypothesis written into the summary's commit/PR line); an unticked item is not done. Print the gate report and the Bug Fix Summary from `references/dispatch.md`. Append to `PROGRESS.md`: `` `[{slug}]` root cause — fix (file:line) — regression test (RED → GREEN) ``.
 
-Next: `/validate-code`, then `/review-code` (score ≥ 8.0 with no CRITICAL), then `/pr` — the confirmed hypothesis goes in its text. A no-seam finding is a lead for `/improve-codebase-architecture`.
+Next: `/validate-code`, then `/review-code` (score ≥ 8.0 with no CRITICAL), then `/pr` — the confirmed hypothesis goes in its text. A no-seam finding is a lead for `/improve-codebase-architecture`. Claude asks first, for `/validate-code` and `/review-code` only (`/pr` and `/improve-codebase-architecture` stay user-started): run it now / you run it later / stop.

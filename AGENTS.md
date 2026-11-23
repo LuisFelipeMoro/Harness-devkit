@@ -17,7 +17,7 @@ Two conventions there are easy to get wrong and worth calling out up front:
 - **Branching**: work on the current branch; on `main`/`master` cut `feat/{slug}` first, never
   commit to `main`, and never push or open a PR unless asked. See
   `plugins/coding-pipeline/references/branching.md`.
-- **Skills are manual**: every skill is started by the user and does one job; none runs another.
+- **Skills**: each does one job. At a `Next:` step Claude asks — run it now / you run it later / stop — and invokes the next pipeline skill only on "now"; a skill never runs another itself, and non-pipeline skills are started by the user.
 
 ## Harness-specific notes
 

@@ -1,7 +1,6 @@
 ---
 name: validate-code
 description: Validate the current diff against its base branch — every quality gate for the detected stack, the verify sensors, a qa audit and a stress pass at the depth the diff needs, then the scripted verdict — and loop any low, failing or blocked result through fix rounds until it passes or the human decides. Usage: /validate-code [plan-path] [--full], e.g. "/validate-code docs/plans/checkout-retry/plan.md".
-disable-model-invocation: true
 ---
 
 **Input**: the working diff vs `BASE=$(git merge-base HEAD main)` (fall back to `master`); optionally the plan path; `--full` forces full depth.
@@ -30,4 +29,4 @@ disable-model-invocation: true
 7. **Self-check inline.** At this step, read `agents/verdict.md` and apply its Security Gate, narrative and five-axis Verdict Self-Check (Evidence · Traceability · Independence · Residual risk · Actionability), with its downgrade rules. If step 6 or this check fires a Score Loop trigger (overall score below the bar, a hard-gate FAIL, or a CRITICAL in the Security Gate), run the Score Loop per `references/validation-loop.md` § Score Loop before step 8; step 8 then reports the final round, with the first pass shown as its starting score.
 8. **Report.** First write each qa and stress return verbatim to `docs/plans/{slug}/validation/qa.md` / `stress.md` (no plan → `$TMPDIR/validate-{slug}/`); both files are release-excluded. Then print the depth line, then the gate table and overall line in the template of `references/execution-and-report.md` (`Overall: ✅ PASS — all gates green · {X}% coverage · {N} tests`, or the failing gates); then the summary of `references/validation-output-format.md` (plugin root; no review score — that is `/review-code`'s): per agent only its score line, its top 3 findings and the file path it was written to, the verdict line, self-check scores, Security Gate, top 3 action items each with `file:line`, and the outcome row from `references/validation-loop.md`. Headless (`references/headless-runs.md`): the last line printed is `VERDICT_LINE: <verdict> <score>`; the sentinel is the plain last line: no markdown, bold, backticks or blockquote around it.
 
-Next: `/review-code` for the standards and spec review; on exhaustion, the human's answer to the Score Loop question decides the next step.
+Next: `/review-code` for the standards and spec review; on exhaustion, the human's answer to the Score Loop question decides the next step. Claude asks first: run it now / you run it later / stop.

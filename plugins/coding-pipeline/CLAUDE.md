@@ -27,20 +27,21 @@ This devkit is a Harness. Four components, all mandatory:
   | `gate-filter.sh` | PreToolUse(Bash) | `pre:bash:gate-filter` | Opt-in (`DEVKIT_GATE_FILTER=1`) because Claude Code cannot pre-check the rewritten compound command and needs a broad Bash allow (auto/bypass or driver grant); rewrites a simple test/lint gate command so only failures and a 20-line tail reach context; full output kept in a file named in the last line |
   | `secret-write-guard.sh` | PreToolUse(Write/Edit) | `pre:write:secret-guard` | Blocks writing a recognisable live credential into the tree |
   | `go-test-name-guard.sh` | PreToolUse(Write) | `pre:write:go-test-name` | Blocks creating a `*_test.go` with no same-named source beside it (go.md naming rule); existing files are not judged |
+  | `tasks-state-guard.sh` | PreToolUse(Write/Edit) | `pre:write:tasks-state` | Blocks hand edits of a plan's `tasks.json` (parent dir resolved, basename case-folded); only `scripts/tasks_state.py` writes it |
   | `session-tracker.sh` | PostToolUse | `post:session-tracker` | Records which source files changed and whether any gate command ran |
   | `context-budget.sh` | PostToolUse | `post:context-budget` | Reads context fill from the session transcript; warns at 60%, calls the 80% ceiling |
   | `dispatch-budget.sh` | PreToolUse(Agent\|Task) | `pre:agent:dispatch-budget` | Counts subagent dispatches, warns once past the session budget |
   | `precompact-snapshot.sh` | PreCompact | `pre:compact:snapshot` | Records branch, dirty files, last commits and PROGRESS.md freshness before compaction; never blocks |
-  | `delivery-gate.sh` | Stop | `stop:delivery-gate` | Refuses to call a session done when source changed and no test/lint/typecheck ever ran |
+  | `delivery-gate.sh` | Stop | `stop:delivery-gate` | Refuses to call a session done when source changed and no test/lint/typecheck ever ran; also warns on leftover `*.devkit-break` markers and `in_progress` rows in tasks.json |
   | `pr-review-responder.sh` | PostToolUse(Bash) | — | After a push, says how many PR comments are open and suggests `/pr-fix` |
-  | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md`; after compaction also the snapshot, and re-arms the context latches |
+  | `session-bootstrap.sh` | SessionStart | — | Injects `PROGRESS.md` and computed row status from each unfinished plan's tasks.json; carries the Lessons of entries it omits; after compaction also the snapshot, and re-arms the context latches |
 
   Dial them with `DEVKIT_HOOK_PROFILE` — `off`, `standard` (default), or `strict`, which makes `delivery-gate` block once instead of warn — or disable a single hook with `DEVKIT_DISABLED_HOOKS=<hook-id>,<hook-id>`. A guard that cannot parse its input exits 0 — failing open beats blocking every tool call on a payload change.
 - **Context ceiling — 80%, hard, and now measured.** `hooks/context-budget.sh` reads the real
   figure from the session transcript, so this stopped being a number the model reports about
   itself. Model reliability degrades before the window is full: mid-context recall drops and confident invention rises, which in a multi-step run propagates through every step downstream. At 80%, checkpoint and continue — no human step: write the `PROGRESS.md` entries, commit the branch (push only if the user has asked for pushes), carry on; the harness compacts, and `precompact-snapshot.sh` + `session-bootstrap.sh` restore state. Never carry on past it without that checkpoint, and never record session state in the code — no `TODO`, no `FIXME`, no commented-out stub marking where an agent stopped. That state belongs to the Memory leg; a marker left in a source file is a CD6 finding in the next review.
-- **Memory & Progress**: `PROGRESS.md` at repo root (`Done` / `Failed` / `Current State` / `Next` / `Lessons`) — appended at each checkpoint, read at session start by the SessionStart bootstrap hook. Atomic commits.
-- **Separation**: **implementer ≠ validator** — `coder` builds; `qa`, `reviewer` and `stress` validate. The acceptance contract (ACs + Test Case table) is frozen BEFORE any code. **The plan is validated the same way**: `plan-reviewer` reads the plan against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say. Skills run one at a time, started by the user; a skill may dispatch agents but never another skill.
+- **Memory & Progress**: `PROGRESS.md` at repo root — one appended `## [slug] YYYY-MM-DD — title` entry per checkpoint with `Done` / `Failed` / `Current State` / `Next` / `Lessons` bullets, never rewritten; row state lives in `docs/plans/{slug}/tasks.json` (written only by `tasks_state.py`). Read at session start by the SessionStart bootstrap hook. Atomic commits.
+- **Separation**: **implementer ≠ validator** — `coder` builds; `qa`, `reviewer` and `stress` validate. The acceptance contract (ACs + Test Case table) is frozen BEFORE any code. **The plan is validated the same way**: `plan-reviewer` reads the plan against the real codebase before it reaches the human, because the author of a plan cannot see what it does not say. Skills run one at a time. At a skill's `Next:` step Claude asks — run it now / you run it later / stop — and invokes the next pipeline skill only on "now"; a skill may dispatch agents but never another skill itself, and non-pipeline skills are started by the user.
 
 ## Is the Harness working?
 
@@ -64,7 +65,7 @@ falsifiability. Four steps, in order, for every change:
    time: anything the spec did not decide is flagged, not invented.
 3. **Test** — the coder writes exactly the rows in the table, no more, no fewer. A row it
    cannot write is a spec defect, reported upward — never silently dropped or reshaped.
-4. **Falsify** — the evidence step that replaces RED. For every test, break the code path it
+4. **Falsify** — the evidence step that replaces RED, run once by `/code`'s Final proof stage against the final tree, not per row. For every test, break the code path it
    covers (invert the condition, return the zero value, delete the guard), run the test,
    observe it FAIL, then restore. A test that still passes against broken code is worthless
    and must be rewritten before handoff. A prose-only row (Markdown, README, CHANGELOG) is marked `n/a — Markdown, wiring check` and gets a wiring check, not a break.
@@ -147,7 +148,7 @@ Front-load reasoning into planning so execution is mechanical: get the plan tigh
 - **After git push**: the hook reports how many PR comments are open. `/pr-fix` triages them: a valid issue (bug/missing test/security hole) is fixed and answered with what changed; a non-actionable one (style preference/opinion/already done) is answered with why. Never leave PR comments unanswered.
 - **Load references lazily**: a reference is read only when its trigger fires, one file at a time; exactly one language file up front (see Quality Gates); dispatch prompts pass paths, never contents.
 
-## Skills (invoke manually)
+## Skills
 
 | Need | Skill |
 |------|-------|
@@ -176,7 +177,7 @@ Front-load reasoning into planning so execution is mechanical: get the plan tigh
 | Create a new skill | `/write-a-skill` |
 | What the devkit has: skills, flows, one skill's usage | `/devkit-help` |
 
-Skills never run each other. Claude may suggest the next skill; only the user starts one. After any code change, `/validate-code` then `/review-code` are the recommended final steps, then `/pr` to open the pull request: gates without a reviewer are insufficient, because logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
+At a skill's `Next:` step Claude asks — run it now / you run it later / stop — and invokes the next pipeline skill (`/map`, `/planning`, `/code`, `/validate-code`, `/review-code`, `/bugfix`) only on "now". A skill never runs another skill itself; every other skill is started by the user. After any code change, `/validate-code` then `/review-code` are the recommended final steps, then `/pr` to open the pull request: gates without a reviewer are insufficient, because logic bugs and OWASP vulnerabilities are invisible to format/lint/coverage checks.
 
 ## Coding Discipline (12 rules — non-negotiable)
 
@@ -188,7 +189,7 @@ These rules are enforced, not aspirational: the reviewer checks them as the CD1�
 3. **Surgical changes**: Modify only necessary code, matching existing style. No drive-by refactors. *Test*: every changed line traces to a sentence of the request; clean up orphans your change created, never pre-existing dead code (CD1, CD5, CD6).
 4. **Goal-driven execution**: Define clear success criteria before starting. Tasks are verifiable goals.
 5. **Read before you write**: Review existing callers, exports, and related code before implementing.
-6. **Surface conflicts**: Pick one approach, explain the tradeoff, flag contradictions — never average them.
+6. **Surface conflicts**: Pick one approach, explain the tradeoff, flag contradictions — never average them. When the user decides, offer ≥ 3 options with trade-offs (`references/grilling.md` § Decision questions).
 7. **Match conventions**: Existing codebase conventions beat personal preference. Always.
 8. **Checkpoint frequently**: After each phase, state: what's done, what's verified, what remains.
 9. **Tests verify intent**: Tests encode the *why* of behavioral requirements, not just the *what*.

@@ -23,6 +23,9 @@
 # Exit 0 — every check passed: `M: PASS`.
 # Exit 1 — one or more checks failed: one `M: FAIL <check> — <detail>` line
 #          per failure, then `M: FAIL (n)`.
+# The --gates command runs as the leader of its own process group; a timeout or
+# interrupt stops that whole group (TERM, 5 s wall clock, KILL). A process that
+# leaves the group (setsid, daemonising) is out of reach of the stop.
 # Exit 2 — bad usage, not a git repository, or a sub-sensor itself came back
 #          unmeasured (spec-coverage.sh / classify-diff.sh exiting 2) — never
 #          folded into an ordinary FAIL, because "could not measure" is not
@@ -43,10 +46,59 @@ cleanup_tmp() {
     [ ${#TMPFILES[@]} -gt 0 ] && rm -f "${TMPFILES[@]}"
 }
 trap cleanup_tmp EXIT
+gates_pid=""
+# INT/TERM: stop the running gate's whole process group (TERM, 5 s, KILL) before exiting 2,
+# so an interrupted checkpoint never orphans its gate.
+on_interrupt() {
+    [ -n "$gates_pid" ] && stop_group "$gates_pid"
+    exit 2
+}
+trap on_interrupt INT TERM
 
 unmeasured() {
     echo "M: UNMEASURED — $1" >&2
     exit 2
+}
+
+# start_group <out> <cmd...> — run <cmd> with stdin closed and stdout+stderr in <out>, as the
+# leader of its own process group (the python wrapper calls setpgid(0,0) then execs, so the
+# pid it leaves in $grp_pid is also the pgid). Sets grp_pid.
+start_group() {
+    local of="$1"
+    shift
+    python3 -c 'import os, sys
+os.setpgid(0, 0)
+os.execvp(sys.argv[1], sys.argv[1:])' "$@" </dev/null >"$of" 2>&1 &
+    grp_pid=$!
+}
+
+# stop_group <pgid> — TERM the whole group, poll it until it is gone or 5 s of wall clock have
+# passed (date +%s, so a wide tree cannot stretch the bound), then KILL the group unconditionally
+# and wait. Stderr is silenced throughout so bash's `Killed` job notice never reaches the output.
+stop_group() {
+    local pgid="$1" deadline
+    {
+        kill -TERM -- "-$pgid" 2>/dev/null || kill -TERM "$pgid" 2>/dev/null
+        deadline=$(( $(date +%s) + 5 ))
+        while kill -0 -- "-$pgid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep 0.1
+        done
+        kill -KILL -- "-$pgid" 2>/dev/null
+        kill -KILL "$pgid" 2>/dev/null
+        wait "$pgid"
+    } 2>/dev/null
+    return 0
+}
+
+# gate_timeout — DEVKIT_GATE_TIMEOUT when it is a positive integer, else 900,
+# so a typo in the variable can never turn every gate into an instant timeout.
+gate_timeout() {
+    local t="${DEVKIT_GATE_TIMEOUT:-900}"
+    case "$t" in
+        ''|*[!0-9]*) t=900 ;;
+    esac
+    [ "$t" -gt 0 ] || t=900
+    printf '%s' "$t"
 }
 
 new_tmp() {  # new_tmp <prefix> — prints the path, registers it for cleanup
@@ -120,6 +172,11 @@ done
 [ -f "$spec" ] || { echo "checkpoint-m: usage — no such spec file '$spec'" >&2; exit 2; }
 [ ${#TESTS[@]} -gt 0 ] || usage
 [ ${#EXPECT[@]} -gt 0 ] || usage
+
+# The gate runs through a python3 launcher; without it the gate cannot be measured at all.
+if [ -n "$gates_cmd" ] && ! command -v python3 >/dev/null 2>&1; then
+    unmeasured "gates: python3 not found"
+fi
 
 if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
     unmeasured "not a git repository"
@@ -419,8 +476,31 @@ fi
 
 # ── gates: an arbitrary command this checkpoint requires to exit clean ──────
 if [ -n "$gates_cmd" ]; then
-    gates_out=$(bash -c "$gates_cmd" 2>&1)
+    # stdin from /dev/null so a gate that reads it sees EOF, not the caller's
+    # open pipe; a watchdog so one that never ends is UNMEASURED, not a wait.
+    gates_limit=$(gate_timeout)
+    gates_tmp=$(new_tmp gates)
+    start_group "$gates_tmp" bash -c "$gates_cmd"
+    gates_pid=$grp_pid
+    gates_waited=0
+    while kill -0 "$gates_pid" 2>/dev/null && [ "$gates_waited" -lt "$gates_limit" ]; do
+        sleep 1
+        gates_waited=$((gates_waited + 1))
+    done
+    if kill -0 "$gates_pid" 2>/dev/null; then
+        stop_group "$gates_pid"
+        rm -f "$gates_tmp"
+        unmeasured "gates: TIMEOUT after ${gates_limit}s"
+    fi
+    # The pid is cleared right after the wait: a late signal must not reach a reaped, possibly
+    # reused pid. The group id outlives the leader while any member does, so one KILL stops a
+    # descendant left behind (harmless when the group is empty).
+    wait "$gates_pid" 2>/dev/null
     gates_rc=$?
+    gates_pid=""
+    kill -KILL -- "-$grp_pid" 2>/dev/null
+    gates_out=$(cat "$gates_tmp")
+    rm -f "$gates_tmp"
     if [ "$gates_rc" -ne 0 ]; then
         gates_detail=$(printf '%s\n' "$gates_out" | tail -1)
         fail "gates" "\`$gates_cmd\` exited $gates_rc${gates_detail:+ — $gates_detail}"

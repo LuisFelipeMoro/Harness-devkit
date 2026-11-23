@@ -10,9 +10,9 @@ disable-model-invocation: true
 
 ## Steps
 
-1. **Collect state.** `git branch --show-current`, `git status --short`, `git log --oneline -5`, the active plan (`docs/plans/{slug}/plan.md` — its `Status` and which Tasks rows are done), and the last gate results seen this session.
+1. **Collect state.** `git branch --show-current`, `git status --short`, `git log --oneline -5`, the active plan (`docs/plans/{slug}/plan.md` — its `Status`), and the last gate results seen this session. When `docs/plans/{slug}/tasks.json` exists, run `python3 coding-pipeline/scripts/tasks_state.py status docs/plans/{slug}/plan.md` and take row status from its output — never guess which rows are done.
 2. **Write the handoff** — at this step, read `references/handoff-template.md` and follow its structure. Point to existing artifacts (plan, codebase map, ADRs) instead of restating them; record the branch and plan slug first — without them the next session cannot resume the work. With an objective argument, tailor Next steps and Suggested skills to it.
-3. **Refresh `PROGRESS.md`** — at this step, read `references/progress-file.md`: append `Done` / `Failed`, rewrite `Current State` and `Next`, add `Lessons`. The handoff and `PROGRESS.md` must agree.
+3. **Refresh `PROGRESS.md`** — at this step, read `references/progress-file.md` and append one entry in that format: a `## [{slug}] YYYY-MM-DD — {title}` heading with `Done` / `Failed` / `Current State` / `Next` / `Lessons` bullets. Never rewrite earlier entries. The handoff and `PROGRESS.md` must agree.
 4. **Lessons are mandatory** — every rule this session learned the hard way, each with the failure or gate output that taught it. Omit the section only when nothing was learned, and say so.
 5. **Redact** API keys, tokens, passwords and PII from both files.
 6. **Editorial pass** (not a gate): run both texts past `coding-pipeline/references/prose-standards.md`.
