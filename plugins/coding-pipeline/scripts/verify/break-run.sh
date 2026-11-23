@@ -275,8 +275,13 @@ if kill -0 "$cmd_pid" 2>/dev/null; then
     echo "break-run: TIMEOUT after ${run_limit}s" >&2
     exit 2
 fi
+# The pid is cleared right after the wait: a late signal must not reach a reaped, possibly
+# reused pid. The group id outlives the leader while any member does, so one KILL stops a
+# descendant left behind (harmless when the group is empty).
 wait "$cmd_pid"
 run_rc=$?
+cmd_pid=""
+kill -KILL -- "-$grp_pid" 2>/dev/null
 run_out=$(cat "$out_tmp")
 rm -f "$out_tmp"
 printf '%s\n' "$run_out"

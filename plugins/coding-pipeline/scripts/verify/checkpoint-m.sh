@@ -173,6 +173,11 @@ done
 [ ${#TESTS[@]} -gt 0 ] || usage
 [ ${#EXPECT[@]} -gt 0 ] || usage
 
+# The gate runs through a python3 launcher; without it the gate cannot be measured at all.
+if [ -n "$gates_cmd" ] && ! command -v python3 >/dev/null 2>&1; then
+    unmeasured "gates: python3 not found"
+fi
+
 if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
     unmeasured "not a git repository"
 fi
@@ -487,8 +492,13 @@ if [ -n "$gates_cmd" ]; then
         rm -f "$gates_tmp"
         unmeasured "gates: TIMEOUT after ${gates_limit}s"
     fi
+    # The pid is cleared right after the wait: a late signal must not reach a reaped, possibly
+    # reused pid. The group id outlives the leader while any member does, so one KILL stops a
+    # descendant left behind (harmless when the group is empty).
     wait "$gates_pid" 2>/dev/null
     gates_rc=$?
+    gates_pid=""
+    kill -KILL -- "-$grp_pid" 2>/dev/null
     gates_out=$(cat "$gates_tmp")
     rm -f "$gates_tmp"
     if [ "$gates_rc" -ne 0 ]; then

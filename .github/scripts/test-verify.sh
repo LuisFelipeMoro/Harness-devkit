@@ -336,6 +336,12 @@ check "verdict: no-stress without no-review is usage, never silently ignored" 2 
 bash "$V/verdict.sh" --no-review --no-stress >/dev/null 2>&1; rc=$?
 check "verdict: no-stress without qa is usage" 2 "$rc"
 
+# AC22: classify on the 2-decimal score that is printed — (8*0.35+8*0.30)/0.65 is 7.999999999999998 as a float
+out=$(bash "$V/verdict.sh" --no-review --stress 8 --qa 8 2>&1); rc=$?
+check "verdict: equal scores at the bar are production ready" 0 "$rc" "$out" "VERDICT: PRODUCTION READY"
+out=$(bash "$V/verdict.sh" --no-review --stress 8 --qa 7.9 2>&1); rc=$?
+check "verdict: just under the bar stays conditional" 1 "$rc" "$out" "VERDICT: READY WITH CONDITIONS"
+
 # Test 2: verdict roster path hides score on hard-gate fail like legacy
 out=$(bash "$V/verdict.sh" --roster standard --classify-exit 0 --review 9 --stress 9 --qa 9 --hard-gate-fail lint 2>&1); rc=$?
 check "verdict: roster path hides score on hard-gate fail like legacy" 1 "$rc" "$out" "NOT READY"
@@ -4719,6 +4725,56 @@ else
 fi
 pkill -f "sleep 15.$u17" 2>/dev/null
 cd - >/dev/null || exit
+
+# AC22: a descendant left in the command's group after a NORMAL exit is stopped before the run returns
+br13="$W/br13"
+mkdir -p "$br13"
+printf 'ENABLED=yes\n' > "$br13/cfg.txt"
+cp "$br13/cfg.txt" "$br13/cfg.orig"
+u13="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 14.%s &\nexit 0\n' "$u13" > "$br13/leave.sh"
+bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br13/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br13/leave.sh" </dev/null >/dev/null 2>&1
+if cmp -s "$br13/cfg.txt" "$br13/cfg.orig" && [ ! -f "$br13/cfg.txt.devkit-break" ] && ! pgrep -f "sleep 14.$u13" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: descendant left after a normal exit is stopped — file not restored, marker left, or a 'sleep 14.$u13' survived"; fail=1
+fi
+pkill -f "sleep 14.$u13" 2>/dev/null
+
+cp_gates_fixture cp19
+u19="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 9.%s &\nexit 0\n' "$u19" > "$W/leave-gate.sh"
+out=$(cp_gates cp19 "bash $W/leave-gate.sh"); rc=$?
+check "checkpoint-m: descendant left after a normal gate exit is stopped" 0 "$rc" "$out" "M: PASS"
+if ! pgrep -f "sleep 9.$u19" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: descendant left after a normal gate exit is stopped — a 'sleep 9.$u19' survived"; fail=1
+fi
+pkill -f "sleep 9.$u19" 2>/dev/null
+
+# PATH holds the tools checkpoint-m needs, minus python3
+cp_gates_fixture cp20
+nopy="$W/nopy-bin"
+mkdir -p "$nopy"
+for t in git bash dirname awk grep sed cat rm mktemp find sort tr head tail cut date sleep kill env; do
+    tp=$(command -v "$t" 2>/dev/null) && [ -x "$tp" ] && ln -sf "$tp" "$nopy/$t"
+done
+out=$(PATH="$nopy" "$nopy/bash" "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp20-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "true" 2>&1 </dev/null); rc=$?
+check "checkpoint-m: missing python3 is unmeasured" 2 "$rc" "$out" "M: UNMEASURED — gates: python3 not found"
+cd - >/dev/null || exit
+
+# The race window is milliseconds, so the clears are checked by reading: each wait is followed by its pid being cleared.
+wiring_ok=1
+grep -A4 'wait "\$cmd_pid"' "$V/break-run.sh" | grep -q '^cmd_pid=""' || wiring_ok=0
+grep -A5 'wait "\$gates_pid"' "$V/checkpoint-m.sh" | grep -q '^ *gates_pid=""' || wiring_ok=0
+if [ "$wiring_ok" = 1 ]; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: watchdog pids cleared after wait — cmd_pid / gates_pid is not cleared right after its wait"; fail=1
+fi
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
