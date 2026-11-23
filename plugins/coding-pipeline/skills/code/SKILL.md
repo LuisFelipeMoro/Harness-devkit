@@ -30,4 +30,4 @@ description: Implement a plan (or a small inline task) row by row — spec, impl
 7. **Final proof.** After the last row (or at start when every row is `done`), run `references/loop.md` § Final proof: the plan's Gates once, FINAL-PROOF coder dispatches (one per Language or test suite) that falsify every code row, their evidence lines appended to `evidence.md` by the main session, a main-session re-break sample, then `checkpoint-m.sh --spec docs/plans/{slug}/plan.md --gates "<plan Gates>"` must print `M: PASS`.
 8. **Report.** One table: Task · mode · files · rows implemented · checkpoint line · Final proof line (gates, falsified rows, re-break sample); then every `Gap found` and anything the coder flagged (pinned versions, blast-radius callers the plan missed). Last line: `python3 scripts/tasks_state.py status docs/plans/{slug}/plan.md`. The run is complete only when it reads `{n}/{n} done`.
 
-Next: `/validate-code docs/plans/{slug}/plan.md`, then `/review-code`.
+Next: `/validate-code docs/plans/{slug}/plan.md`, then `/review-code`. Claude asks first: run it now / you run it later / stop.

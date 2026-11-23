@@ -4821,6 +4821,11 @@ check_skill_invocation_docs() {  # check_skill_invocation_docs <row> — the ask
     for f in plugins/coding-pipeline/CLAUDE.md AGENTS.md README.md plugins/devtools/skills/devkit-help/SKILL.md plugins/devtools/skills/write-a-skill/SKILL.md; do
         grep -qE 'Skills never run each other|invoke manually|every skill is started by the user|every skill is manual' "$R/$f" && miss="${miss}[$f: stale manual-only wording] "
     done
+    for f in plugins/coding-pipeline/skills/map/SKILL.md plugins/coding-pipeline/skills/planning/SKILL.md plugins/coding-pipeline/skills/code/SKILL.md plugins/coding-pipeline/skills/validate-code/SKILL.md plugins/coding-pipeline/skills/bugfix/SKILL.md plugins/pr-workflow/skills/review-code/SKILL.md; do
+        grep -E '^Next:' "$R/$f" 2>/dev/null | grep -qF -- 'run it now / you run it later / stop' || miss="${miss}[$f: Next line lacks the ask-first clause] "
+    done
+    grep -E '^Next:' "$R/plugins/coding-pipeline/skills/bugfix/SKILL.md" 2>/dev/null | grep -qF -- '`/pr` and `/improve-codebase-architecture` stay user-started' || miss="${miss}[bugfix: Next line lacks the user-started exceptions] "
+    grep -E '^Next:' "$R/plugins/pr-workflow/skills/review-code/SKILL.md" 2>/dev/null | grep -qF -- '`/pr-fix` stays user-started' || miss="${miss}[review-code: Next line lacks the user-started exception] "
     if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
 }
 check_skill_invocation_docs "docs: ask-before-invoking rule stated"

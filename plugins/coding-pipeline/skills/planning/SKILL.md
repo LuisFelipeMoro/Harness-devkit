@@ -21,4 +21,4 @@ description: Produce a reviewed, approved plan in the devkit plan template, from
 8. **Tasks table + approve.** At this step, read § Phase 4: rows are vertical tracer-bullet slices (prefactoring first; wide refactors as expand → migrate batches → contract); check every row's `Files`, `Test rows`, `Language`, `Tier`, `Depends on`, sizing (≤ 200 target · 400 soft · 800 hard) and bundling. AskUserQuestion: Approve / Request changes. Approve → `Status: approved`.
 9. **Summary.** At this step, read `references/output-contract.md` and print its block.
 
-Next: `/code docs/plans/{slug}/plan.md`.
+Next: `/code docs/plans/{slug}/plan.md`. Claude asks first: run it now / you run it later / stop.

@@ -15,4 +15,4 @@ description: Write a read-only, file:line-cited map of the code a topic touches 
 4. Spot-check the blast radius yourself: run LSP find-references (or grep) on the two most-changed symbols and compare counts. A mismatch is corrected in the map and noted under the total line.
 5. Write the file (or print with `--print`) using the output shape in `references/map-procedure.md`. Print the total line and the path.
 
-Next: `/planning` for the same topic — it reuses this map instead of re-mapping.
+Next: `/planning` for the same topic — it reuses this map instead of re-mapping. Claude asks first: run it now / you run it later / stop.
