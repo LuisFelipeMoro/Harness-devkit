@@ -39,10 +39,11 @@ case "$target" in
     *) abs="$cwd/$target" ;;
 esac
 # Resolve the parent directory (symlinks, `..`, doubled slashes) so neither a symlinked
-# plan dir nor a lexical trick hides the plan path; the basename is case-folded.
+# plan dir nor a lexical trick hides the plan path; the whole resolved path is case-folded
+# because a case-insensitive filesystem treats DOCS/Plans as docs/plans.
 abs="$(python3 -c 'import os, sys
 d, b = os.path.split(sys.argv[1])
-print(os.path.join(os.path.realpath(d), b.casefold()))' "$abs" 2>/dev/null)" || fail_open
+print(os.path.join(os.path.realpath(d), b).casefold())' "$abs" 2>/dev/null)" || fail_open
 [ -n "$abs" ] || fail_open
 
 case "$abs" in

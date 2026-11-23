@@ -129,15 +129,41 @@ if [ "$count" -ne 1 ]; then
     exit 2
 fi
 
-# kill_tree <pid> — TERM <pid> and every descendant. Descendants are collected
-# before anything is signalled: once the parent dies its children reparent to
-# init and `pgrep -P` can no longer find them.
-kill_tree() {
+# collect_tree <pid> — print <pid> and every descendant, one per line. The whole
+# tree is collected before anything is signalled: once a parent dies its
+# children reparent to init and `pgrep -P` can no longer find them.
+collect_tree() {
     local pid="$1" kid
+    echo "$pid"
     for kid in $(pgrep -P "$pid" 2>/dev/null); do
-        kill_tree "$kid"
+        collect_tree "$kid"
     done
-    kill -TERM "$pid" 2>/dev/null
+}
+
+# pid_alive <pid> — running, not a zombie awaiting its parent's wait.
+pid_alive() {
+    local st
+    st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
+    [ -n "$st" ] || return 1
+    case "$st" in Z*) return 1 ;; esac
+    return 0
+}
+
+# stop_tree <pid> — TERM the whole tree, poll up to 5 s, KILL every survivor. A
+# command that traps or ignores TERM cannot outlive this, so the caller's
+# following `wait` cannot block on it.
+stop_tree() {
+    local pids p i alive
+    pids=$(collect_tree "$1")
+    for p in $pids; do kill -TERM "$p" 2>/dev/null; done
+    for i in $(seq 1 25); do
+        alive=0
+        for p in $pids; do pid_alive "$p" && alive=1; done
+        [ "$alive" -eq 0 ] && return 0
+        sleep 0.2
+    done
+    for p in $pids; do kill -KILL "$p" 2>/dev/null; done
+    return 0
 }
 
 # gate_timeout — DEVKIT_GATE_TIMEOUT when it is a positive integer, else 900,
@@ -212,7 +238,7 @@ trap cleanup EXIT
 # then translate the signal into a plain `exit 2` so cleanup's own EXIT trap
 # performs the one restore path above, instead of duplicating it here.
 on_interrupt() {
-    [ -n "$cmd_pid" ] && kill -TERM "$cmd_pid" 2>/dev/null
+    [ -n "$cmd_pid" ] && stop_tree "$cmd_pid"
     exit 2
 }
 trap on_interrupt INT TERM
@@ -248,7 +274,7 @@ while kill -0 "$cmd_pid" 2>/dev/null && [ "$run_waited" -lt "$run_limit" ]; do
     run_waited=$((run_waited + 1))
 done
 if kill -0 "$cmd_pid" 2>/dev/null; then
-    kill_tree "$cmd_pid"
+    stop_tree "$cmd_pid"
     wait "$cmd_pid" 2>/dev/null
     echo "break-run: TIMEOUT after ${run_limit}s" >&2
     exit 2

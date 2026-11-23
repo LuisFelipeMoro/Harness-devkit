@@ -43,21 +43,55 @@ cleanup_tmp() {
     [ ${#TMPFILES[@]} -gt 0 ] && rm -f "${TMPFILES[@]}"
 }
 trap cleanup_tmp EXIT
+gates_pid=""
+# INT/TERM: stop the running gate's whole tree (TERM, 5 s, KILL) before exiting 2,
+# so an interrupted checkpoint never orphans its gate.
+on_interrupt() {
+    [ -n "$gates_pid" ] && stop_tree "$gates_pid"
+    exit 2
+}
+trap on_interrupt INT TERM
 
 unmeasured() {
     echo "M: UNMEASURED — $1" >&2
     exit 2
 }
 
-# kill_tree <pid> — TERM <pid> and every descendant. Descendants are collected
-# before anything is signalled: once the parent dies its children reparent to
-# init and `pgrep -P` can no longer find them.
-kill_tree() {
+# collect_tree <pid> — print <pid> and every descendant, one per line. The whole
+# tree is collected before anything is signalled: once a parent dies its
+# children reparent to init and `pgrep -P` can no longer find them.
+collect_tree() {
     local pid="$1" kid
+    echo "$pid"
     for kid in $(pgrep -P "$pid" 2>/dev/null); do
-        kill_tree "$kid"
+        collect_tree "$kid"
     done
-    kill -TERM "$pid" 2>/dev/null
+}
+
+# pid_alive <pid> — running, not a zombie awaiting its parent's wait.
+pid_alive() {
+    local st
+    st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
+    [ -n "$st" ] || return 1
+    case "$st" in Z*) return 1 ;; esac
+    return 0
+}
+
+# stop_tree <pid> — TERM the whole tree, poll up to 5 s, KILL every survivor. A
+# command that traps or ignores TERM cannot outlive this, so the caller's
+# following `wait` cannot block on it.
+stop_tree() {
+    local pids p i alive
+    pids=$(collect_tree "$1")
+    for p in $pids; do kill -TERM "$p" 2>/dev/null; done
+    for i in $(seq 1 25); do
+        alive=0
+        for p in $pids; do pid_alive "$p" && alive=1; done
+        [ "$alive" -eq 0 ] && return 0
+        sleep 0.2
+    done
+    for p in $pids; do kill -KILL "$p" 2>/dev/null; done
+    return 0
 }
 
 # gate_timeout — DEVKIT_GATE_TIMEOUT when it is a positive integer, else 900,
@@ -453,7 +487,7 @@ if [ -n "$gates_cmd" ]; then
         gates_waited=$((gates_waited + 1))
     done
     if kill -0 "$gates_pid" 2>/dev/null; then
-        kill_tree "$gates_pid"
+        stop_tree "$gates_pid"
         wait "$gates_pid" 2>/dev/null
         rm -f "$gates_tmp"
         unmeasured "gates: TIMEOUT after ${gates_limit}s"

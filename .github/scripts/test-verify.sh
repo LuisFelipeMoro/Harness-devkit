@@ -4073,7 +4073,7 @@ check_gate_timeout_docs() {  # check_gate_timeout_docs <row> — the stall rule 
     miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/skills/validate-code/references/execution-and-report.md" '`</dev/null`' '10 minutes is a stall')"
     miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/references/thresholds.md" '`DEVKIT_GATE_TIMEOUT`, positive integer; unset or invalid → 900' '10 s per line (`DEVKIT_PUSH_STDIN_TIMEOUT`' 'Background run stall | 10 minutes with no change to its output file')"
     sec=$(awk '/^## \[3\.4\.0\]/{f=1;next} /^## \[/{f=0} f' "$R/CHANGELOG.md")
-    printf '%s\n' "$sec" | grep -qF -- 'DEVKIT_GATE_TIMEOUT' || miss="$miss[CHANGELOG [3.4.0]: DEVKIT_GATE_TIMEOUT] "
+    printf '%s\n' "$sec" | grep -qF -- 'DEVKIT_GATE_TIMEOUT' || miss="${miss}[CHANGELOG [3.4.0]: DEVKIT_GATE_TIMEOUT] "
     miss="$miss$(gate_timeout_missing "$R/README.md" 'DEVKIT_GATE_TIMEOUT')"
     if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
 }
@@ -4526,18 +4526,128 @@ check "break-run: test command timeout restores and reports" 2 "$rc" "$out" "bre
 cmp -s "$br6/cfg.txt" "$br6/cfg.orig" && [ ! -f "$br6/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 8 ] \
     && pass=$((pass + 1)) || { echo "FAIL: break-run: test command timeout restores and reports — file not restored, marker left, or took $((t1 - t0))s"; fail=1; }
 
+# Every row below names its sleep with a per-run unique argument, so a match can only be
+# this run's own child, never another process on the machine; survivors are always reaped.
 br7="$W/br7"
 mkdir -p "$br7"
 printf 'ENABLED=yes\n' > "$br7/cfg.txt"
-printf '#!/usr/bin/env bash\nsleep 47\ntrue\n' > "$br7/slow.sh"
+u7="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 47.%s\ntrue\n' "$u7" > "$br7/slow.sh"
 DEVKIT_GATE_TIMEOUT=1 run_br --file "$br7/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br7/slow.sh" >/dev/null 2>&1
 sleep 1
-if pgrep -f 'sleep 47' >/dev/null 2>&1; then
-    echo "FAIL: break-run: timeout kills the test command's children — a 'sleep 47' survived"; fail=1
-    pkill -f 'sleep 47' 2>/dev/null
+if pgrep -f "sleep 47.$u7" >/dev/null 2>&1; then
+    echo "FAIL: break-run: timeout kills the test command's children — a 'sleep 47.$u7' survived"; fail=1
+    pkill -f "sleep 47.$u7" 2>/dev/null
 else
     pass=$((pass + 1))
 fi
+
+# run_bounded <limit s> <outfile> <cmd...> — run with stdin closed, KILL it if it outlives the limit
+# (sets bounded_rc, 124 on expiry), so a hung watchdog fails its row instead of hanging the suite.
+run_bounded() {
+    local lim="$1" of="$2" p n=0
+    shift 2
+    "$@" </dev/null >"$of" 2>&1 &
+    p=$!
+    while kill -0 "$p" 2>/dev/null && [ "$n" -lt $((lim * 5)) ]; do sleep 0.2; n=$((n + 1)); done
+    if kill -0 "$p" 2>/dev/null; then
+        pkill -KILL -P "$p" 2>/dev/null
+        kill -KILL "$p" 2>/dev/null
+        wait "$p" 2>/dev/null
+        bounded_rc=124
+    else
+        wait "$p"
+        bounded_rc=$?
+    fi
+}
+
+# a command that ignores TERM (and passes that on to its child) must still die: TERM, 5 s, KILL
+br8="$W/br8"
+mkdir -p "$br8"
+printf 'ENABLED=yes\n' > "$br8/cfg.txt"
+cp "$br8/cfg.txt" "$br8/cfg.orig"
+u8="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 18.%s\n' "$u8" > "$br8/stubborn.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$br8/out" bash -c 'cd "$1" && shift && exec bash "$@"' _ "$W" "$V/break-run.sh" \
+    --file "$br8/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br8/stubborn.sh"
+rc=$bounded_rc; out=$(cat "$br8/out")
+t1=$(date +%s)
+check "break-run: TERM-ignoring test command is killed and the file restored" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+if cmp -s "$br8/cfg.txt" "$br8/cfg.orig" && [ ! -f "$br8/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 12 ] \
+    && ! pgrep -f "sleep 18.$u8" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: break-run: TERM-ignoring test command is killed and the file restored — file not restored, marker left, survivor, or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 18.$u8" 2>/dev/null
+
+cp_gates_fixture cp16
+u16="$$$RANDOM"
+printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 17.%s\n' "$u16" > "$W/stubborn-gate.sh"
+t0=$(date +%s)
+DEVKIT_GATE_TIMEOUT=1 run_bounded 25 "$W/cp16.out" bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp16-spec.md" \
+    --tests filler_test.go --expect filler_test.go filler.go --gates "bash $W/stubborn-gate.sh"
+rc=$bounded_rc; out=$(cat "$W/cp16.out")
+t1=$(date +%s)
+check "checkpoint-m: TERM-ignoring gate is killed" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+if [ $((t1 - t0)) -lt 12 ] && ! pgrep -f "sleep 17.$u16" >/dev/null 2>&1; then
+    pass=$((pass + 1))
+else
+    echo "FAIL: checkpoint-m: TERM-ignoring gate is killed — survivor or took $((t1 - t0))s"; fail=1
+fi
+pkill -f "sleep 17.$u16" 2>/dev/null
+cd - >/dev/null || exit
+
+# wait_for_child <unique sleep arg> — poll (bounded, ~10 s) until the child exists
+wait_for_child() {
+    local n=0
+    while ! pgrep -f "$1" >/dev/null 2>&1 && [ "$n" -lt 50 ]; do sleep 0.2; n=$((n + 1)); done
+    pgrep -f "$1" >/dev/null 2>&1
+}
+
+br9="$W/br9"
+mkdir -p "$br9"
+printf 'ENABLED=yes\n' > "$br9/cfg.txt"
+cp "$br9/cfg.txt" "$br9/cfg.orig"
+u9="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 16.%s\n' "$u9" > "$br9/child.sh"
+bg_br --file "$br9/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br9/child.sh" >/dev/null 2>&1
+if wait_for_child "sleep 16.$u9"; then
+    kill -TERM "$bg_br_pid" 2>/dev/null
+    wait "$bg_br_pid" 2>/dev/null; rc=$?
+    if [ "$rc" = 2 ] && cmp -s "$br9/cfg.txt" "$br9/cfg.orig" && [ ! -f "$br9/cfg.txt.devkit-break" ] \
+        && ! pgrep -f "sleep 16.$u9" >/dev/null 2>&1; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: break-run: interrupt stops the test command's children — rc=$rc, file not restored, or the child survived"; fail=1
+    fi
+else
+    echo "FAIL: break-run: interrupt stops the test command's children — the child never started"; fail=1
+    kill -KILL "$bg_br_pid" 2>/dev/null
+fi
+pkill -f "sleep 16.$u9" 2>/dev/null
+
+cp_gates_fixture cp17
+u17="$$$RANDOM"
+printf '#!/usr/bin/env bash\nsleep 15.%s\n' "$u17" > "$W/child-gate.sh"
+bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp17-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "bash $W/child-gate.sh" </dev/null >/dev/null 2>&1 &
+cp17_pid=$!
+if wait_for_child "sleep 15.$u17"; then
+    kill -TERM "$cp17_pid" 2>/dev/null
+    wait "$cp17_pid" 2>/dev/null; rc=$?
+    if [ "$rc" = 2 ] && ! pgrep -f "sleep 15.$u17" >/dev/null 2>&1; then
+        pass=$((pass + 1))
+    else
+        echo "FAIL: checkpoint-m: interrupt stops the gate tree — rc=$rc or the gate's child survived"; fail=1
+    fi
+else
+    echo "FAIL: checkpoint-m: interrupt stops the gate tree — the gate never started"; fail=1
+    kill -KILL "$cp17_pid" 2>/dev/null
+fi
+pkill -f "sleep 15.$u17" 2>/dev/null
+cd - >/dev/null || exit
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

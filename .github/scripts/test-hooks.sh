@@ -136,6 +136,7 @@ case "$msg" in
     *) echo "FAIL: tasks-state-guard: Write to docs/plans tasks.json blocked — stderr was: $msg"; fail=1 ;;
 esac
 rel_json=$(printf '{"cwd":"%s","tool_input":{"file_path":"docs/plans/x/tasks.json"}}' "$TS")
+expect "tasks-state-guard: directory case variant blocked" tasks-state-guard.sh "$(tsg_json "$TS/DOCS/Plans/x/tasks.json")" 2
 expect "tasks-state-guard: Edit of a relative docs/plans path blocked" tasks-state-guard.sh "$rel_json" 2
 other_ok=0
 printf '%s' "$(printf '{"cwd":"%s","tool_input":{"file_path":"docs/plans/x/run-state.json"}}' "$TS")" | bash "$HOOKS/tasks-state-guard.sh" >/dev/null 2>&1 && \
