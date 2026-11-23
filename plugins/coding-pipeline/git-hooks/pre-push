@@ -74,7 +74,32 @@ else
     zero_sha="0000000000000000000000000000000000000000"
     push_lines=""
     if [ ! -t 0 ]; then
-        push_lines="$(cat)"
+        # Bounded, never `cat`: a caller that leaves stdin an open pipe nobody
+        # writes to or closes (a background gate sweep did, and hung 2h38m)
+        # would block `cat` forever. DEVKIT_PUSH_STDIN_TIMEOUT seconds per
+        # line; a silent stdin yields no lines and takes the fallback below.
+        push_timeout="${DEVKIT_PUSH_STDIN_TIMEOUT:-10}"
+        case "$push_timeout" in
+            ''|*[!0-9]*) push_timeout=10 ;;
+        esac
+        [ "$push_timeout" -gt 0 ] || push_timeout=10
+        while :; do
+            push_line=""
+            read_rc=0
+            IFS= read -r -t "$push_timeout" push_line || read_rc=$?
+            if [ "$read_rc" -eq 0 ]; then
+                push_lines="${push_lines}${push_line}
+"
+                continue
+            fi
+            # rc 1 is EOF — an unterminated final line still counts; anything
+            # above 128 is the timeout, whose partial text is never trusted.
+            if [ "$read_rc" -eq 1 ] && [ -n "$push_line" ]; then
+                push_lines="${push_lines}${push_line}
+"
+            fi
+            break
+        done
     fi
     if [ -n "$push_lines" ]; then
         guard_rc=0

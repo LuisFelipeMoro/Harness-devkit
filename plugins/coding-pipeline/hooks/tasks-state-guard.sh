@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# PreToolUse(Write|Edit|MultiEdit) — block a hand edit of a plan's tasks.json or tasks.json.sum.
+# PreToolUse(Write|Edit|MultiEdit) — block a hand edit of a plan's tasks.json.
 #
-# tasks.json holds the status of every Tasks row and tasks.json.sum stamps it. Only
-# scripts/tasks_state.py may write either: a hand edit can drop or reorder rows, or
+# tasks.json holds the status of every Tasks row and its embedded checksum. Only
+# scripts/tasks_state.py may write it: a hand edit can drop or reorder rows, or
 # forge a status the next session would trust. The match is on the normalised absolute
-# path, one directory level under docs/plans, so ordinary json files are never judged.
+# path, one directory level under docs/plans (parent dir resolved, so a symlinked dir cannot bypass it), so ordinary json files are never judged.
 # Exit 2 blocks the call and prints the reason on stderr. Every other outcome exits 0:
 # a path that does not match, a malformed payload, or an internal fault. A guard fault
 # must never block every Write (fail open, SEC-4).
@@ -26,8 +26,9 @@ devkit_hook_enabled "pre:write:tasks-state" || exit 0
 
 input=$(cat)
 target="$(devkit_field "$input" file_path)"
-case "$target" in
-    *tasks.json|*tasks.json.sum) ;;
+# Cheap pre-filter, case-insensitive: macOS filesystems fold case, so TASKS.JSON is the same file.
+case "$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]')" in
+    *tasks.json) ;;
     *) exit 0 ;;
 esac
 
@@ -37,12 +38,15 @@ case "$target" in
     /*) abs="$target" ;;
     *) abs="$cwd/$target" ;;
 esac
-# Lexical normalisation: `..` and doubled slashes must not hide the plan path.
-abs="$(python3 -c 'import os, sys; print(os.path.normpath(sys.argv[1]))' "$abs" 2>/dev/null)" || fail_open
+# Resolve the parent directory (symlinks, `..`, doubled slashes) so neither a symlinked
+# plan dir nor a lexical trick hides the plan path; the basename is case-folded.
+abs="$(python3 -c 'import os, sys
+d, b = os.path.split(sys.argv[1])
+print(os.path.join(os.path.realpath(d), b.casefold()))' "$abs" 2>/dev/null)" || fail_open
 [ -n "$abs" ] || fail_open
 
 case "$abs" in
-    */docs/plans/*/tasks.json|*/docs/plans/*/tasks.json.sum) ;;
+    */docs/plans/*/tasks.json) ;;
     *) exit 0 ;;
 esac
 

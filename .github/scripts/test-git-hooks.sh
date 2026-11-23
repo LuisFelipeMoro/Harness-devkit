@@ -48,7 +48,9 @@ fixture() {
 # stays out of reach unless a fixture stubs it explicitly.
 run_hook() {        # run_hook <hook> <fixture-dir> — echoes output, returns exit code
     local hook="$1" dir="$2"
-    ( cd "$dir" && PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/$hook" 2>&1 )
+    # stdin is /dev/null: a hook that reads it must see EOF, never the open pipe
+    # of whoever launched this suite (an open one hung a gate sweep for 2h38m).
+    ( cd "$dir" && PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/$hook" 2>&1 </dev/null )
 }
 
 expect_exit() {     # expect_exit <name> <hook> <fixture-dir> <want-exit>
@@ -458,6 +460,41 @@ run_push() {
     ( cd "$dir" && printf 'refs/heads/main %s refs/heads/main %s\n' "$lsha" "$rsha" \
         | PATH="$dir/.stub-bin:/usr/bin:/bin" bash "$HOOKS/pre-push" origin "$dir" 2>&1 )
 }
+
+# A silent, open stdin (a FIFO a `sleep 15` holds open read-write and never
+# writes to, so even a regressed hook ends once it exits) must not hang the hook: the bounded read gives up and the fallback
+# base resolution still catches the offending commit.
+d="$(guard_repo push-silent-stdin)"
+( cd "$d" && printf 'mode: atomic\n' > coverage.out && git add coverage.out && git commit -qm "oops: coverage" )
+mkfifo "$d/silent.fifo"
+sleep 15 <>"$d/silent.fifo" &
+holder=$!
+t0="$(date +%s)"
+out="$( cd "$d" && DEVKIT_PUSH_STDIN_TIMEOUT=1 PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/pre-push" origin "$d" 2>&1 <"$d/silent.fifo" )"; got=$?
+t1="$(date +%s)"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+ok=1; [ "$got" = "1" ] || ok=0
+case "$out" in *"coverage.out"*) ;; *) ok=0 ;; esac
+[ $((t1 - t0)) -lt 8 ] || ok=0
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: pre-push: silent open stdin does not hang — exit $got after $((t1 - t0))s, got: $out"; fail=1
+fi
+
+# Every piped ref line is read, not just the first: the offending range is the
+# second line, the first range is clean.
+d="$(guard_repo push-two-lines)"
+( cd "$d" && printf 'clean\n' > c1.txt && git add c1.txt && git commit -qm "clean one" )
+sha1="$(cd "$d" && git rev-parse HEAD)"
+base_sha="$(cd "$d" && git rev-parse HEAD~1)"
+( cd "$d" && printf 'mode: atomic\n' > coverage.out && git add coverage.out && git commit -qm "oops: coverage" )
+sha2="$(cd "$d" && git rev-parse HEAD)"
+out="$( cd "$d" && printf 'refs/heads/a %s refs/heads/a %s\nrefs/heads/main %s refs/heads/main %s\n' "$sha1" "$base_sha" "$sha2" "$sha1" \
+    | PATH="$d/.stub-bin:/usr/bin:/bin" bash "$HOOKS/pre-push" origin "$d" 2>&1 )"; got=$?
+ok=1; [ "$got" = "1" ] || ok=0
+case "$out" in *"coverage.out"*) ;; *) ok=0 ;; esac
+if [ "$ok" = 1 ]; then pass=$((pass + 1)); else
+    echo "FAIL: pre-push: every piped ref line is read — exit $got, got: $out"; fail=1
+fi
 
 # New branch (remote sha all zeros): every commit `git rev-list <lsha> --not
 # --remotes` finds is checked on its own, not just the tip's net diff — an

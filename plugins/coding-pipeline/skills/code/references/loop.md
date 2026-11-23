@@ -97,6 +97,11 @@ route it exactly like a FAIL.
 - `--gates` carries format + lint + the existing test suite for the stack
   (`references/quality-gate-reference.md`). The per-row form omits it (the coder runs the suite once green);
   § Final proof passes it once. Mechanical gates still run in every mode, at every size.
+- **A gate run never waits forever.** `checkpoint-m.sh --gates` runs the command with stdin from
+  `/dev/null` under a watchdog of `DEVKIT_GATE_TIMEOUT` seconds (default 900); on expiry it kills the
+  command and exits 2 `M: UNMEASURED — gates: TIMEOUT after {N}s` — route it like a FAIL. Any gate or test
+  run you start in the background closes stdin (`</dev/null`). A background run whose output file has not
+  changed for 10 minutes is a stall: kill it, say so, and re-run it with stdin closed.
 
 ## Fix rounds
 

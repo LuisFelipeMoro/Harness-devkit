@@ -183,7 +183,7 @@ input, plus the measured fix-round factors, and you can override the mode per ro
 falsification evidence run in every mode.
 
 Row state lives in `docs/plans/{slug}/tasks.json`, one row per Tasks row, written only by `scripts/tasks_state.py`
-(`init`, `set`, `status`, `verify`); a `tasks.json.sum` checksum makes a hand edit visible. A session that resumes a
+(`init`, `set`, `status`, `verify`); a checksum embedded in `tasks.json` makes a hand edit visible. A session that resumes a
 plan runs the **Resume** protocol: it reads the `tasks_state` status line and continues from the rows still `todo` or
 `in_progress`. When every row is `done`, **Final proof** runs falsification and the full gates once, after the last row.
 
@@ -319,7 +319,7 @@ Session hooks run in Claude Code. They are deterministic (regex and exit codes, 
 | `destructive-guard.sh` | PreToolUse(Bash) | Blocks force-push, remote branch deletion, `reset --hard` on a mainline, root/home recursive deletes, `curl \| sh`, `chmod 777`, destructive DDL |
 | `gate-filter.sh` | PreToolUse(Bash) | Opt-in: set `DEVKIT_GATE_FILTER=1`. Rewrites a simple test/lint gate command (`go test`, `tsc`, `eslint`, `npm test`…) so only failure lines and a 20-line tail reach context; the full output stays in a file named on the last line. Opt-in because Claude Code cannot pre-check the rewritten compound command, so it needs a broad Bash allow (auto/bypass mode or the driver grant). Inert when `rtk` is on PATH |
 | `secret-write-guard.sh` | PreToolUse(Write/Edit) | Blocks writing a recognisable live credential |
-| `tasks-state-guard.sh` | PreToolUse(Write/Edit) | Blocks direct writes to a plan's `tasks.json` and `tasks.json.sum`; row state changes only through `scripts/tasks_state.py` |
+| `tasks-state-guard.sh` | PreToolUse(Write/Edit) | Blocks direct writes to a plan's `tasks.json` (symlinked plan directories and case variants included); row state changes only through `scripts/tasks_state.py` |
 | `go-test-name-guard.sh` | PreToolUse(Write) | Blocks creating a `*_test.go` with no same-named source beside it (`bar_test.go` needs `bar.go`); existing files are not judged |
 | `dispatch-budget.sh` | PreToolUse(Agent) | Warns once past the session dispatch budget (default 20, `DEVKIT_DISPATCH_BUDGET`); flags an oversized dispatch prompt |
 | `session-tracker.sh` | PostToolUse | Records changed source files and whether a gate command ran |
@@ -380,6 +380,7 @@ All settings are environment variables. None is required.
 | `DEVKIT_HOOK_PROFILE=strict` | `delivery-gate` blocks once per session instead of warning |
 | `DEVKIT_DISABLED_HOOKS=id,id` | Disables individual hooks: `pre:read:env-guard`, `pre:bash:destructive-guard`, `pre:bash:gate-filter`, `pre:write:secret-guard`, `pre:write:go-test-name`, `pre:write:tasks-state`, `post:session-tracker`, `stop:delivery-gate` |
 | `DEVKIT_GATE_FILTER=1` | Turns on `gate-filter.sh` (off by default) |
+| `DEVKIT_GATE_TIMEOUT=900` | Seconds before `checkpoint-m.sh --gates` and `break-run.sh` kill a gate that never ends (positive integer; invalid → 900). `DEVKIT_PUSH_STDIN_TIMEOUT=10` bounds `pre-push`'s read of git's ref lines |
 | `DEVKIT_GATE_RE` | Regex of commands `gate-filter.sh` and `session-tracker.sh` treat as a gate; the default covers `go test`, `tsc`, `eslint`, `npm test`, `pytest`, `cargo test` and more (`hooks/hook-lib.sh`) |
 | `DEVKIT_DISPATCH_BUDGET` | Subagent dispatches per session before the one-time warning. Default 20 |
 | `DEVKIT_PROMPT_MAX_CHARS`, `DEVKIT_PROMPT_MAX_FILES` | Size at which a dispatch prompt is flagged as oversized. Defaults 6000 characters, 8 files |

@@ -27,7 +27,7 @@ This devkit is a Harness. Four components, all mandatory:
   | `gate-filter.sh` | PreToolUse(Bash) | `pre:bash:gate-filter` | Opt-in (`DEVKIT_GATE_FILTER=1`) because Claude Code cannot pre-check the rewritten compound command and needs a broad Bash allow (auto/bypass or driver grant); rewrites a simple test/lint gate command so only failures and a 20-line tail reach context; full output kept in a file named in the last line |
   | `secret-write-guard.sh` | PreToolUse(Write/Edit) | `pre:write:secret-guard` | Blocks writing a recognisable live credential into the tree |
   | `go-test-name-guard.sh` | PreToolUse(Write) | `pre:write:go-test-name` | Blocks creating a `*_test.go` with no same-named source beside it (go.md naming rule); existing files are not judged |
-  | `tasks-state-guard.sh` | PreToolUse(Write/Edit) | `pre:write:tasks-state` | Blocks hand edits of a plan's `tasks.json` / `tasks.json.sum`; only `scripts/tasks_state.py` writes them |
+  | `tasks-state-guard.sh` | PreToolUse(Write/Edit) | `pre:write:tasks-state` | Blocks hand edits of a plan's `tasks.json` (parent dir resolved, basename case-folded); only `scripts/tasks_state.py` writes it |
   | `session-tracker.sh` | PostToolUse | `post:session-tracker` | Records which source files changed and whether any gate command ran |
   | `context-budget.sh` | PostToolUse | `post:context-budget` | Reads context fill from the session transcript; warns at 60%, calls the 80% ceiling |
   | `dispatch-budget.sh` | PreToolUse(Agent\|Task) | `pre:agent:dispatch-budget` | Counts subagent dispatches, warns once past the session budget |

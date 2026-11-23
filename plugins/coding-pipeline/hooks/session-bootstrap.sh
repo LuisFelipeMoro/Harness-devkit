@@ -69,7 +69,6 @@ import sys
 LIMIT = 9500
 ROWS_CAP = 3000          # the row-status block's own bound; PROGRESS gives way to it
 TASKS_CAP = 64 * 1024    # SEC-5: a larger tasks.json is skipped, never parsed
-SUM_CAP = 256
 PLAN_CAP = 256 * 1024    # plan.md is read only for the Depends-on column
 LESSONS_MAX = 15
 LESSONS_CHARS = 1500
@@ -210,12 +209,7 @@ def tasks_lines(path):
         return [unreadable(slug)], False
     # The stamp is checked before the all-done filter: a forged all-done plan is
     # the exact state a session must not trust, so it cannot be silent.
-    try:
-        recorded, _ = read_capped(os.path.join(os.path.dirname(path), "tasks.json.sum"), SUM_CAP)
-        stamp_ok = recorded.decode("utf-8").strip() == canonical_sum(rows)
-    except (OSError, ValueError):
-        stamp_ok = False
-    if not stamp_ok:
+    if doc.get("sum") != canonical_sum(rows):
         return [f"[{slug}] tasks.json changed outside tasks_state.py — run tasks_state.py verify"], False
     if all(r["status"] == "done" for r in rows):
         return [], False

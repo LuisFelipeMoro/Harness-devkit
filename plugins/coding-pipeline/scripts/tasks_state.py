@@ -103,7 +103,9 @@ ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9._-]{0,15}")
 LOCK_TIMEOUT_DEFAULT = 5.0
 USAGE = "usage: tasks_state.py {init|status|verify} <plan.md> | set <plan.md> <ID> <status> [--evidence TEXT]"
 EVIDENCE_MAX = 300
-CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# C0/C1 controls plus the Unicode line separators and bidi controls that can forge or hide text on read.
+CONTROL_RE = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+TAMPER_MSG = "TASKS: FAIL — tasks.json changed outside tasks_state.py; run tasks_state.py verify"
 # (from, to) → the rule the transition must meet (AC2). Any pair not listed is an illegal transition.
 TRANSITIONS = {
     ("todo", "in_progress"): "deps",
@@ -192,6 +194,8 @@ def load(plan):
         raise StateError(2, "TASKS: UNMEASURED — tasks.json has a duplicate row ID")
     if not isinstance(data.get("plan"), str) or not isinstance(data.get("slug"), str):
         raise StateError(2, "TASKS: UNMEASURED — tasks.json has no plan or slug")
+    if data.get("sum") != canonical_sum(rows):
+        raise StateError(1, TAMPER_MSG)
     return TaskFile(SCHEMA, data["plan"], data["slug"], rows)
 
 
@@ -256,18 +260,8 @@ def _atomic_write(path, text):
 
 def _write_state(tf, path):
     doc = {"schema": tf.schema, "plan": tf.plan, "slug": tf.slug, "rows": tf.rows}
+    doc["sum"] = canonical_sum(tf.rows)
     _atomic_write(path, json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
-    _atomic_write(path + ".sum", canonical_sum(tf.rows) + "\n")
-
-
-def _sum_matches(path, rows):
-    """True when <path>.sum holds the canonical hash of rows; a missing or unreadable sum is a mismatch."""
-    try:
-        with open(path + ".sum", encoding="utf-8") as f:
-            recorded = f.read().strip()
-    except OSError:
-        recorded = ""
-    return recorded == canonical_sum(rows)
 
 
 def _git(cwd, *args):
@@ -312,8 +306,7 @@ def init(plan):
     plan_rows = _plan_rows(plan)
     _check_plan_ids(plan_rows)
     path = tasks_path(plan)
-    for p in (path, path + ".sum"):
-        _refuse_symlink(p)
+    _refuse_symlink(path)
     plan_ids = [r["id"] for r in plan_rows]
     slug = os.path.basename(os.path.dirname(os.path.abspath(plan)))
     root = _repo_root(os.path.dirname(os.path.abspath(plan)))
@@ -322,8 +315,6 @@ def init(plan):
     try:
         if os.path.lexists(path):
             stored = load(plan)
-            if not _sum_matches(path, stored.rows):
-                raise StateError(1, "TASKS: FAIL — tasks.json changed outside tasks_state.py; run tasks_state.py verify")
             stored_ids = [r["id"] for r in stored.rows]
             for sid in stored_ids:
                 if sid not in plan_ids:
@@ -357,7 +348,7 @@ def _check_deps(row_id, plan_rows, rows):
 
 
 def set_status(plan, row_id, status_to, evidence):
-    """Apply one allowed transition under the lock; rewrite tasks.json, then tasks.json.sum. Returns the TaskFile."""
+    """Apply one allowed transition under the lock; rewrite tasks.json (rows and sum in one atomic write). Returns the TaskFile."""
     if status_to not in STATUSES:
         raise StateError(2, f"TASKS: UNMEASURED — unknown status {status_to[:20]!r}; use {', '.join(STATUSES)}")
     if len(evidence) > EVIDENCE_MAX:
@@ -365,13 +356,10 @@ def set_status(plan, row_id, status_to, evidence):
     text = CONTROL_RE.sub("", evidence)
     plan_rows = _plan_rows(plan)
     path = tasks_path(plan)
-    for p in (path, path + ".sum"):
-        _refuse_symlink(p)
+    _refuse_symlink(path)
     fd = _lock(plan)
     try:
         tf = load(plan)
-        if not _sum_matches(path, tf.rows):
-            raise StateError(1, "TASKS: FAIL — tasks.json changed outside tasks_state.py; run tasks_state.py verify")
         row = next((r for r in tf.rows if r["id"] == row_id), None)
         if row is None:
             raise StateError(2, f"TASKS: UNMEASURED — unknown task {row_id!r}; not in tasks.json (run tasks_state.py init)")
@@ -417,8 +405,7 @@ def verify(plan):
             if gone:
                 return 1, f"TASKS: FAIL — stored row {gone[0]!r} is no longer in the plan"
             return 1, "TASKS: FAIL — stored row order differs from the plan"
-        _refuse_symlink(tasks_path(plan) + ".sum")
-        if not _sum_matches(tasks_path(plan), rows):
+        if data.get("sum") != canonical_sum(rows):
             return 1, "TASKS: FAIL — tasks.json changed outside tasks_state.py"
         return 0, "TASKS: PASS"
     except StateError as e:

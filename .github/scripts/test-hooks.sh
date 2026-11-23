@@ -125,7 +125,7 @@ got=$(printf '%s' "$(gtg_json "$GT/block/bar_test.go")" | env HOME="$GT/home" ba
 if [ "$got" = 0 ]; then pass=$((pass + 1)); else echo "FAIL: go-test-guard: fails open on internal error — stub shared script exit 3 gave $got (want 0)"; fail=1; fi
 rm -rf "$GT"
 
-# ── tasks-state-guard: tasks.json and tasks.json.sum are written only by tasks_state.py ──
+# ── tasks-state-guard: tasks.json is written only by tasks_state.py ──
 TS="$(mktemp -d "${TMPDIR:-/tmp}/devkit-tsg.XXXXXX")"
 mkdir -p "$TS/docs/plans/x"
 tsg_json() { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }
@@ -143,7 +143,9 @@ printf '%s' "$(tsg_json "$TS/src/tasks.json")" | bash "$HOOKS/tasks-state-guard.
 if [ "$other_ok" = 1 ]; then pass=$((pass + 1)); else echo "FAIL: tasks-state-guard: other json files pass — a non-plan json was blocked"; fail=1; fi
 expect "tasks-state-guard: malformed payload fails open" tasks-state-guard.sh 'not json' 0
 expect "tasks-state-guard: disabled by DEVKIT_DISABLED_HOOKS" tasks-state-guard.sh "$(tsg_json "$TS/docs/plans/x/tasks.json")" 0 DEVKIT_DISABLED_HOOKS=pre:write:tasks-state
-expect "tasks-state-guard: Write to tasks.json.sum blocked" tasks-state-guard.sh "$(tsg_json "$TS/docs/plans/x/tasks.json.sum")" 2
+expect "tasks-state-guard: case variant blocked" tasks-state-guard.sh "$(tsg_json "$TS/docs/plans/x/TASKS.JSON")" 2
+ln -s "$TS/docs/plans/x" "$TS/link"
+expect "tasks-state-guard: symlinked plan dir blocked" tasks-state-guard.sh "$(tsg_json "$TS/link/tasks.json")" 2
 expect "tasks-state-guard: nested docs/plans path passes" tasks-state-guard.sh "$(tsg_json "$TS/docs/plans/a/b/tasks.json")" 0
 rm -rf "$TS"
 
@@ -521,8 +523,8 @@ for arg in sys.argv[1:]:
     rows.append({"id": rid, "status": status, "evidence": "", "head": "abc1234", "updated": "2026-11-22T00:00:00Z"})
 print(json.dumps(rows))' "$@"
 }
-# bs_tasks <dir> <slug> <rows-json> [ok|stale|nosum] — docs/plans/<slug>/tasks.json plus its .sum;
-# stale writes a sum that does not match the rows, nosum writes no sum file
+# bs_tasks <dir> <slug> <rows-json> [ok|stale|nosum] — docs/plans/<slug>/tasks.json with its embedded sum;
+# stale embeds a sum that does not match the rows, nosum omits the sum field
 bs_tasks() {
     python3 -I -c '
 import hashlib, json, os, sys
@@ -530,14 +532,14 @@ d, slug, rows_text, mode = sys.argv[1:5]
 plan = os.path.join(d, "docs", "plans", slug)
 os.makedirs(plan, exist_ok=True)
 rows = json.loads(rows_text)
-with open(os.path.join(plan, "tasks.json"), "w", encoding="utf-8") as fh:
-    json.dump({"schema": 1, "plan": "docs/plans/%s/plan.md" % slug, "slug": slug, "rows": rows}, fh)
 stamp = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 if mode == "stale":
     stamp = "0" * 64
+doc = {"schema": 1, "plan": "docs/plans/%s/plan.md" % slug, "slug": slug, "rows": rows}
 if mode != "nosum":
-    with open(os.path.join(plan, "tasks.json.sum"), "w", encoding="utf-8") as fh:
-        fh.write(stamp + "\n")
+    doc["sum"] = stamp
+with open(os.path.join(plan, "tasks.json"), "w", encoding="utf-8") as fh:
+    json.dump(doc, fh)
 ' "$1" "$2" "$3" "${4:-ok}"
 }
 

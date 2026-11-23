@@ -129,6 +129,28 @@ if [ "$count" -ne 1 ]; then
     exit 2
 fi
 
+# kill_tree <pid> — TERM <pid> and every descendant. Descendants are collected
+# before anything is signalled: once the parent dies its children reparent to
+# init and `pgrep -P` can no longer find them.
+kill_tree() {
+    local pid="$1" kid
+    for kid in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$kid"
+    done
+    kill -TERM "$pid" 2>/dev/null
+}
+
+# gate_timeout — DEVKIT_GATE_TIMEOUT when it is a positive integer, else 900,
+# so a typo in the variable can never turn every gate into an instant timeout.
+gate_timeout() {
+    local t="${DEVKIT_GATE_TIMEOUT:-900}"
+    case "$t" in
+        ''|*[!0-9]*) t=900 ;;
+    esac
+    [ "$t" -gt 0 ] || t=900
+    printf '%s' "$t"
+}
+
 cmd_pid=""  # set once the test command is backgrounded — see on_interrupt below
 out_tmp=""  # set once the test command's output file is created — see cleanup below
 marker="$file.devkit-break"
@@ -215,8 +237,22 @@ out_tmp=$(mktemp "${TMPDIR:-/tmp}/break-run.out.XXXXXX") || {
     echo "break-run: could not create temp output file" >&2
     exit 2
 }
-"${cmd[@]}" >"$out_tmp" 2>&1 &
+# stdin is /dev/null and DEVKIT_GATE_TIMEOUT bounds the run: a test command
+# that never ends must not leave the file mutated, or the caller waiting.
+"${cmd[@]}" </dev/null >"$out_tmp" 2>&1 &
 cmd_pid=$!
+run_limit=$(gate_timeout)
+run_waited=0
+while kill -0 "$cmd_pid" 2>/dev/null && [ "$run_waited" -lt "$run_limit" ]; do
+    sleep 1
+    run_waited=$((run_waited + 1))
+done
+if kill -0 "$cmd_pid" 2>/dev/null; then
+    kill_tree "$cmd_pid"
+    wait "$cmd_pid" 2>/dev/null
+    echo "break-run: TIMEOUT after ${run_limit}s" >&2
+    exit 2
+fi
 wait "$cmd_pid"
 run_rc=$?
 run_out=$(cat "$out_tmp")

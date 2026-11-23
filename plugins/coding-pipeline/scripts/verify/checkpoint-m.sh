@@ -49,6 +49,28 @@ unmeasured() {
     exit 2
 }
 
+# kill_tree <pid> — TERM <pid> and every descendant. Descendants are collected
+# before anything is signalled: once the parent dies its children reparent to
+# init and `pgrep -P` can no longer find them.
+kill_tree() {
+    local pid="$1" kid
+    for kid in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$kid"
+    done
+    kill -TERM "$pid" 2>/dev/null
+}
+
+# gate_timeout — DEVKIT_GATE_TIMEOUT when it is a positive integer, else 900,
+# so a typo in the variable can never turn every gate into an instant timeout.
+gate_timeout() {
+    local t="${DEVKIT_GATE_TIMEOUT:-900}"
+    case "$t" in
+        ''|*[!0-9]*) t=900 ;;
+    esac
+    [ "$t" -gt 0 ] || t=900
+    printf '%s' "$t"
+}
+
 new_tmp() {  # new_tmp <prefix> — prints the path, registers it for cleanup
     local t
     t=$(mktemp "${TMPDIR:-/tmp}/checkpoint-m.$1.XXXXXX") || unmeasured "could not create a temp file"
@@ -419,8 +441,27 @@ fi
 
 # ── gates: an arbitrary command this checkpoint requires to exit clean ──────
 if [ -n "$gates_cmd" ]; then
-    gates_out=$(bash -c "$gates_cmd" 2>&1)
+    # stdin from /dev/null so a gate that reads it sees EOF, not the caller's
+    # open pipe; a watchdog so one that never ends is UNMEASURED, not a wait.
+    gates_limit=$(gate_timeout)
+    gates_tmp=$(new_tmp gates)
+    bash -c "$gates_cmd" </dev/null >"$gates_tmp" 2>&1 &
+    gates_pid=$!
+    gates_waited=0
+    while kill -0 "$gates_pid" 2>/dev/null && [ "$gates_waited" -lt "$gates_limit" ]; do
+        sleep 1
+        gates_waited=$((gates_waited + 1))
+    done
+    if kill -0 "$gates_pid" 2>/dev/null; then
+        kill_tree "$gates_pid"
+        wait "$gates_pid" 2>/dev/null
+        rm -f "$gates_tmp"
+        unmeasured "gates: TIMEOUT after ${gates_limit}s"
+    fi
+    wait "$gates_pid" 2>/dev/null
     gates_rc=$?
+    gates_out=$(cat "$gates_tmp")
+    rm -f "$gates_tmp"
     if [ "$gates_rc" -ne 0 ]; then
         gates_detail=$(printf '%s\n' "$gates_out" | tail -1)
         fail "gates" "\`$gates_cmd\` exited $gates_rc${gates_detail:+ — $gates_detail}"

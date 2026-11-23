@@ -6,8 +6,8 @@ Multi-session `/code` runs resume from facts instead of prose. The design follow
 
 ### Added
 
-- **Row state in `tasks.json`.** `scripts/tasks_state.py` (`init`, `set`, `status`, `verify`) keeps one row per Tasks row in `docs/plans/{slug}/tasks.json`, with a `tasks.json.sum` checksum. Only the allowed status transitions are accepted, so a row cannot be edited into a state the tool did not write (AC1–AC4).
-- **`hooks/tasks-state-guard.sh`** (id `pre:write:tasks-state`, PreToolUse on Write/Edit) blocks direct writes to `tasks.json` and `tasks.json.sum`. Row state changes only through `tasks_state.py` (AC5).
+- **Row state in `tasks.json`.** `scripts/tasks_state.py` (`init`, `set`, `status`, `verify`) keeps one row per Tasks row in `docs/plans/{slug}/tasks.json`, with a checksum embedded in the same file (`sum`), so rows and stamp are one atomic write. Only the allowed status transitions are accepted, so a row cannot be edited into a state the tool did not write (AC1–AC4).
+- **`hooks/tasks-state-guard.sh`** (id `pre:write:tasks-state`, PreToolUse on Write/Edit) blocks direct writes to `tasks.json`, resolving a symlinked plan directory and ignoring case. Row state changes only through `tasks_state.py` (AC5).
 - **Bootstrap row status.** `session-bootstrap.sh` prints one `tasks_state` status line before the PROGRESS block. When it drops old entries to fit the cap, it keeps their `- Lessons:` lines (AC6, AC7).
 - **`/code` § Resume and § Final proof.** Resume: `tasks_state.py init` runs before the first dispatch, each row is set `in_progress` and then `done`, and a resumed session continues from the rows still `todo` or `in_progress`. Final proof: once every row is `done`, falsification and the full gates run once after the last row (AC11, AC17).
 - **`delivery-gate` clean-state check.** The Stop hook resolves the repo root from the payload `cwd` (AC8) and reports rows still `in_progress`, so a session cannot end silently on half-finished row state.
@@ -22,6 +22,8 @@ Multi-session `/code` runs resume from facts instead of prose. The design follow
 
 ### Fixed
 
+- **Gate runs can no longer wait forever.** A background gate sweep hung 2h38m in `pre-push`'s `cat` on a stdin pipe that never closed. `pre-push` now reads git's ref lines with a bounded loop (`DEVKIT_PUSH_STDIN_TIMEOUT`, default 10 s per line) and falls back to base resolution when none arrive. `checkpoint-m.sh --gates` and `break-run.sh` run their command with stdin from `/dev/null` under a `DEVKIT_GATE_TIMEOUT` watchdog (default 900 s): the process tree is killed, `break-run.sh` restores the file, and the run exits 2. `/code` and `/validate-code` state that background runs close stdin and that an output file unchanged for 10 minutes is a stall (AC19).
+- A crash between the two writes of `tasks.json` and its checksum could wedge a plan. The checksum now lives inside `tasks.json`, so one atomic write cannot leave rows and stamp apart; `status` also refuses a file changed outside the tool, the guard resolves symlinked plan directories and case variants, and evidence strips Unicode line separators and bidi controls.
 - `harness-metrics.py` read 0 of 0 for sensor escapes on real `PROGRESS.md` files. The sensor escape count now reads `- Failed:` bullets inside `## [` entries (AC9).
 - Final proof passes each row's `Language` to its FINAL-PROOF dispatch (one per Language or test suite), names prose evidence lines `wiring:`, and routes a test that does not fail to step 5 as `NOT FALSIFIED`.
 

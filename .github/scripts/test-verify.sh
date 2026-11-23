@@ -4062,6 +4062,23 @@ check_readme_tasks() {  # README: the guard row, its disable id, and the tasks.j
 check_readme_tasks; rc=$?
 check "readme: hooks, ids, tasks.json, resume and autocompact" 0 "$rc"
 
+gate_timeout_missing() {  # gate_timeout_missing <file> <needle>... — prints each needle the file lacks (a missing file lacks all)
+    local f="$1" n
+    shift
+    for n in "$@"; do grep -qF -- "$n" "$f" 2>/dev/null || printf '[%s] ' "$n"; done
+}
+check_gate_timeout_docs() {  # check_gate_timeout_docs <row> — the stall rule and both timeout knobs are stated where coder, validator and operator read them
+    local row="$1" R="$ROOT" miss="" sec
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/skills/code/references/loop.md" '`</dev/null`' '10 minutes is a stall')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/skills/validate-code/references/execution-and-report.md" '`</dev/null`' '10 minutes is a stall')"
+    miss="$miss$(gate_timeout_missing "$R/plugins/coding-pipeline/references/thresholds.md" '`DEVKIT_GATE_TIMEOUT`, positive integer; unset or invalid → 900' '10 s per line (`DEVKIT_PUSH_STDIN_TIMEOUT`' 'Background run stall | 10 minutes with no change to its output file')"
+    sec=$(awk '/^## \[3\.4\.0\]/{f=1;next} /^## \[/{f=0} f' "$R/CHANGELOG.md")
+    printf '%s\n' "$sec" | grep -qF -- 'DEVKIT_GATE_TIMEOUT' || miss="$miss[CHANGELOG [3.4.0]: DEVKIT_GATE_TIMEOUT] "
+    miss="$miss$(gate_timeout_missing "$R/README.md" 'DEVKIT_GATE_TIMEOUT')"
+    if [ -z "$miss" ]; then pass=$((pass + 1)); else echo "FAIL: $row — missing: $miss"; fail=1; fi
+}
+check_gate_timeout_docs "gate timeout docs state the stall rule"
+
 check_readme_fixes_in_rounds() {  # README no longer says validate-code reports only; its row names the Score Loop
     local f="$ROOT/README.md" bad=0
     grep -qF 'Reports, never fixes' "$f" && { echo "README still says 'Reports, never fixes'"; bad=1; }
@@ -4155,12 +4172,11 @@ p, restamp, stmt = sys.argv[1], sys.argv[2] == "1", sys.argv[3]
 doc = json.load(open(p, encoding="utf-8"))
 rows = doc["rows"]
 exec(stmt)
-with open(p, "w", encoding="utf-8") as f:
-    f.write(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 if restamp:
     text = json.dumps(doc["rows"], sort_keys=True, separators=(",", ":"))
-    with open(p + ".sum", "w", encoding="utf-8") as f:
-        f.write(hashlib.sha256(text.encode("utf-8")).hexdigest() + "\n")
+    doc["sum"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+with open(p, "w", encoding="utf-8") as f:
+    f.write(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 ' "$@"
 }
 
@@ -4194,12 +4210,12 @@ check "tasks-state: init on an existing file appends new plan rows and keeps sta
 
 d="$tsd/init-gone"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
 python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
-cp "$d/tasks.json" "$d/before.json"; cp "$d/tasks.json.sum" "$d/before.sum"
+cp "$d/tasks.json" "$d/before.json"
 check_tasks_plan "$d/plan.md" T1
 out=$(python3 "$TS" init "$d/plan.md" 2>&1); rc=$?
 bad=0; [ "$rc" = 1 ] || bad=1
 case "$out" in *T2*) ;; *) bad=1 ;; esac
-cmp -s "$d/tasks.json" "$d/before.json" && cmp -s "$d/tasks.json.sum" "$d/before.sum" || bad=1
+cmp -s "$d/tasks.json" "$d/before.json" || bad=1
 check "tasks-state: init refuses when a stored row is gone from the plan" 0 "$bad" "$out" "T2"
 
 d="$tsd/init-unsafe-none"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" 'T1;x'
@@ -4283,13 +4299,13 @@ print(next(r[sys.argv[3]] for r in doc["rows"] if r["id"] == sys.argv[2]))
 PY
 }
 
-check_sum_matches() {  # check_sum_matches <tasks.json> — true when tasks.json.sum is the canonical hash of its rows
+check_sum_matches() {  # check_sum_matches <tasks.json> — true when the embedded sum is the canonical hash of its rows and no .sum file exists
     python3 - "$1" <<'PY'
-import hashlib, json, sys
+import hashlib, json, os, sys
 p = sys.argv[1]
-rows = json.load(open(p, encoding="utf-8"))["rows"]
-want = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-sys.exit(0 if open(p + ".sum", encoding="utf-8").read().strip() == want else 1)
+doc = json.load(open(p, encoding="utf-8"))
+want = hashlib.sha256(json.dumps(doc["rows"], sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+sys.exit(0 if doc.get("sum") == want and not os.path.lexists(p + ".sum") else 1)
 PY
 }
 
@@ -4372,7 +4388,34 @@ bad=0; check_sum_matches "$d/tasks.json" || bad=1
 python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1 || bad=1
 check_sum_matches "$d/tasks.json" || bad=1
 python3 "$TS" verify "$d/plan.md" >/dev/null 2>&1 || bad=1
-check "tasks-state: init and set write a matching tasks.json.sum" 0 "$bad"
+check "tasks-state: init and set write a matching embedded sum" 0 "$bad"
+
+d="$tsd/one-file"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+bad=0
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1 || bad=1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1 || bad=1
+python3 "$TS" set "$d/plan.md" T1 done --evidence "M: PASS" >/dev/null 2>&1 || bad=1
+python3 - "$d/tasks.json" <<'PY' || bad=1
+import json, os, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+assert sorted(doc) == ["plan", "rows", "schema", "slug", "sum"], sorted(doc)
+assert not os.path.lexists(sys.argv[1] + ".sum")
+PY
+check "tasks-state: rows and sum live in one atomic file" 0 "$bad"
+
+d="$tsd/status-forged"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1 T2
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+check_tasks_edit "$d/tasks.json" 0 "rows[0]['status']='done'"
+out=$(python3 "$TS" status "$d/plan.md" 2>&1); rc=$?
+check "tasks-state: status refuses a forged file" 1 "$rc" "$out" "tasks.json changed outside tasks_state.py"
+
+d="$tsd/set-unicode"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
+python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
+python3 "$TS" set "$d/plan.md" T1 in_progress >/dev/null 2>&1
+ev=$(printf 'M: PASS\xe2\x80\xa8X\xe2\x80\xaeY\xe2\x81\xa6Z')
+out=$(python3 "$TS" set "$d/plan.md" T1 done --evidence "$ev" 2>&1); rc=$?
+bad=0; [ "$rc" = 0 ] || bad=1; [ "$(check_row_field "$d/tasks.json" T1 evidence)" = "M: PASSXYZ" ] || bad=1
+check "tasks-state: unicode separators and bidi controls stripped from evidence" 0 "$bad" "$out"
 
 d="$tsd/set-restore"; mkdir -p "$d"; check_tasks_plan "$d/plan.md" T1
 python3 "$TS" init "$d/plan.md" >/dev/null 2>&1
@@ -4420,6 +4463,81 @@ grep -qF 'CLAUDE_CODE_AUTO_COMPACT_WINDOW' "$C" || bad=1
 grep -qF 'settings.local.json' "$C" || bad=1
 grep -qF 'DEVKIT_CONTEXT_WINDOW=200000' "$C" || bad=1
 check "context-budget-doc: plugin users told how to set the window" 0 "$bad"
+
+# ── gate runs cannot hang (AC19): checkpoint-m --gates and break-run watchdog ──
+# Each fixture reuses the all-green shape (cp11) so only the gates command differs.
+cp_gates_fixture() {  # cp_gates_fixture <name> — leaves cwd in a passing repo
+    local n="$1"
+    mkrepo "$W/$n"
+    cd "$W/$n" || exit
+    printf 'func TestOK(t *testing.T) {}\n' > filler_test.go
+    write_dup_filler filler.go
+    cat > "$W/$n-spec.md" <<'MD'
+| Test Name | Input | Expected |
+|---|---|---|
+| `TestOK` | a | b |
+MD
+}
+cp_gates() {  # cp_gates <name> <gates cmd> — runs checkpoint-m.sh, stdin closed
+    bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/$1-spec.md" --tests filler_test.go \
+        --expect filler_test.go filler.go --gates "$2" 2>&1 </dev/null
+}
+
+cp_gates_fixture cp13
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=1 cp_gates cp13 "sleep 20"); rc=$?
+t1=$(date +%s)
+check "checkpoint-m: gates timeout is unmeasured" 2 "$rc" "$out" "M: UNMEASURED — gates: TIMEOUT after 1s"
+[ $((t1 - t0)) -lt 8 ] && pass=$((pass + 1)) || { echo "FAIL: checkpoint-m: gates timeout is unmeasured — took $((t1 - t0))s"; fail=1; }
+cd - >/dev/null || exit
+
+# stdin of the checkpoint is a FIFO a `sleep 15` holds open read-write and never writes to
+cp_gates_fixture cp14
+mkfifo "$W/cp14.fifo"
+sleep 15 <>"$W/cp14.fifo" &
+holder=$!
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=10 bash "$V/checkpoint-m.sh" --base release/x-abc --spec "$W/cp14-spec.md" --tests filler_test.go \
+    --expect filler_test.go filler.go --gates "cat >/dev/null" 2>&1 <"$W/cp14.fifo"); rc=$?
+t1=$(date +%s)
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+check "checkpoint-m: gates get closed stdin" 0 "$rc" "$out" "M: PASS"
+[ $((t1 - t0)) -lt 8 ] && pass=$((pass + 1)) || { echo "FAIL: checkpoint-m: gates get closed stdin — took $((t1 - t0))s"; fail=1; }
+cd - >/dev/null || exit
+
+cp_gates_fixture cp15
+bad=""
+for v in abc 0 -3 1e3; do
+    out=$(DEVKIT_GATE_TIMEOUT="$v" cp_gates cp15 "sleep 2"); rc=$?
+    case "$out" in *"M: PASS"*) [ "$rc" = 0 ] || bad="$bad $v" ;; *) bad="$bad $v" ;; esac
+done
+check "checkpoint-m: invalid gate timeout falls back to default" 0 "$([ -z "$bad" ] && echo 0 || echo 1)" "$bad" ""
+cd - >/dev/null || exit
+
+# br_timeout fixtures live under $W like every other break-run row
+br6="$W/br6"
+mkdir -p "$br6"
+printf 'ENABLED=yes\n' > "$br6/cfg.txt"
+cp "$br6/cfg.txt" "$br6/cfg.orig"
+t0=$(date +%s)
+out=$(DEVKIT_GATE_TIMEOUT=1 run_br --file "$br6/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- sleep 20 2>&1); rc=$?
+t1=$(date +%s)
+check "break-run: test command timeout restores and reports" 2 "$rc" "$out" "break-run: TIMEOUT after 1s"
+cmp -s "$br6/cfg.txt" "$br6/cfg.orig" && [ ! -f "$br6/cfg.txt.devkit-break" ] && [ $((t1 - t0)) -lt 8 ] \
+    && pass=$((pass + 1)) || { echo "FAIL: break-run: test command timeout restores and reports — file not restored, marker left, or took $((t1 - t0))s"; fail=1; }
+
+br7="$W/br7"
+mkdir -p "$br7"
+printf 'ENABLED=yes\n' > "$br7/cfg.txt"
+printf '#!/usr/bin/env bash\nsleep 47\ntrue\n' > "$br7/slow.sh"
+DEVKIT_GATE_TIMEOUT=1 run_br --file "$br7/cfg.txt" --old "ENABLED=yes" --new "ENABLED=no" --row "guard-enabled" -- bash "$br7/slow.sh" >/dev/null 2>&1
+sleep 1
+if pgrep -f 'sleep 47' >/dev/null 2>&1; then
+    echo "FAIL: break-run: timeout kills the test command's children — a 'sleep 47' survived"; fail=1
+    pkill -f 'sleep 47' 2>/dev/null
+else
+    pass=$((pass + 1))
+fi
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
