@@ -74,7 +74,7 @@ Impl files created/modified: [list]
 Spec coverage: [N]/[N] Test Case rows implemented  (Gap found: [row the table missed, or "none"])
 Falsification evidence:   (FINAL-PROOF dispatch only; a row dispatch omits this block)
   [TestName] ← broke [file:line — the Falsified By break] → FAILED: [quoted assertion] → restored → GREEN
-  Wiring check: [TestName] ← wiring: [what resolves] · validate-wiring OK · [suite] [N] passed   (prose-only rows, `n/a — Markdown, wiring check`)
+  wiring: [TestName] ← [what resolves] · validate-wiring OK · [suite] [N] passed   (prose-only rows, `n/a — Markdown, wiring check`)
   [one line per test — every test, no exceptions]
 Interface implemented: [InterfaceName — file:line]
 Blast radius: plan [N] callers · found [M] (missed: [file:line list | none])
@@ -230,13 +230,13 @@ A test written after the code has never been observed to fail, so it is unproven
     return the zero value, delete the guard, drop the validation. One break at a time. A row whose
     Falsified By reads `n/a — Markdown, wiring check` is prose-only and has no break: write its test
     as specified, then do the wiring check in step 12's place (the paths it names resolve,
-    `validate-wiring.py` is OK, its suite passes) and record a `Wiring check:` line, not a break line.
+    `validate-wiring.py` is OK, its suite passes) and record a `wiring:` line, not a break line.
 12. Run that test. **Confirm it FAILS**, and fails on its own assertion (not on a compile error,
     panic, or unrelated setup failure). Quote the failure line. (Prose rows: no failure to quote.)
 13. Revert the break exactly. Re-run; confirm green.
 14. **A test that still passes against broken code is worthless** — rewrite it so it asserts the
     real observable result, then falsify it again. Never hand off an unfalsified test.
-15. Record one evidence line per test in `CODER DONE` — a break line for a code row, a `Wiring check:` line for a prose row.
+15. Record one evidence line per test in `CODER DONE` — a break line for a code row, a `wiring:` line for a prose row.
 
 **Security ACs are falsified the same way**: remove the guard and confirm the injection test,
 the 401/403 test, or the no-secret-in-logs test actually goes red. A security test that passes

@@ -209,9 +209,13 @@ dg_test_fresh dgo1
 expect_out "delivery-gate: same clean-state finding warns once" delivery-gate.sh "$(dg_test_payload dgo1 "$RT")" 0 yes
 expect_out "delivery-gate: same clean-state finding warns once (second Stop)" delivery-gate.sh "$(dg_test_payload dgo1 "$RT")" 0 no
 
+DGS="$DG/strict"; dg_test_repo "$DGS"; : > "$DGS/a.go.devkit-break"
 dg_test_fresh dgs1
-expect_out "delivery-gate: strict blocks once on a leftover marker" delivery-gate.sh "$(dg_test_payload dgs1 "$RT")" 2 yes DEVKIT_HOOK_PROFILE=strict
-expect_out "delivery-gate: strict blocks once on a leftover marker (second Stop)" delivery-gate.sh "$(dg_test_payload dgs1 "$RT")" 0 no DEVKIT_HOOK_PROFILE=strict
+expect_out "delivery-gate: strict blocks once on a leftover marker" delivery-gate.sh "$(dg_test_payload dgs1 "$DGS")" 2 yes DEVKIT_HOOK_PROFILE=strict
+# a second marker makes a different finding set, so the dedupe does not hide the latch:
+# the finding prints again, and strict must still not block a second time
+: > "$DGS/b.go.devkit-break"
+expect_out "delivery-gate: strict blocks once on a leftover marker (second Stop)" delivery-gate.sh "$(dg_test_payload dgs1 "$DGS")" 0 yes DEVKIT_HOOK_PROFILE=strict
 
 MAL="$DG/malformed"; dg_test_repo "$MAL"; dg_test_tasks "$MAL" '{'
 dg_test_fresh dgmal
@@ -242,11 +246,10 @@ expect_out "delivery-gate: unsafe id in tasks.json is not echoed" delivery-gate.
 dg_check "delivery-gate: unsafe id in tasks.json is not echoed — no BLOCKED line" no "BLOCKED"
 
 BIG="$DG/big"; dg_test_repo "$BIG"
-pad=$(head -c 70000 /dev/zero | tr '\0' x)
-dg_test_tasks "$BIG" "$(dg_test_plan "{\"id\":\"T2\",\"status\":\"in_progress\",\"evidence\":\"$pad\",\"head\":\"abc1234\",\"updated\":\"2026-11-22T00:00:00Z\"}")"
+# valid JSON by construction (json.dumps), 70,000-byte evidence, one in_progress row
+dg_test_tasks "$BIG" "$(python3 -I -c 'import json; print(json.dumps({"schema": 1, "plan": "docs/plans/demo/plan.md", "slug": "demo", "rows": [{"id": "T2", "status": "in_progress", "evidence": "x" * 70000, "head": "abc1234", "updated": "2026-11-22T00:00:00Z"}]}))')"
 dg_test_fresh dgbig
 expect_out "delivery-gate: oversized tasks.json is skipped" delivery-gate.sh "$(dg_test_payload dgbig "$BIG")" 0 no
-unset pad
 
 # tasks-state: hook validators match the CLI regexes (ADR-6). The ID and status literals
 # are in all three files; the slug literal is in the two hooks (the CLI takes it from the dir name).
@@ -368,8 +371,8 @@ expect_win "context-budget: k suffix in the compact env var" wd "83% of the wind
     "claude-x[1m]" 250000 - CLAUDE_CODE_AUTO_COMPACT_WINDOW=300k
 expect_win "context-budget: compact window below 100000 is ignored" we NONE \
     "claude-x" 60000 '{"autoCompactWindow": 50000}'
-expect_win "context-budget: malformed settings.json falls back to inference" wf NONE \
-    "claude-x[1m]" 250000 '{'
+expect_win "context-budget: malformed settings.json falls back to inference" wf "85% of the window" \
+    "claude-x[1m]" 850000 '{'
 rm -rf "$CTX" "${TMPDIR:-/tmp}/claude-devkit/ctx"* "${TMPDIR:-/tmp}"/claude-devkit/w[a-f]
 
 # ── precompact-snapshot + session-bootstrap: compaction with nobody watching ──
@@ -631,7 +634,9 @@ bs_check "bootstrap: carried Lessons capped at 15 newest" $?
 
 # status block and Lessons stay within 9500: five unfinished plans, large PROGRESS with lessons, a snapshot
 d=$(bs_dir budget)
-for i in 1 2 3 4 5; do bs_tasks "$d" "p$i" "$(bs_rows T1:done T2:todo)"; done
+# Six rows per plan, five in_progress: the status block plus the resume line outweigh one
+# PROGRESS entry, so dropping the block from the PROGRESS budget must overflow 9,500.
+for i in 1 2 3 4 5; do bs_tasks "$d" "p$i" "$(bs_rows T1:in_progress T2:in_progress T3:in_progress T4:in_progress T5:in_progress T6:todo)"; done
 python3 -I -c '
 import sys
 out = []
@@ -644,6 +649,8 @@ mkdir -p "$d/tmp/claude-devkit/bs"
 python3 -I -c 'import sys; sys.stdout.write("SNAP\n" + "s" * 3000 + "\n")' > "$d/tmp/claude-devkit/bs/precompact.md"
 bs_run "$d" compact
 [ "$(bs_len "$d/out")" -le 9500 ] && [ "$(grep -cE '^\[p[0-9]\] ' "$d/out")" = 5 ] \
+    && grep -qF '=== PROGRESS.md' "$d/out" && ! grep -qF 'could not be sized' "$d/out" \
+    && ! grep -qF '(snapshot truncated' "$d/out" \
     && tail -n 1 "$d/out" | grep -q 'Do not ask the human to restart.'
 bs_check "bootstrap: status block and Lessons stay within 9500 chars" $?
 

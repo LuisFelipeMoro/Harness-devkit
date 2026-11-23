@@ -23,10 +23,7 @@ Multi-session `/code` runs resume from facts instead of prose. The design follow
 ### Fixed
 
 - `harness-metrics.py` read 0 of 0 for sensor escapes on real `PROGRESS.md` files. The sensor escape count now reads `- Failed:` bullets inside `## [` entries (AC9).
-
-### Known issues
-
-- The FINAL-PROOF prompt names one `Language`. A plan that spans several stacks must pass each row's `Language` by hand.
+- Final proof passes each row's `Language` to its FINAL-PROOF dispatch (one per Language or test suite), names prose evidence lines `wiring:`, and routes a test that does not fail to step 5 as `NOT FALSIFIED`.
 
 ## [3.3.0] — 2026-11-18
 

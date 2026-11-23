@@ -71,7 +71,6 @@ ROWS_CAP = 3000          # the row-status block's own bound; PROGRESS gives way 
 TASKS_CAP = 64 * 1024    # SEC-5: a larger tasks.json is skipped, never parsed
 SUM_CAP = 256
 PLAN_CAP = 256 * 1024    # plan.md is read only for the Depends-on column
-MAX_PLANS = 5
 LESSONS_MAX = 15
 LESSONS_CHARS = 1500
 LESSON = "- Lessons:"
@@ -227,7 +226,7 @@ def tasks_lines(path):
 
 def rows_block(paths):
     lines, resume_needed = [], False
-    for p in paths[:MAX_PLANS]:
+    for p in paths:
         out, in_progress = tasks_lines(p)
         lines += out
         resume_needed = resume_needed or in_progress

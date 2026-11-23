@@ -126,18 +126,22 @@ final tree, in order:
 
 1. **Gates** — the plan's `Gates:` line (`references/plan-template.md`), run once: format, lint and the full
    suite for the stack. Red → step 5.
-2. **Falsify every code row** — one coder dispatch: `Plan: docs/plans/{slug}/plan.md · Task: FINAL-PROOF ·
-   Tasks: {every code row} · Base: {merge-base} · Language: {Language} · Edit only the rows' Files.` The coder
-   runs `agents/coder.md` Phase 3 for each row's Test Case rows, with `scripts/verify/break-run.sh`, and writes
-   one `## {ID}` block of evidence lines to `docs/plans/{slug}/evidence.md`: a break line per test, a
-   `Wiring check:` line for each prose row. A row's test that still passes against its break is rewritten and
-   falsified again, as in Phase 3.
+2. **Falsify every code row** — the FINAL-PROOF coder dispatch: `Plan: docs/plans/{slug}/plan.md · Task: FINAL-PROOF ·
+   Tasks: {rows} · Base: {merge-base} · Language: {Language of each row, from its Tasks row} · Edit only the rows'
+   Files.` Rows split into one dispatch per `Language`, or per test suite when a suite is slow; dispatches that run
+   in parallel each get their own worktree (`references/delivery-and-worktree.md`). Each coder runs
+   `agents/coder.md` Phase 3 for its rows' Test Case rows, with `scripts/verify/break-run.sh`, and returns its
+   evidence lines to the main session: a break line per test, and a `wiring:` line for each prose row (the label
+   `scripts/verify/falsification.sh` requires). Only the main tree's `docs/plans/{slug}/evidence.md` is written,
+   by the main session from the returned lines, one `## {ID}` block per row. A test that does not fail against
+   its break is reported `NOT FALSIFIED` with the reason; it is not rewritten inside the FINAL-PROOF dispatch
+   and goes to step 5.
 3. **Re-break a sample** — the main session, not the coder: one break per code row, two for a row that carries
    a SEC test. Each break is applied with `break-run.sh` and must FAIL by the row's name; the break's marker is
    restored by the script. Prose rows (`n/a — Markdown, wiring check`) are not broken.
 4. **Checkpoint M** — `scripts/verify/checkpoint-m.sh --base $START --spec docs/plans/{slug}/plan.md
    --tests <paths> --expect <union of Files> --gates "<plan Gates>"` must print `M: PASS`.
-5. **Failure** — a red gate, a FAIL from M, or a re-break that does not fail → for each affected row
+5. **Failure** — a red gate, a FAIL from M, a `NOT FALSIFIED` line from step 2, or a re-break that does not fail → for each affected row
    `python3 scripts/tasks_state.py set docs/plans/{slug}/plan.md {ID} todo --evidence "<that line>"`, then a fresh
    coder fix round (§ Fix rounds), `set {ID} in_progress`, checkpoint M (fast form), `set {ID} done`, and Final
    proof again for the affected rows (steps 2–4).

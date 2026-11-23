@@ -219,6 +219,20 @@ test_code_loop_final_proof() {
 test_code_loop_final_proof; rc=$?
 check "code-loop: Final proof runs gates once then falsifies every code row" 0 "$rc"
 
+test_code_loop_final_proof_language() {  # step 2 passes each row's Language, labels prose lines wiring:, routes NOT FALSIFIED to step 5
+    local fp
+    fp=$(awk '/^## Final proof$/ {f=1; next} /^## / {f=0} f' "$CL")
+    [ -n "$fp" ] || return 1
+    grep -qF -- 'Language of each row, from its Tasks row' <<<"$fp" &&
+        grep -qF -- 'one dispatch per `Language`' <<<"$fp" &&
+        grep -qF -- '`wiring:` line' <<<"$fp" &&
+        grep -qF -- 'NOT FALSIFIED' <<<"$fp" &&
+        grep -qF -- 'a `NOT FALSIFIED` line from step 2' <<<"$fp" &&
+        ! grep -qF -- 'Wiring check:' <<<"$fp"
+}
+test_code_loop_final_proof_language; rc=$?
+check "code-loop: Final proof names each row's Language and reports unfalsified rows" 0 "$rc"
+
 test_coder_final_proof_timing() {  # the core and both overlays put Phase 3 in FINAL-PROOF; a row dispatch skips it
     local f
     for f in "$ROOT/plugins/coding-pipeline/agents/coder.md" "$ROOT/plugins/coding-pipeline/agents/coder-frontend.md" \
