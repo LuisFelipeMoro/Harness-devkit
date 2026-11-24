@@ -17,7 +17,7 @@ Three rules bind it:
 
 Where a smell coincides with a numbered row, file it under that row, which carries the severity:
 Duplicated Code → RD2/RD4 · Primitive Obsession → PE6 · Speculative Generality → PE14/CD2 ·
-Divergent Change → PE2. The smell label is for what no row names.
+Divergent Change → PE2 · Grab-bag Module → PE2. The smell label is for what no row names.
 
 | Smell | What it is | Fix |
 |---|---|---|
@@ -33,6 +33,7 @@ Divergent Change → PE2. The smell label is for what no row names.
 | **Message Chains** | Long `a.b().c().d()` navigation the caller should not depend on | Hide the walk behind one method on the first object |
 | **Middle Man** | A class or function that mostly just delegates onward | Cut it; call the real target directly |
 | **Refused Bequest** | A subclass or implementer that ignores or overrides most of what it inherits | Drop the inheritance; use composition |
+| **Grab-bag Module** | A `utils`/`helpers`/`common` module (or generic service) collecting unrelated responsibilities that every feature imports | Move each function to the module whose domain it serves; delete the empty grab-bag |
 
 Report line: `[MINOR] file:line — possible <Smell>: <the hunk, quoted briefly>. Fix: <the fix>. Cost: <the change it makes harder>.`
 

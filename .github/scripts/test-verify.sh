@@ -4830,5 +4830,40 @@ check_skill_invocation_docs() {  # check_skill_invocation_docs <row> — the ask
 }
 check_skill_invocation_docs "docs: ask-before-invoking rule stated"
 
+# ── modularity audit: shared connascence reference, reviewer PE16/PE5, grab-bag smell (T1, AC11–AC13) ──
+# Markdown wiring check: each needle is a literal phrase the plan's Test Case table names.
+K="$ROOT/plugins/coding-pipeline/references/connascence.md"
+bad=0
+for needle in '## Terms' '## Forms' '## Strength, locality, degree' 'Connascence of Position' 'Connascence of Algorithm' 'Connascence of Execution' 'Connascence of Meaning' 'Connascence of Identity' 'crosses a module boundary' 'weighs more' 'Name and Type across a boundary are how modules talk' 'Fundamentals of Software Architecture'; do
+    grep -qF -- "$needle" "$K" || bad=1
+done
+check "connascence: reference defines terms, forms and boundary weighting" 0 "$bad"
+
+# PE16 must sit on one row of each mirrored file with the same severity direction (MAJOR reviewer, HIGH checklist)
+R_REV="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+R_CHK="$ROOT/plugins/pr-workflow/skills/review-code/references/review-checklist.md"
+bad=0
+grep -F 'PE16' "$R_REV" | grep -F 'Connascence across a module boundary' | grep -F 'Meaning or stronger' | grep -qF 'MAJOR' || bad=1
+grep -F 'PE16 Connascence across a module boundary' "$R_CHK" | grep -F 'Meaning or stronger' | grep -q -- '→ HIGH$' || bad=1
+check "reviewer: PE16 cross-boundary connascence in reviewer and checklist" 0 "$bad"
+
+# PE5 counts positional parameters in both mirrored files
+bad=0
+grep -F 'PE5' "$R_REV" | grep -qF 'three or more positional parameters' || bad=1
+grep -F 'PE5' "$R_CHK" | grep -qF 'three or more positional parameters' || bad=1
+check "reviewer: PE5 names three positional parameters" 0 "$bad"
+
+# the reviewer loads connascence.md on the PE16 row of its load table, not merely via the PE16 finding row
+bad=0
+grep -F 'Judging or citing PE16' "$R_REV" | grep -qF '`references/connascence.md`' || bad=1
+check "reviewer: connascence reference on the load table" 0 "$bad"
+
+# grab-bag modules: the smell row exists and files under PE2 on the coincidence line
+S="$ROOT/plugins/coding-pipeline/references/code-smells.md"
+bad=0
+grep -qF '**Grab-bag Module**' "$S" || bad=1
+grep -qF 'Grab-bag Module → PE2' "$S" || bad=1
+check "code-smells: grab-bag module row" 0 "$bad"
+
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail
