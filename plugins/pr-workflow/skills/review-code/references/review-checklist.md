@@ -122,7 +122,7 @@ formatter or linter already owns.
 - PE12 Comment explaining *what* (delete) — or a missing *why* where the code is surprising → LOW
 - PE13 Invented convention — a pattern in this diff and nowhere else, where an existing one fit → MEDIUM
 - PE14 Speculative generality — extension point, knob, hook, or type parameter with exactly one user → MEDIUM
-- PE16 Connascence across a module boundary — a form of Meaning or stronger (a magic value, positional order, a duplicated rule, a call-order assumption, shared identity) spans two modules (or frontend and backend), so a change in one silently breaks the other. Name and Type across a boundary are never filed; the same form inside one module stays at its own row (`coding-pipeline/references/connascence.md`) → HIGH
+- PE16 Connascence across a module boundary — a form of Meaning or stronger (a magic value, positional order, a duplicated rule, a call-order assumption, shared identity) spans two modules (or frontend and backend), so a change in one silently breaks the other. Name and Type across a boundary are never filed; the same form inside one module stays at its own row (`coding-pipeline/references/connascence.md`). A cross-boundary Meaning, Position or Algorithm finding is filed as PE16 only — drop the in-module row (RD2/RD4, PE5, magic numbers) for the same defect → HIGH
 
 **Overengineering and slop are symmetric findings.** An interface with one implementation, a
 factory for one type, or a layer that only forwards costs every future reader a walk through

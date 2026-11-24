@@ -22,13 +22,13 @@ Static forms are visible in the source text; dynamic forms appear only when the 
 | Form | Static/Dynamic | What must change together | Detectable sign | Filed by |
 |---|---|---|---|---|
 | Connascence of Name | Static | Every user of a name must change when the name changes | The same identifier is spelled in several files | Mysterious Name smell (`code-smells.md`) |
-| Connascence of Type | Static | Every user must change when a type or field layout changes | Two callers rely on the same field layout | PE6 |
+| Connascence of Type | Static | Every user must change when a type or field layout changes | Two callers rely on the same field layout | no dedicated row — not filed |
 | Connascence of Meaning | Static | Every user must agree on what a value means | A magic number or string with no name is repeated | Maintainability magic numbers (`reviewer.md`) |
 | Connascence of Position | Static | Every caller must agree on argument order | `f(a, b, c)` still compiles when two arguments are swapped | PE5 |
 | Connascence of Algorithm | Static | Every user must use the same algorithm | The same rule (parse, hash, validation) is implemented in two places | RD1/RD2 inside one diff; PE16 across a boundary |
 | Connascence of Execution | Dynamic | Operations must run in a fixed order | `init()` then `start()` with nothing enforcing the order | PE4 |
 | Connascence of Timing | Dynamic | Operations must happen within a fixed time window | A sleep or timeout assumed to be long enough | `agents/stress.md` |
-| Connascence of Value | Dynamic | Several values must change together | Two fields updated in one place must stay consistent | PE3 |
+| Connascence of Value | Dynamic | Several values must change together | Two fields updated in one place must stay consistent | no dedicated row — not filed |
 | Connascence of Identity | Dynamic | Components must reference the same entity | Two parts share one mutable object or one row | PE7 |
 
 ## Strength, locality, degree

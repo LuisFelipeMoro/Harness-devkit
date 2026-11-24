@@ -84,7 +84,7 @@ rules. Each finding is worded in the deep-module vocabulary of
 ## Score rubric
 
 Anchor the 0–10 score to the rows below. Pick the anchor the evidence fits, adjust
-by at most ±1, and justify in at most 3 sentences.
+by at most ±1, clamped to 0–10, and justify in at most 3 sentences.
 
 | Score | Anchor |
 |---|---|
