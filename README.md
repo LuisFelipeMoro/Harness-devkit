@@ -157,7 +157,7 @@ Invoke by name. At a `Next:` step Claude asks whether to run the next pipeline s
 | `/observability` | You are adding logs, metrics or tracing, with a falsified contract test. |
 | `/performance-profiling` | Something is slow: trace-first latency and pprof investigation. |
 | `/release-management` | You are cutting a release: semver bump, CHANGELOG, tag and a draft GitHub release from merged `main`. |
-| `/improve-codebase-architecture` | You want an architecture health review in deep-module terms (depth, seams, leverage, locality). |
+| `/improve-codebase-architecture` | You want a modularity audit (cohesion, coupling, connascence): 0–10 score, ≤ 7 ranked findings and a commit-sized plan, in deep-module terms. |
 | `/business-analysis`, `/technical-analysis` | You need business rules or technical contracts of a domain mapped. |
 | `/grill-me` | You want a plan or design stress-tested: every question that can be asked now, each with a recommended answer. |
 | `/handoff` | The session is ending: handoff doc plus `PROGRESS.md` refresh. |

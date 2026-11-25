@@ -145,7 +145,7 @@ Findings: logic bugs · off-by-one · race conditions · incorrect error propaga
 | PE2 | **Responsibility sprawl** — a function, class, or module with two reasons to change; the test name needs an "and" | MAJOR |
 | PE3 | **Leaky abstraction** — the caller must know the implementation to use it correctly: call ordering, a field set before a method, an error only some backends return | MAJOR |
 | PE4 | **Temporal coupling** — `init()` then `start()` then `use()` with nothing enforcing the order. Make invalid states unrepresentable instead | MAJOR |
-| PE5 | **Boolean/positional parameter** deciding behaviour at the call site (`process(x, true, false)`) — unreadable at the call, and every new mode multiplies | MINOR |
+| PE5 | **Boolean/positional parameter** deciding behaviour at the call site (`process(x, true, false)`), or three or more positional parameters that are all of the same type or whose order a swap would not catch at compile time — unreadable at the call, and every new mode multiplies | MINOR |
 | PE6 | **Primitive obsession on a domain invariant** — a validated identifier, money amount, or unit passed as a bare string/int, so validity is re-checked (or forgotten) at every use | MINOR (MAJOR when it is a security or money invariant) |
 | PE7 | **Shared mutable state** reachable from two paths without an owner — a package-level var, a mutated argument, a cache with no single writer | MAJOR |
 | PE8 | **Hidden side effect** — a function whose name promises a read and which writes, logs, mutates its argument, or performs I/O | MAJOR |
@@ -156,6 +156,7 @@ Findings: logic bugs · off-by-one · race conditions · incorrect error propaga
 | PE15 | **Session state left in the source** — a `TODO`/`FIXME`/commented-out stub marking where work stopped or context ran out. That belongs in `PROGRESS.md`, not in a file the next reader will trust | MINOR (MAJOR if it marks an unfinished code path that ships) |
 | PE13 | **Invented convention** — a pattern that appears in this diff and nowhere else in the codebase, where an existing pattern fit | MINOR (MAJOR when it forces a second pattern into one layer, cf. RD5) |
 | PE14 | **Speculative generality** — an extension point, a knob, a hook, or a type parameter with exactly one user and no named second one | MINOR (MAJOR if it is load-bearing, cf. CD2) |
+| PE16 | **Connascence across a module boundary** — a form of Meaning, Position, Algorithm, Execution or Identity (a magic value, positional order, a duplicated rule, a call-order assumption, shared identity) spans two modules (or frontend and backend), so a change in one silently breaks the other. Name and Type across a boundary are never filed; the same form inside one module stays at its own row (`references/connascence.md`). A cross-boundary Meaning, Position, Algorithm, Execution or Identity finding is filed as PE16 only — drop the in-module row (RD2/RD4, PE5, PE4, PE7, magic numbers) for the same defect | MAJOR |
 
 **Maintainability**: functions >40 lines · magic numbers without named constants · poor naming (`data`, `info`, `result`, single-letter vars outside loops) · untyped public API · missing type annotations on exported symbols
 
@@ -289,6 +290,7 @@ Read a file from this table only at the moment its trigger fires, only that file
 | The diff touches an HTTP handler, auth, input parsing, queries, crypto, secrets or logging (always on a non-empty security-scan) | `references/security-checklist.md` |
 | The diff adds or changes non-test source code (Standards-axis smell pass) | `references/code-smells.md` |
 | Judging or citing a CD1–CD8 finding | `references/change-discipline.md` |
+| Judging or citing PE16 (connascence across a module boundary) | `references/connascence.md` |
 | Judging test quality beyond the checklist above (mock patterns, security test rows) | `references/test-audit-reference.md` |
 | `api-spec.yaml` exists and the diff touches an endpoint | `references/spec-driven-reference.md` |
 | The diff changes a schema or introduces a datastore | `references/db-selection-reference.md` |
