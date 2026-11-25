@@ -4843,8 +4843,8 @@ check "connascence: reference defines terms, forms and boundary weighting" 0 "$b
 R_REV="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
 R_CHK="$ROOT/plugins/pr-workflow/skills/review-code/references/review-checklist.md"
 bad=0
-grep -F 'PE16' "$R_REV" | grep -F 'Connascence across a module boundary' | grep -F 'Meaning or stronger' | grep -qF 'MAJOR' || bad=1
-grep -F 'PE16 Connascence across a module boundary' "$R_CHK" | grep -F 'Meaning or stronger' | grep -q -- '→ HIGH$' || bad=1
+grep -F 'PE16' "$R_REV" | grep -F 'Connascence across a module boundary' | grep -F 'Meaning, Position, Algorithm, Execution or Identity' | grep -qF 'MAJOR' || bad=1
+grep -F 'PE16 Connascence across a module boundary' "$R_CHK" | grep -F 'Meaning, Position, Algorithm, Execution or Identity' | grep -q -- '→ HIGH$' || bad=1
 check "reviewer: PE16 cross-boundary connascence in reviewer and checklist" 0 "$bad"
 
 # PE5 counts positional parameters in both mirrored files
@@ -4961,6 +4961,41 @@ check "arch skill: still one read-only Explore dispatch and report path" 0 "$bad
 bad=0
 grep -F -- '/improve-codebase-architecture' "$RM" | grep -F -- 'modularity audit' | grep -qF -- 'connascence' || bad=1
 check "readme: improve-codebase-architecture row names the modularity audit" 0 "$bad"
+
+# PR #40 review fixes: PE16 names its forms and drops PE4/PE7 too, so one cross-boundary defect is filed once
+F_REV="$ROOT/plugins/coding-pipeline/agents/reviewer.md"
+F_CHK="$ROOT/plugins/pr-workflow/skills/review-code/references/review-checklist.md"
+F_CON="$ROOT/plugins/coding-pipeline/references/connascence.md"
+F_SK="$ROOT/plugins/devtools/skills/improve-codebase-architecture/SKILL.md"
+bad=0
+for f in "$F_REV" "$F_CHK"; do
+    grep -F 'PE16' "$f" | grep -F 'Meaning, Position, Algorithm, Execution or Identity' | grep -qF 'PE4, PE7' || bad=1
+done
+check "reviewer: PE16 tiebreak drops PE4 and PE7 rows too" 0 "$bad"
+
+# the reference and the reviewer row agree on which forms PE16 files
+bad=0
+grep -qF 'PE16 files Meaning, Position, Algorithm, Execution and Identity across a boundary' "$F_CON" || bad=1
+grep -qF 'Timing is filed by the stress lens' "$F_CON" || bad=1
+check "connascence: PE16 scope excludes Timing and Value" 0 "$bad"
+
+# PE5 flags only same-type or swap-silent positional lists, not every ctx/id/opts signature
+bad=0
+for f in "$F_REV" "$F_CHK"; do
+    grep -F 'PE5' "$f" | grep -qF 'of the same type, or whose order a swap would not catch at compile time' || bad=1
+done
+check "reviewer: PE5 threshold needs same type or a silent swap" 0 "$bad"
+
+# step 4 points at the impact table by its current name
+bad=0
+grep -qF 'Impact starts from the examples in the table below' "$F_SK" || bad=1
+if grep -qF 'severity examples' "$F_SK"; then bad=1; fi
+check "arch skill: rank step cites the impact table" 0 "$bad"
+
+# the credential rule is its own bullet, not buried mid-paragraph
+bad=0
+grep -e '^   - ' "$F_SK" | grep -qF 'never quoted' || bad=1
+check "arch skill: credential rule is its own verify bullet" 0 "$bad"
 
 echo "verify tests: $pass passed, exit=$fail"
 exit $fail

@@ -35,7 +35,7 @@ Static forms are visible in the source text; dynamic forms appear only when the 
 
 Strength runs weakest to strongest: Name < Type < Meaning < Position < Algorithm < Execution < Timing < Value < Identity. Refactor toward the weaker forms; the stronger the form, the closer together its parts must live.
 
-Connascence that crosses a module boundary weighs more than the same form inside one module, because the coupled parts then have different owners and change for different reasons, which makes them easy to miss. Name and Type across a boundary are how modules talk, so PE16 never files them; the same form inside one module stays at its own row.
+Connascence that crosses a module boundary weighs more than the same form inside one module, because the coupled parts then have different owners and change for different reasons, which makes them easy to miss. Name and Type across a boundary are how modules talk, so PE16 never files them; the same form inside one module stays at its own row. PE16 files Meaning, Position, Algorithm, Execution and Identity across a boundary; Timing is filed by the stress lens, and Value has no row.
 
 Degree is the number of places that must change together. More places means a higher priority.
 
