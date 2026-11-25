@@ -112,7 +112,7 @@ formatter or linter already owns.
 - PE2 Responsibility sprawl — two reasons to change; the test name needs an "and" → HIGH
 - PE3 Leaky abstraction — the caller must know the implementation to use it correctly (call ordering, a field set before a method) → HIGH
 - PE4 Temporal coupling — `init()` then `start()` then `use()` with nothing enforcing the order → HIGH
-- PE5 Boolean or positional parameter deciding behaviour at the call site, or three or more positional parameters of the same type, or whose order a swap would not catch at compile time → MEDIUM
+- PE5 Boolean or positional parameter deciding behaviour at the call site, or three or more positional parameters that are all of the same type or whose order a swap would not catch at compile time → MEDIUM
 - PE6 Primitive obsession on a domain invariant — validated id, money, or unit passed as a bare string/int → MEDIUM (HIGH for a security or money invariant)
 - PE7 Shared mutable state reachable from two paths with no single owner → HIGH
 - PE8 Hidden side effect — a name promising a read that writes, logs, mutates an argument, or does I/O → HIGH

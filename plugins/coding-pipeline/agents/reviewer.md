@@ -145,7 +145,7 @@ Findings: logic bugs · off-by-one · race conditions · incorrect error propaga
 | PE2 | **Responsibility sprawl** — a function, class, or module with two reasons to change; the test name needs an "and" | MAJOR |
 | PE3 | **Leaky abstraction** — the caller must know the implementation to use it correctly: call ordering, a field set before a method, an error only some backends return | MAJOR |
 | PE4 | **Temporal coupling** — `init()` then `start()` then `use()` with nothing enforcing the order. Make invalid states unrepresentable instead | MAJOR |
-| PE5 | **Boolean/positional parameter** deciding behaviour at the call site (`process(x, true, false)`), or three or more positional parameters of the same type, or whose order a swap would not catch at compile time — unreadable at the call, and every new mode multiplies | MINOR |
+| PE5 | **Boolean/positional parameter** deciding behaviour at the call site (`process(x, true, false)`), or three or more positional parameters that are all of the same type or whose order a swap would not catch at compile time — unreadable at the call, and every new mode multiplies | MINOR |
 | PE6 | **Primitive obsession on a domain invariant** — a validated identifier, money amount, or unit passed as a bare string/int, so validity is re-checked (or forgotten) at every use | MINOR (MAJOR when it is a security or money invariant) |
 | PE7 | **Shared mutable state** reachable from two paths without an owner — a package-level var, a mutated argument, a cache with no single writer | MAJOR |
 | PE8 | **Hidden side effect** — a function whose name promises a read and which writes, logs, mutates its argument, or performs I/O | MAJOR |

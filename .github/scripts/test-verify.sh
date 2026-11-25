@@ -4979,12 +4979,12 @@ grep -qF 'PE16 files Meaning, Position, Algorithm, Execution and Identity across
 grep -qF 'Timing is filed by the stress lens' "$F_CON" || bad=1
 check "connascence: PE16 scope excludes Timing and Value" 0 "$bad"
 
-# PE5 flags only same-type or swap-silent positional lists, not every ctx/id/opts signature
+# PE5 flags three or more positional parameters only when all share a type or a swap compiles; the floor of three covers both cases
 bad=0
 for f in "$F_REV" "$F_CHK"; do
-    grep -F 'PE5' "$f" | grep -qF 'of the same type, or whose order a swap would not catch at compile time' || bad=1
+    grep -F 'PE5' "$f" | grep -qF 'three or more positional parameters that are all of the same type or whose order a swap would not catch at compile time' || bad=1
 done
-check "reviewer: PE5 threshold needs same type or a silent swap" 0 "$bad"
+check "reviewer: PE5 floor of three covers both cases" 0 "$bad"
 
 # step 4 points at the impact table by its current name
 bad=0
