@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.5.0] — 2026-11-26
+
+`/improve-codebase-architecture` runs a modularity audit (cohesion, coupling and connascence, after *Fundamentals of Software Architecture*, ch. 3). The audit is folded into the existing report rather than added as a second skill, and its connascence vocabulary is a shared reference the code reviewer also uses (#40).
+
+### Added
+
+- **Modularity audit in `/improve-codebase-architecture`.** Cohesion is counted from co-change in `git log`, each commit cited by short sha and subject. Coupling and connascence lenses are added to the read-only map. The report gives a 0–10 score against an anchored rubric (clamped to 0–10, never inflated), at most 7 findings ranked by impact with a step up for any that crosses a module boundary, a plan of commit-sized steps each with its validation, a "Not worth changing now" section, and up to 8 project rules: a lint config snippet for a mechanical rule, one CLAUDE.md line for a judgement call. Nothing is written outside `/tmp` until you pick a plan step.
+- **`references/connascence.md`.** The nine connascence forms, their strength, locality and degree, and which reviewer row files each one.
+- **Reviewer rule PE16: connascence across a module boundary.** MAJOR in `reviewer`, HIGH in the `/review-code` checklist. It covers Meaning, Position, Algorithm, Execution and Identity, and is filed instead of the in-module row (RD2/RD4, PE4, PE5, PE7, magic numbers), so one defect is never counted twice. Name and Type across a boundary are never filed; Timing stays with the stress lens.
+- **Code smell: Grab-bag Module.** A `utils`, `helpers` or `common` module whose members change for unrelated reasons, filed as PE2.
+
+### Changed
+
+- **PE5 positional parameters** flags three or more positional parameters only when all share a type or a swap of their order would still compile. A two-parameter `copy(src, dst)` is not filed.
+
+### Fixed
+
+- `connascence.md` no longer maps Type and Value to reviewer rows that do not describe them.
+- Step 4 of `/improve-codebase-architecture` cites the impact table by its current name. Step 2 is split into bullets, so the credential rule (cite by `file:symbol`, never quote the value) stands on its own line.
+
 ## [3.4.0] — 2026-11-22
 
 Multi-session `/code` runs resume from facts instead of prose. The design follows Anthropic, "Effective harnesses for long-running agents" (https://www.anthropic.com/research/effective-harnesses-for-long-running-agents) and its companion quickstart (https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding): a JSON row list where only the status may change, a fixed resume ritual at session start, and a final proof before the run is called done.
