@@ -4031,18 +4031,18 @@ NEEDLES
 check_language_error_gaps; rc=$?
 check "languages: error handling gaps filled" 0 "$rc"
 
-# Release 3.4.0 wiring (AC13). Each helper returns 0 only when every needle holds.
-check_release_version() {  # every shipped plugin.json is 3.4.0 and CHANGELOG has the heading
+# Release wiring (AC13): tracks the current release. Each helper returns 0 only when every needle holds.
+check_release_version() {  # every shipped plugin.json is 3.5.0 and CHANGELOG has the heading
     local p bad=0
     for p in coding-pipeline pr-workflow devtools engineering; do
-        python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("version") == "3.4.0" else 1)' \
-            "$ROOT/plugins/$p/.claude-plugin/plugin.json" || { echo "$p plugin.json is not 3.4.0"; bad=1; }
+        python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("version") == "3.5.0" else 1)' \
+            "$ROOT/plugins/$p/.claude-plugin/plugin.json" || { echo "$p plugin.json is not 3.5.0"; bad=1; }
     done
-    grep -q '^## \[3\.4\.0\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG has no ## [3.4.0] heading"; bad=1; }
+    grep -q '^## \[3\.5\.0\]' "$ROOT/CHANGELOG.md" || { echo "CHANGELOG has no ## [3.5.0] heading"; bad=1; }
     [ "$bad" = 0 ]
 }
 check_release_version; rc=$?
-check "release: version 3.4.0" 0 "$rc"
+check "release: version 3.5.0" 0 "$rc"
 
 check_changelog_340() {  # the 3.4.0 section names the source paper and the resume protocol
     local sec bad=0 n
